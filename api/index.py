@@ -118,6 +118,27 @@ def root():
 def hello():
     """API status endpoint"""
     try:
+        # Test direct connection to YouTube
+        direct_connection_success = False
+        try:
+            # Temporarily clear proxy settings
+            old_http_proxy = os.environ.pop('HTTP_PROXY', None)
+            old_https_proxy = os.environ.pop('HTTPS_PROXY', None)
+            
+            # Try a quick direct connection
+            with requests.Session() as test_session:
+                test_session.proxies.clear()
+                response = test_session.get("https://www.youtube.com", timeout=5)
+                direct_connection_success = response.status_code == 200
+                
+            # Restore environment
+            if old_http_proxy:
+                os.environ['HTTP_PROXY'] = old_http_proxy
+            if old_https_proxy:
+                os.environ['HTTPS_PROXY'] = old_https_proxy
+        except:
+            direct_connection_success = False
+        
         # Basic environment info for diagnostics
         env_info = {
             'python_version': sys.version,
@@ -130,6 +151,7 @@ def hello():
             'status': 'online',
             'message': 'YouTube Chapter Generator API is running',
             'proxy_configured': bool(proxies),
+            'direct_connection_available': direct_connection_success,
             'env_info': env_info
         })
     except Exception as e:
@@ -181,43 +203,64 @@ def generate_chapters():
         
         # Get transcript
         try:
-            # Configure proxies for transcript API
-            kwargs = {'languages': ['en']}
+            transcript_list = None
+            error_messages = []
             
-            # Add proxy configurations directly to the YouTube API call
-            if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
-                import http.client
-                http.client.HTTPConnection.debuglevel = 1
-                
-                # Set up proxy handlers manually for the transcript API
-                import urllib.request
-                proxy_handler = urllib.request.ProxyHandler({
-                    'http': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80',
-                    'https': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80'
-                })
-                opener = urllib.request.build_opener(proxy_handler)
-                urllib.request.install_opener(opener)
-                print("Applied proxy settings to urllib")
-            
-            # Try to get transcript with YouTube API first
+            # Try method 1: YouTube API with proxies from environment
             try:
-                print("Attempting to fetch transcript with YouTubeTranscriptApi...")
+                print("Method 1: Attempting to fetch transcript with YouTubeTranscriptApi using proxy from env vars...")
+                kwargs = {'languages': ['en']}
                 transcript_list = YouTubeTranscriptApi.get_transcript(video_id, **kwargs)
-                print(f"Successfully fetched transcript using YouTubeTranscriptApi")
-            except Exception as api_error:
-                print(f"YouTubeTranscriptApi failed: {api_error}")
-                print("Falling back to requests implementation...")
+                print(f"Method 1 succeeded: Retrieved transcript with {len(transcript_list)} entries")
+            except Exception as e1:
+                error_message = str(e1)
+                error_messages.append(f"Method 1 failed: {error_message}")
+                print(f"Method 1 failed: {error_message}")
                 
-                # Try our custom implementation with explicit proxy support
-                transcript_list = fetch_transcript_with_requests(video_id, proxies=proxies)
+                # Try method 2: Requests library with explicit proxies
+                try:
+                    print("Method 2: Attempting with requests library using explicit proxies...")
+                    transcript_list = fetch_transcript_with_requests(video_id, proxies=proxies)
+                    print(f"Method 2 succeeded: Retrieved transcript with {len(transcript_list)} entries")
+                except Exception as e2:
+                    error_messages.append(f"Method 2 failed: {str(e2)}")
+                    print(f"Method 2 failed: {str(e2)}")
+                    
+                    # Method 3: Try directly without proxy as last resort
+                    try:
+                        print("Method 3: Attempting direct connection without proxy...")
+                        # Clear environment proxies temporarily
+                        old_http_proxy = os.environ.pop('HTTP_PROXY', None)
+                        old_https_proxy = os.environ.pop('HTTPS_PROXY', None)
+                        
+                        # Use a clean session
+                        with requests.Session() as direct_session:
+                            # Force clean session without proxies
+                            direct_session.proxies.clear()
+                            
+                            # Get transcript directly
+                            transcript_list = fetch_transcript_with_requests(video_id, proxies=None, session=direct_session)
+                        
+                        # Restore environment
+                        if old_http_proxy:
+                            os.environ['HTTP_PROXY'] = old_http_proxy
+                        if old_https_proxy:
+                            os.environ['HTTPS_PROXY'] = old_https_proxy
+                            
+                        print(f"Method 3 succeeded: Retrieved transcript with {len(transcript_list)} entries")
+                    except Exception as e3:
+                        error_messages.append(f"Method 3 failed: {str(e3)}")
+                        print(f"Method 3 failed: {str(e3)}")
             
+            # If all methods failed
             if not transcript_list:
+                combined_errors = " | ".join(error_messages)
                 return jsonify({
                     'success': False,
-                    'error': 'No transcript found for this video'
-                }), 404, response_headers
+                    'error': f'Failed to fetch transcript: {combined_errors}'
+                }), 500, response_headers
                 
-            print(f"Transcript retrieved for {video_id} with {len(transcript_list)} entries")
+            print(f"Successfully retrieved transcript for {video_id} with {len(transcript_list)} entries")
         except Exception as transcript_error:
             return jsonify({
                 'success': False,
@@ -321,15 +364,18 @@ if __name__ == '__main__':
     app.run(debug=True) 
 
 # Backup function to fetch transcript using requests directly
-def fetch_transcript_with_requests(video_id, proxies=None):
+def fetch_transcript_with_requests(video_id, proxies=None, session=None):
     """Fetch YouTube transcript using requests library with proxy support"""
     print(f"Attempting to fetch transcript for {video_id} using requests with proxies: {bool(proxies)}")
+    
+    # Use provided session or create a new one
+    req_session = session if session else requests
     
     # First get the video page to extract available captions
     video_url = f"https://www.youtube.com/watch?v={video_id}"
     try:
         print(f"Fetching video page with proxies: {bool(proxies)}")
-        response = requests.get(video_url, proxies=proxies)
+        response = req_session.get(video_url, proxies=proxies)
         response.raise_for_status()
         
         # Find the captions URL in the page
@@ -374,7 +420,7 @@ def fetch_transcript_with_requests(video_id, proxies=None):
         
         # Fetch the captions
         print(f"Fetching captions from {caption_url}")
-        captions_response = requests.get(caption_url, proxies=proxies)
+        captions_response = req_session.get(caption_url, proxies=proxies)
         captions_response.raise_for_status()
         
         captions_data = captions_response.json()
