@@ -18,6 +18,8 @@ const chaptersContentElement = document.getElementById('chapters-content');
 const copyButton = document.getElementById('copy-btn');
 const regenerateButton = document.getElementById('regenerate-btn');
 const debugInfoElement = document.getElementById('debug-info');
+const debugTitleElement = document.getElementById('debug-title');
+const debugContentElement = document.getElementById('debug-content');
 
 // State variables
 let currentVideoId = null;
@@ -33,6 +35,15 @@ function init() {
   generateButton.addEventListener('click', handleGenerateClick);
   copyButton.addEventListener('click', handleCopyClick);
   regenerateButton.addEventListener('click', handleRegenerateClick);
+  
+  // Set up debug section toggle
+  if (debugTitleElement) {
+    debugTitleElement.addEventListener('click', function() {
+      if (debugContentElement) {
+        debugContentElement.classList.toggle('visible');
+      }
+    });
+  }
   
   // Check API server status first
   checkApiStatus()

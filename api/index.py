@@ -36,17 +36,13 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME")
 WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD")
 
-# Configure HTTP/HTTPS proxies if Webshare credentials are available
-proxies = None
+# Set up Webshare proxy if credentials are available
+webshare_proxy = None
 if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
-    proxy_url = f"http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80"
-    proxies = {
-        'http': proxy_url,
-        'https': proxy_url
+    webshare_proxy = {
+        'http': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80/',
+        'https': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80/'
     }
-    # Set environment variables for libraries that use them
-    os.environ['HTTP_PROXY'] = proxy_url
-    os.environ['HTTPS_PROXY'] = proxy_url
     print("Webshare proxy configured")
 else:
     print("No Webshare proxy configured")
@@ -58,7 +54,7 @@ def generate_session_id():
 @app.route('/api', methods=['GET'])
 def hello():
     proxy_status = {
-        'configured': bool(proxies),
+        'configured': bool(webshare_proxy),
         'username': bool(WEBSHARE_USERNAME),
         'password': bool(WEBSHARE_PASSWORD)
     }
@@ -66,7 +62,7 @@ def hello():
     return jsonify({
         'status': 'online',
         'message': 'YouTube Chapter Generator API is running',
-        'webshare_proxy_configured': bool(proxies),
+        'webshare_proxy_configured': bool(webshare_proxy),
         'proxy_status': proxy_status,
         'cors_headers': {
             'Access-Control-Allow-Origin': '*',
@@ -75,91 +71,40 @@ def hello():
         }
     })
 
-# Custom transcript fetcher that uses proxies
-def get_transcript_with_proxy(video_id, language_code='en'):
+def get_transcript(video_id, language_code='en'):
     """
-    Get transcript using multiple methods, with proxy support if configured
-    """
-    errors = []
+    Get transcript for a YouTube video using youtube-transcript-api
     
+    This function follows the recommended approach from the youtube-transcript-api 
+    documentation for working around IP blocks using proxies.
+    """
     try:
-        # Method 1: Direct approach with the library's built-in proxy support
+        # First attempt: Try without proxy
         try:
-            print(f"Getting transcript for {video_id} using method 1...")
-            # This uses the proxies from environment variables
+            print(f"Attempting to get transcript for {video_id} without proxy...")
             return YouTubeTranscriptApi.get_transcript(video_id, languages=[language_code])
         except Exception as e:
-            errors.append(f"Method 1 failed: {str(e)}")
-            traceback.print_exc()
+            print(f"Failed to get transcript without proxy: {e}")
+            if not webshare_proxy:
+                # If no proxy is configured, re-raise the exception
+                raise
         
-        # Method 2: Explicitly pass proxies using the library's proxy parameter
-        if proxies:
+        # Second attempt: Try with Webshare proxy if configured
+        if webshare_proxy:
+            print(f"Attempting to get transcript for {video_id} with Webshare proxy...")
             try:
-                print(f"Getting transcript for {video_id} using method 2...")
                 return YouTubeTranscriptApi.get_transcript(
                     video_id, 
                     languages=[language_code],
-                    proxies=proxies
+                    proxies=webshare_proxy
                 )
             except Exception as e:
-                errors.append(f"Method 2 failed: {str(e)}")
-                traceback.print_exc()
-        
-        # Method 3: Use requests session with proxies
-        if proxies:
-            try:
-                print(f"Getting transcript for {video_id} using method 3...")
-                # Create a custom requests session with proxies
-                session = requests.Session()
-                session.proxies.update(proxies)
-                
-                # Override the YouTubeTranscriptApi's _make_http_request method temporarily
-                original_request_method = YouTubeTranscriptApi._make_http_request
-                
-                def custom_request(url):
-                    response = session.get(url)
-                    return response.text
-                
-                # Monkey patch
-                YouTubeTranscriptApi._make_http_request = custom_request
-                
-                try:
-                    result = YouTubeTranscriptApi.get_transcript(video_id, languages=[language_code])
-                    return result
-                finally:
-                    # Restore original method
-                    YouTubeTranscriptApi._make_http_request = original_request_method
-            except Exception as e:
-                errors.append(f"Method 3 failed: {str(e)}")
-                traceback.print_exc()
-        
-        # Method 4: Last resort - try without proxy
-        try:
-            # Clear environment variables temporarily
-            temp_http_proxy = os.environ.pop('HTTP_PROXY', None)
-            temp_https_proxy = os.environ.pop('HTTPS_PROXY', None)
-            
-            print(f"Getting transcript for {video_id} using method 4 (no proxy)...")
-            result = YouTubeTranscriptApi.get_transcript(video_id, languages=[language_code])
-            
-            # Restore environment variables
-            if temp_http_proxy:
-                os.environ['HTTP_PROXY'] = temp_http_proxy
-            if temp_https_proxy:
-                os.environ['HTTPS_PROXY'] = temp_https_proxy
-                
-            return result
-        except Exception as e:
-            errors.append(f"Method 4 failed: {str(e)}")
-            traceback.print_exc()
-            
-        # If we get here, all methods failed
-        raise Exception(f"All transcript fetch methods failed. Errors: {errors}")
-        
+                print(f"Failed to get transcript with Webshare proxy: {e}")
+                raise
     except Exception as e:
-        print(f"Final error getting transcript: {e}")
-        # If all methods fail, raise the exception with all errors
-        raise Exception(f"Failed to fetch transcript: {str(e)}. Detailed errors: {', '.join(errors)}")
+        print(f"All transcript fetching methods failed: {e}")
+        traceback.print_exc()
+        raise Exception(f"Could not retrieve transcript: {str(e)}")
 
 @app.route('/api/generate-chapters', methods=['POST'])
 def generate_chapters():
@@ -194,8 +139,8 @@ def generate_chapters():
         
         print(f"Processing request for video_id: {video_id} with session_id: {session_id}")
         
-        # Get transcript using YouTube Transcript API (with proxy if configured)
-        transcript_list = get_transcript_with_proxy(video_id)
+        # Get transcript using YouTube Transcript API (with proxy if needed)
+        transcript_list = get_transcript(video_id)
         
         if not transcript_list:
             return jsonify({
@@ -267,7 +212,7 @@ def generate_chapters():
             "session_id": session_id,
             "video_id": video_id,
             "video_duration": format_time(video_duration_seconds),
-            "used_proxy": bool(proxies)
+            "used_proxy": bool(webshare_proxy)
         })
         
         # Add CORS headers to response
