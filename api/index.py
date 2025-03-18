@@ -52,18 +52,6 @@ WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
 
 print(f"Environment variables loaded: OPENAI_API_KEY={'✓' if OPENAI_API_KEY else '✗'}, WEBSHARE_USERNAME={'✓' if WEBSHARE_USERNAME else '✗'}, WEBSHARE_PASSWORD={'✓' if WEBSHARE_PASSWORD else '✗'}")
 
-# Create OpenAI client if API key is available
-openai_client = None
-if OPENAI_API_KEY:
-    try:
-        openai_client = OpenAI(api_key=OPENAI_API_KEY)
-        print("OpenAI client configured")
-    except Exception as e:
-        print(f"ERROR configuring OpenAI client: {e}")
-        traceback.print_exc()
-else:
-    print("Warning: OpenAI API key not found in environment variables")
-
 # Configure proxies if credentials available
 proxies = None
 if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
@@ -73,12 +61,32 @@ if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
             'http': proxy_url,
             'https': proxy_url
         }
-        print("Webshare proxy configured")
+        
+        # Set proxies in environment variables for libraries that use them
+        if not os.environ.get('HTTP_PROXY'):
+            os.environ['HTTP_PROXY'] = proxy_url
+        if not os.environ.get('HTTPS_PROXY'):
+            os.environ['HTTPS_PROXY'] = proxy_url
+            
+        print("Webshare proxy configured via environment variables")
     except Exception as e:
         print(f"ERROR configuring proxies: {e}")
         traceback.print_exc()
 else:
     print("No Webshare proxy configured")
+
+# Create OpenAI client if API key is available
+openai_client = None
+if OPENAI_API_KEY:
+    try:
+        # Initialize the OpenAI client without passing proxies directly
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        print("OpenAI client configured")
+    except Exception as e:
+        print(f"ERROR configuring OpenAI client: {e}")
+        traceback.print_exc()
+else:
+    print("Warning: OpenAI API key not found in environment variables")
 
 # Simple health check
 @app.route('/', methods=['GET'])
@@ -152,11 +160,10 @@ def generate_chapters():
         
         # Get transcript
         try:
-            # Prepare arguments with proxies if available
+            # Only use the language parameter, proxies should be picked up from env vars
             kwargs = {'languages': ['en']}
-            if proxies:
-                kwargs['proxies'] = proxies
-                
+            
+            # We don't pass proxies directly anymore
             transcript_list = YouTubeTranscriptApi.get_transcript(video_id, **kwargs)
             
             if not transcript_list:
