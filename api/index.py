@@ -206,51 +206,45 @@ def generate_chapters():
             transcript_list = None
             error_messages = []
             
-            # Try method 1: YouTube API with proxies from environment
+            # Setup proxies according to youtube-transcript-api documentation
+            if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
+                # Format proxies for youtube-transcript-api
+                proxies_dict = {
+                    'http': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80',
+                    'https': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80'
+                }
+                print(f"Configured proxies for youtube-transcript-api: {proxies_dict}")
+            else:
+                proxies_dict = None
+                print("No proxy credentials found, will attempt without proxy")
+            
+            # Try with Webshare proxies first
             try:
-                print("Method 1: Attempting to fetch transcript with YouTubeTranscriptApi using proxy from env vars...")
-                kwargs = {'languages': ['en']}
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, **kwargs)
-                print(f"Method 1 succeeded: Retrieved transcript with {len(transcript_list)} entries")
+                print("Attempting to fetch transcript with proxies directly in YouTubeTranscriptApi...")
+                # Pass proxies directly to the API call as documented
+                transcript_list = YouTubeTranscriptApi.get_transcript(
+                    video_id, 
+                    languages=['en'],
+                    proxies=proxies_dict
+                )
+                print(f"Successfully fetched transcript with {len(transcript_list)} entries")
             except Exception as e1:
                 error_message = str(e1)
-                error_messages.append(f"Method 1 failed: {error_message}")
-                print(f"Method 1 failed: {error_message}")
+                error_messages.append(f"Proxy method failed: {error_message}")
+                print(f"Proxy method failed: {error_message}")
                 
-                # Try method 2: Requests library with explicit proxies
+                # Try without proxy as fallback
                 try:
-                    print("Method 2: Attempting with requests library using explicit proxies...")
-                    transcript_list = fetch_transcript_with_requests(video_id, proxies=proxies)
-                    print(f"Method 2 succeeded: Retrieved transcript with {len(transcript_list)} entries")
+                    print("Attempting to fetch transcript without proxy...")
+                    transcript_list = YouTubeTranscriptApi.get_transcript(
+                        video_id, 
+                        languages=['en'],
+                        proxies=None
+                    )
+                    print(f"Successfully fetched transcript without proxy: {len(transcript_list)} entries")
                 except Exception as e2:
-                    error_messages.append(f"Method 2 failed: {str(e2)}")
-                    print(f"Method 2 failed: {str(e2)}")
-                    
-                    # Method 3: Try directly without proxy as last resort
-                    try:
-                        print("Method 3: Attempting direct connection without proxy...")
-                        # Clear environment proxies temporarily
-                        old_http_proxy = os.environ.pop('HTTP_PROXY', None)
-                        old_https_proxy = os.environ.pop('HTTPS_PROXY', None)
-                        
-                        # Use a clean session
-                        with requests.Session() as direct_session:
-                            # Force clean session without proxies
-                            direct_session.proxies.clear()
-                            
-                            # Get transcript directly
-                            transcript_list = fetch_transcript_with_requests(video_id, proxies=None, session=direct_session)
-                        
-                        # Restore environment
-                        if old_http_proxy:
-                            os.environ['HTTP_PROXY'] = old_http_proxy
-                        if old_https_proxy:
-                            os.environ['HTTPS_PROXY'] = old_https_proxy
-                            
-                        print(f"Method 3 succeeded: Retrieved transcript with {len(transcript_list)} entries")
-                    except Exception as e3:
-                        error_messages.append(f"Method 3 failed: {str(e3)}")
-                        print(f"Method 3 failed: {str(e3)}")
+                    error_messages.append(f"Direct method failed: {str(e2)}")
+                    print(f"Direct method failed: {str(e2)}")
             
             # If all methods failed
             if not transcript_list:
