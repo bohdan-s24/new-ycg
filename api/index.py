@@ -265,7 +265,9 @@ def generate_chapters():
             
             chapters = response.choices[0].message.content
             
-            print(f"Generated chapters for {video_id}: {len(chapters.split('\\n'))} chapters")
+            # Count lines without using backslash in f-string
+            chapter_count = len(chapters.split("\n"))
+            print(f"Generated chapters for {video_id}: {chapter_count} chapters")
         except Exception as openai_error:
             print(f"OpenAI API error: {openai_error}")
             traceback.print_exc()
