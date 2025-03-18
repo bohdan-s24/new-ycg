@@ -24,9 +24,9 @@ A Chrome extension that automatically generates YouTube video chapters using AI.
 - **Frontend**: Chrome Extension with vanilla JavaScript
 - **Backend**: Python Flask API deployed on Vercel
 - **Libraries**:
-  - YouTube Transcript API
-  - OpenAI API
-  - Flask for API endpoints
+  - YouTube Transcript API (for transcript extraction)
+  - OpenAI API (for intelligent chapter generation)
+  - Flask for API endpoints (with CORS support)
 
 ## Development
 
@@ -93,13 +93,18 @@ If you see CORS errors in the console:
 - Ensure the Vercel deployment has completed
 - Check that the API is accessible
 - Verify that the headers in vercel.json are correct
+- Check browser console for specific error messages
 
 ### Proxy Issues
 If the proxy is not working:
 - Check the Webshare account status
 - Verify the credentials are correct
 - Ensure you're using Residential proxies (not other types)
+- Check the server logs for connection errors
 
 ## License
 
 This project is licensed under the MIT License.
+
+## Latest Update
+Updated on June 3, 2024 with improved CORS handling and better proxy integration.
