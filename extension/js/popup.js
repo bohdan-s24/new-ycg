@@ -1,7 +1,7 @@
 // YouTube Chapter Generator Popup Script
 
 // API endpoints
-const API_BASE_URL = 'https://old-ycg.vercel.app/api';
+const API_BASE_URL = 'https://new-ycg.vercel.app/api';
 const GENERATE_CHAPTERS_ENDPOINT = `${API_BASE_URL}/generate-chapters`;
 
 // Elements
@@ -46,19 +46,24 @@ function getCurrentTabInfo() {
     }
     
     // Send message to content script to get video info
-    chrome.tabs.sendMessage(currentTab.id, { action: 'getVideoInfo' }, (response) => {
-      if (chrome.runtime.lastError) {
-        console.error('Error sending message:', chrome.runtime.lastError);
-        showError('Could not communicate with YouTube page. Please refresh the page and try again.');
-        return;
-      }
-      
-      if (response && response.success) {
-        handleVideoInfo(response.videoId, response.videoTitle);
-      } else {
-        showError('Could not extract video information. Please make sure you are on a YouTube video page.');
-      }
-    });
+    try {
+      chrome.tabs.sendMessage(currentTab.id, { action: 'getVideoInfo' }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Error sending message:', chrome.runtime.lastError.message);
+          showError('Could not communicate with YouTube page. Please refresh the page and try again.');
+          return;
+        }
+        
+        if (response && response.success) {
+          handleVideoInfo(response.videoId, response.videoTitle);
+        } else {
+          showError('Could not extract video information. Please make sure you are on a YouTube video page.');
+        }
+      });
+    } catch (error) {
+      console.error('Error in getCurrentTabInfo:', error);
+      showError('An unexpected error occurred. Please refresh the page and try again.');
+    }
   });
 }
 
@@ -91,19 +96,31 @@ async function generateChapters() {
   hideError();
   
   try {
+    console.log(`Sending request to ${GENERATE_CHAPTERS_ENDPOINT} for video ID: ${currentVideoId}`);
+    
     const response = await fetch(GENERATE_CHAPTERS_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
       body: JSON.stringify({
         video_id: currentVideoId
       }),
     });
     
-    const data = await response.json();
+    console.log('Received response:', response.status);
     
-    if (response.ok && data.success) {
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('Error response:', text);
+      throw new Error(`Server responded with status ${response.status}: ${text}`);
+    }
+    
+    const data = await response.json();
+    console.log('Parsed response data:', data);
+    
+    if (data.success) {
       displayChapters(data.chapters);
     } else {
       showError(`Failed to generate chapters: ${data.error || 'Unknown error'}`);

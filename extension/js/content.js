@@ -5,16 +5,38 @@ console.log('YouTube Chapter Generator: Content script loaded');
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('Content script received message:', request);
   
-  if (request.action === 'getVideoInfo') {
-    // Extract video ID and title
-    const videoId = getVideoId();
-    const videoTitle = getVideoTitle();
-    
-    console.log('Extracted video info:', { videoId, videoTitle });
+  try {
+    if (request.action === 'getVideoInfo') {
+      // Extract video ID and title
+      const videoId = getVideoId();
+      const videoTitle = getVideoTitle();
+      
+      console.log('Extracted video info:', { videoId, videoTitle });
+      
+      if (!videoId) {
+        sendResponse({ 
+          success: false, 
+          error: 'Could not extract video ID from the current page.' 
+        });
+        return true;
+      }
+      
+      sendResponse({ 
+        success: true, 
+        videoId, 
+        videoTitle 
+      });
+    } else {
+      sendResponse({ 
+        success: false, 
+        error: 'Unknown action requested' 
+      });
+    }
+  } catch (error) {
+    console.error('Error processing message:', error);
     sendResponse({ 
-      success: true, 
-      videoId, 
-      videoTitle 
+      success: false, 
+      error: `Error in content script: ${error.message}` 
     });
   }
   
@@ -28,6 +50,11 @@ function getVideoId() {
     const url = window.location.href;
     const urlObj = new URL(url);
     const videoId = urlObj.searchParams.get('v');
+    
+    if (!videoId) {
+      console.error('No video ID found in URL:', url);
+    }
+    
     return videoId;
   } catch (error) {
     console.error('Error extracting video ID:', error);
@@ -41,9 +68,12 @@ function getVideoTitle() {
     // Look for the title in different places depending on YouTube's layout
     const titleElement = document.querySelector('h1.title yt-formatted-string') ||
                         document.querySelector('h1.title') ||
-                        document.querySelector('h1 .ytd-video-primary-info-renderer');
+                        document.querySelector('h1 .ytd-video-primary-info-renderer') ||
+                        document.querySelector('h1.ytd-video-primary-info-renderer');
     
-    return titleElement ? titleElement.textContent.trim() : 'Unknown Title';
+    const title = titleElement ? titleElement.textContent.trim() : 'Unknown Title';
+    console.log('Extracted video title:', title);
+    return title;
   } catch (error) {
     console.error('Error extracting video title:', error);
     return 'Unknown Title';
