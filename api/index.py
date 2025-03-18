@@ -1,39 +1,89 @@
-from flask import Flask, request, jsonify, make_response
-from youtube_transcript_api import YouTubeTranscriptApi
-from openai import OpenAI
 import os
-from flask_cors import CORS
-import traceback
 import sys
+import traceback
+
+# Debug imports
+print(f"Python version: {sys.version}")
+print(f"Current working directory: {os.getcwd()}")
+print(f"Files in current directory: {os.listdir()}")
+
+# Import dependencies with error handling
+try:
+    from flask import Flask, request, jsonify, make_response
+    print("Flask imported successfully")
+except ImportError as e:
+    print(f"ERROR importing Flask: {e}")
+    traceback.print_exc()
+
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi
+    print("YouTubeTranscriptApi imported successfully")
+except ImportError as e:
+    print(f"ERROR importing YouTubeTranscriptApi: {e}")
+    traceback.print_exc()
+
+try:
+    from openai import OpenAI
+    print("OpenAI imported successfully")
+except ImportError as e:
+    print(f"ERROR importing OpenAI: {e}")
+    traceback.print_exc()
+    
+try:
+    from flask_cors import CORS
+    print("CORS imported successfully")
+except ImportError as e:
+    print(f"ERROR importing CORS: {e}")
+    traceback.print_exc()
 
 # Create Flask app
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+try:
+    app = Flask(__name__)
+    CORS(app, resources={r"/*": {"origins": "*"}})
+    print("Flask app created and CORS configured")
+except Exception as e:
+    print(f"ERROR creating Flask app: {e}")
+    traceback.print_exc()
 
 # Get environment variables
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME", "")
 WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
 
+print(f"Environment variables loaded: OPENAI_API_KEY={'✓' if OPENAI_API_KEY else '✗'}, WEBSHARE_USERNAME={'✓' if WEBSHARE_USERNAME else '✗'}, WEBSHARE_PASSWORD={'✓' if WEBSHARE_PASSWORD else '✗'}")
+
 # Create OpenAI client if API key is available
 openai_client = None
 if OPENAI_API_KEY:
-    openai_client = OpenAI(api_key=OPENAI_API_KEY)
-    print("OpenAI client configured")
+    try:
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        print("OpenAI client configured")
+    except Exception as e:
+        print(f"ERROR configuring OpenAI client: {e}")
+        traceback.print_exc()
 else:
     print("Warning: OpenAI API key not found in environment variables")
 
 # Configure proxies if credentials available
 proxies = None
 if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
-    proxy_url = f"http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80"
-    proxies = {
-        'http': proxy_url,
-        'https': proxy_url
-    }
-    print("Webshare proxy configured")
+    try:
+        proxy_url = f"http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80"
+        proxies = {
+            'http': proxy_url,
+            'https': proxy_url
+        }
+        print("Webshare proxy configured")
+    except Exception as e:
+        print(f"ERROR configuring proxies: {e}")
+        traceback.print_exc()
 else:
     print("No Webshare proxy configured")
+
+# Simple health check
+@app.route('/', methods=['GET'])
+def root():
+    return "API is running. Try /api for more details.", 200
 
 @app.route('/api', methods=['GET'])
 def hello():
@@ -213,6 +263,10 @@ def generate_chapters():
             error_response.headers.add(key, value)
         
         return error_response, 500
+
+# This should help Vercel understand we're returning a Flask application
+def handler(event, context):
+    return app
 
 # For local development
 if __name__ == '__main__':
