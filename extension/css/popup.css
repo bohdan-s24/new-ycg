@@ -1,0 +1,205 @@
+/* YouTube Chapter Generator Popup Styles */
+body {
+  width: 400px;
+  min-height: 300px;
+  font-family: 'Roboto', Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  color: #333;
+  background-color: #f9f9f9;
+}
+
+.container {
+  padding: 16px;
+}
+
+header {
+  background-color: #ff0000;
+  color: white;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+header h1 {
+  font-size: 18px;
+  margin: 0;
+  font-weight: 500;
+}
+
+.logo {
+  width: 24px;
+  height: 24px;
+  margin-right: 8px;
+}
+
+.video-info {
+  margin-bottom: 16px;
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.video-title {
+  font-weight: 500;
+  word-break: break-word;
+  margin-bottom: 8px;
+}
+
+.video-id {
+  font-size: 12px;
+  color: #666;
+}
+
+.btn {
+  background-color: #ff0000;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn:hover {
+  background-color: #cc0000;
+}
+
+.btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.btn-icon {
+  margin-right: 6px;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.spinner {
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid #ff0000;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.chapters-container {
+  margin-top: 16px;
+  background-color: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.chapters-title {
+  font-weight: 500;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chapters-content {
+  white-space: pre-wrap;
+  font-family: 'Roboto Mono', monospace;
+  border: 1px solid #eee;
+  padding: 12px;
+  border-radius: 4px;
+  background-color: #f5f5f5;
+  max-height: 300px;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+
+.chapters-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+}
+
+.error {
+  color: #cc0000;
+  background-color: #ffecec;
+  padding: 12px;
+  border-radius: 4px;
+  margin: 8px 0;
+  text-align: center;
+}
+
+.status {
+  margin: 16px 0;
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+}
+
+.hidden {
+  display: none;
+}
+
+.tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip .tooltip-text {
+  visibility: hidden;
+  width: 120px;
+  background-color: #555;
+  color: #fff;
+  text-align: center;
+  padding: 5px;
+  border-radius: 6px;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  margin-left: -60px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  font-size: 12px;
+}
+
+.tooltip:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  padding: 8px 0;
+}
+
+footer a {
+  color: #666;
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
+} 
