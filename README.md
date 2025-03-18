@@ -9,6 +9,7 @@ A Chrome extension that automatically generates YouTube video chapters using AI.
 - Creates properly formatted YouTube chapters ready to copy
 - Simple, user-friendly interface
 - Works with any YouTube video that has captions/subtitles
+- Supports Webshare proxies to avoid IP blocks
 
 ## How It Works
 
@@ -39,6 +40,8 @@ pip install -r requirements.txt
 2. Set up environment variables:
 ```
 OPENAI_API_KEY=your_api_key_here
+WEBSHARE_USERNAME=your_webshare_username
+WEBSHARE_PASSWORD=your_webshare_password
 ```
 
 3. Run locally:
@@ -56,6 +59,46 @@ python index.py
 ## Deployment
 
 The backend is automatically deployed to Vercel when changes are pushed to the main branch.
+
+### Vercel Environment Variables
+
+To ensure proper functionality, set these environment variables in your Vercel project:
+
+1. `OPENAI_API_KEY` - Your OpenAI API key
+2. `WEBSHARE_USERNAME` - Your Webshare proxy username (if using Webshare)
+3. `WEBSHARE_PASSWORD` - Your Webshare proxy password (if using Webshare)
+
+## Using Webshare Proxies
+
+To avoid YouTube IP blocks, this project supports Webshare proxies:
+
+1. **Purchase a Webshare Package**: 
+   - Sign up for [Webshare](https://www.webshare.io/)
+   - Purchase a "Residential" proxy package (NOT "Proxy Server" or "Static Residential")
+
+2. **Configure Proxies**:
+   - Find your proxy credentials in Webshare dashboard
+   - Add them to your environment variables (see above)
+
+3. **Vercel Configuration**:
+   - Add the variables to your Vercel project settings
+   - Redeploy the application
+
+The API will automatically use the proxies if they are configured, falling back to direct access if not.
+
+## Troubleshooting
+
+### CORS Issues
+If you see CORS errors in the console:
+- Ensure the Vercel deployment has completed
+- Check that the API is accessible
+- Verify that the headers in vercel.json are correct
+
+### Proxy Issues
+If the proxy is not working:
+- Check the Webshare account status
+- Verify the credentials are correct
+- Ensure you're using Residential proxies (not other types)
 
 ## License
 

@@ -98,36 +98,79 @@ async function generateChapters() {
   try {
     console.log(`Sending request to ${GENERATE_CHAPTERS_ENDPOINT} for video ID: ${currentVideoId}`);
     
-    const response = await fetch(GENERATE_CHAPTERS_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        video_id: currentVideoId
-      }),
-    });
-    
-    console.log('Received response:', response.status);
-    
-    if (!response.ok) {
-      const text = await response.text();
-      console.error('Error response:', text);
-      throw new Error(`Server responded with status ${response.status}: ${text}`);
-    }
-    
-    const data = await response.json();
-    console.log('Parsed response data:', data);
-    
-    if (data.success) {
-      displayChapters(data.chapters);
-    } else {
-      showError(`Failed to generate chapters: ${data.error || 'Unknown error'}`);
+    // Try first with standard fetch
+    try {
+      const response = await fetch(GENERATE_CHAPTERS_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          video_id: currentVideoId
+        }),
+      });
+      
+      console.log('Received response:', response.status, response.statusText);
+      console.log('Response headers:', 
+        Array.from(response.headers.entries())
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(', ')
+      );
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('Error response:', text);
+        throw new Error(`Server responded with status ${response.status}: ${text}`);
+      }
+      
+      const data = await response.json();
+      console.log('Parsed response data:', data);
+      
+      if (data.success) {
+        displayChapters(data.chapters);
+      } else {
+        showError(`Failed to generate chapters: ${data.error || 'Unknown error'}`);
+      }
+    } catch (fetchError) {
+      // If standard fetch fails (possibly due to CORS), try with mode: 'no-cors'
+      // Note: This won't give us access to the response data, but it might help diagnose issues
+      if (fetchError.message.includes('CORS') || fetchError.message.includes('Failed to fetch')) {
+        console.warn('CORS error detected, retrying with no-cors mode for diagnostic purposes');
+        
+        try {
+          // This is just a diagnostic attempt - we can't read the response with no-cors
+          await fetch(GENERATE_CHAPTERS_ENDPOINT, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              video_id: currentVideoId
+            }),
+            mode: 'no-cors'
+          });
+          
+          // If we reach here, the request went through but we can't access the response
+          console.log('no-cors request was sent, but we cannot access the response');
+          throw new Error("CORS issue detected. The server is running but cannot accept cross-origin requests from this extension. Please check the server configuration.");
+        } catch (noCorsError) {
+          console.error('Even no-cors mode failed:', noCorsError);
+          throw fetchError; // Throw the original error
+        }
+      } else {
+        // Not a CORS issue, rethrow
+        throw fetchError;
+      }
     }
   } catch (error) {
     console.error('Error generating chapters:', error);
-    showError(`Failed to generate chapters: ${error.message}`);
+    
+    if (error.message.includes('CORS')) {
+      showError(`CORS error: The server is not properly configured to accept requests from this extension. Please check the server deployment.`);
+    } else {
+      showError(`Failed to generate chapters: ${error.message}`);
+    }
   } finally {
     showLoading(false);
     isGenerating = false;
