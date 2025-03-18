@@ -1,3 +1,7 @@
+from flask import Flask, request, jsonify, make_response
+from youtube_transcript_api import YouTubeTranscriptApi
+from openai import OpenAI
+from flask_cors import CORS
 import os
 import sys
 import traceback
@@ -63,10 +67,8 @@ if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
         }
         
         # Set proxies in environment variables for libraries that use them
-        if not os.environ.get('HTTP_PROXY'):
-            os.environ['HTTP_PROXY'] = proxy_url
-        if not os.environ.get('HTTPS_PROXY'):
-            os.environ['HTTPS_PROXY'] = proxy_url
+        os.environ['HTTP_PROXY'] = proxy_url
+        os.environ['HTTPS_PROXY'] = proxy_url
             
         print("Webshare proxy configured via environment variables")
     except Exception as e:
@@ -79,7 +81,6 @@ else:
 openai_client = None
 if OPENAI_API_KEY:
     try:
-        # Initialize the OpenAI client without passing proxies directly
         openai_client = OpenAI(api_key=OPENAI_API_KEY)
         print("OpenAI client configured")
     except Exception as e:
@@ -270,10 +271,6 @@ def generate_chapters():
             error_response.headers.add(key, value)
         
         return error_response, 500
-
-# This should help Vercel understand we're returning a Flask application
-def handler(event, context):
-    return app
 
 # For local development
 if __name__ == '__main__':
