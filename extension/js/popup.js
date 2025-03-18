@@ -3,6 +3,7 @@
 // API endpoints
 const API_BASE_URL = 'https://new-ycg.vercel.app/api';
 const GENERATE_CHAPTERS_ENDPOINT = `${API_BASE_URL}/generate-chapters`;
+const PING_ENDPOINT = `${API_BASE_URL}`;
 
 // Elements
 const statusElement = document.getElementById('status');
@@ -16,11 +17,13 @@ const chaptersContainerElement = document.getElementById('chapters-container');
 const chaptersContentElement = document.getElementById('chapters-content');
 const copyButton = document.getElementById('copy-btn');
 const regenerateButton = document.getElementById('regenerate-btn');
+const debugInfoElement = document.getElementById('debug-info');
 
 // State variables
 let currentVideoId = null;
 let currentVideoTitle = null;
 let isGenerating = false;
+let debugInfo = [];
 
 // Initialize
 document.addEventListener('DOMContentLoaded', init);
@@ -31,8 +34,43 @@ function init() {
   copyButton.addEventListener('click', handleCopyClick);
   regenerateButton.addEventListener('click', handleRegenerateClick);
   
-  // Check if we're on a YouTube video page
-  getCurrentTabInfo();
+  // Check API server status first
+  checkApiStatus()
+    .then(() => {
+      // Check if we're on a YouTube video page
+      getCurrentTabInfo();
+    })
+    .catch(error => {
+      showError(`API server is not accessible: ${error.message}. Please check your internet connection and the server status.`);
+    });
+}
+
+// Check API server status
+async function checkApiStatus() {
+  try {
+    addDebugInfo('Checking API status...');
+    
+    const response = await fetch(PING_ENDPOINT, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API server returned status ${response.status}: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    addDebugInfo(`API server is online. CORS headers configured: ${JSON.stringify(data.cors_headers || {})}`);
+    addDebugInfo(`Webshare proxy status: ${JSON.stringify(data.proxy_status || {})}`);
+    
+    return data;
+  } catch (error) {
+    addDebugInfo(`API status check failed: ${error.message}`);
+    throw error;
+  }
 }
 
 // Get information about the current tab
@@ -47,21 +85,26 @@ function getCurrentTabInfo() {
     
     // Send message to content script to get video info
     try {
+      addDebugInfo(`Requesting video info from tab ${currentTab.id}`);
       chrome.tabs.sendMessage(currentTab.id, { action: 'getVideoInfo' }, (response) => {
         if (chrome.runtime.lastError) {
           console.error('Error sending message:', chrome.runtime.lastError.message);
+          addDebugInfo(`Communication error: ${chrome.runtime.lastError.message}`);
           showError('Could not communicate with YouTube page. Please refresh the page and try again.');
           return;
         }
         
         if (response && response.success) {
+          addDebugInfo(`Received video info: ID=${response.videoId}, title="${response.videoTitle?.substring(0, 30)}..."`);
           handleVideoInfo(response.videoId, response.videoTitle);
         } else {
+          addDebugInfo(`Failed to get video info: ${response?.error || 'Unknown error'}`);
           showError('Could not extract video information. Please make sure you are on a YouTube video page.');
         }
       });
     } catch (error) {
       console.error('Error in getCurrentTabInfo:', error);
+      addDebugInfo(`Unexpected error: ${error.message}`);
       showError('An unexpected error occurred. Please refresh the page and try again.');
     }
   });
@@ -96,10 +139,15 @@ async function generateChapters() {
   hideError();
   
   try {
-    console.log(`Sending request to ${GENERATE_CHAPTERS_ENDPOINT} for video ID: ${currentVideoId}`);
+    addDebugInfo(`Sending request to generate chapters for video ID: ${currentVideoId}`);
+    
+    // First check API status
+    await checkApiStatus();
     
     // Try first with standard fetch
     try {
+      addDebugInfo(`Fetch request to ${GENERATE_CHAPTERS_ENDPOINT} with video_id=${currentVideoId}`);
+      
       const response = await fetch(GENERATE_CHAPTERS_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -111,63 +159,75 @@ async function generateChapters() {
         }),
       });
       
-      console.log('Received response:', response.status, response.statusText);
-      console.log('Response headers:', 
-        Array.from(response.headers.entries())
-          .map(([key, value]) => `${key}: ${value}`)
-          .join(', ')
-      );
+      addDebugInfo(`Response status: ${response.status} ${response.statusText}`);
+      
+      // Log response headers for debugging
+      const responseHeaders = {};
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+      addDebugInfo(`Response headers: ${JSON.stringify(responseHeaders)}`);
       
       if (!response.ok) {
-        const text = await response.text();
-        console.error('Error response:', text);
-        throw new Error(`Server responded with status ${response.status}: ${text}`);
+        let errorDetail;
+        try {
+          const errorJson = await response.json();
+          errorDetail = errorJson.error || `HTTP ${response.status}`;
+          addDebugInfo(`Error response JSON: ${JSON.stringify(errorJson)}`);
+        } catch {
+          const text = await response.text();
+          errorDetail = text || `HTTP ${response.status}`;
+          addDebugInfo(`Error response text: ${text}`);
+        }
+        
+        throw new Error(`Server error: ${errorDetail}`);
       }
       
       const data = await response.json();
-      console.log('Parsed response data:', data);
+      addDebugInfo(`Success response: ${JSON.stringify(data, null, 2).substring(0, 200)}...`);
       
       if (data.success) {
         displayChapters(data.chapters);
+        addDebugInfo(`Chapters generated successfully. Video duration: ${data.video_duration}, used proxy: ${data.used_proxy}`);
       } else {
-        showError(`Failed to generate chapters: ${data.error || 'Unknown error'}`);
+        throw new Error(data.error || 'Unknown error');
       }
     } catch (fetchError) {
-      // If standard fetch fails (possibly due to CORS), try with mode: 'no-cors'
-      // Note: This won't give us access to the response data, but it might help diagnose issues
-      if (fetchError.message.includes('CORS') || fetchError.message.includes('Failed to fetch')) {
-        console.warn('CORS error detected, retrying with no-cors mode for diagnostic purposes');
+      // Check if this is a CORS error
+      if (fetchError.message.includes('CORS') || 
+          fetchError.name === 'TypeError' && fetchError.message.includes('Failed to fetch')) {
         
+        addDebugInfo(`CORS error detected: ${fetchError.message}`);
+        
+        // Try direct API ping to diagnose connectivity
         try {
-          // This is just a diagnostic attempt - we can't read the response with no-cors
-          await fetch(GENERATE_CHAPTERS_ENDPOINT, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              video_id: currentVideoId
-            }),
-            mode: 'no-cors'
+          await fetch(PING_ENDPOINT, { 
+            method: 'GET',
+            mode: 'no-cors' // This will succeed if the server is accessible
           });
           
-          // If we reach here, the request went through but we can't access the response
-          console.log('no-cors request was sent, but we cannot access the response');
-          throw new Error("CORS issue detected. The server is running but cannot accept cross-origin requests from this extension. Please check the server configuration.");
-        } catch (noCorsError) {
-          console.error('Even no-cors mode failed:', noCorsError);
-          throw fetchError; // Throw the original error
+          addDebugInfo('API server is reachable with no-cors mode');
+          throw new Error(`CORS issue detected. The server is running but cannot accept cross-origin requests from this extension.`);
+        } catch (pingError) {
+          // If this fails too, the server is likely down
+          addDebugInfo(`API ping failed: ${pingError.message}`);
+          throw new Error(`Cannot connect to API server. Please check if the server is running.`);
         }
-      } else {
-        // Not a CORS issue, rethrow
-        throw fetchError;
       }
+      
+      // Not a CORS issue or couldn't diagnose further
+      throw fetchError;
     }
   } catch (error) {
     console.error('Error generating chapters:', error);
+    addDebugInfo(`Final error: ${error.message}`);
     
     if (error.message.includes('CORS')) {
       showError(`CORS error: The server is not properly configured to accept requests from this extension. Please check the server deployment.`);
+    } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+      showError(`Network error: Cannot connect to the API server. Please check your internet connection and server status.`);
+    } else if (error.message.includes('Transcript is not available') || error.message.includes('Could not find the transcript')) {
+      showError(`No transcript available for this video. The video might not have captions, or YouTube might be blocking access.`);
     } else {
       showError(`Failed to generate chapters: ${error.message}`);
     }
@@ -197,8 +257,28 @@ function copyToClipboard(text) {
     })
     .catch(err => {
       console.error('Failed to copy:', err);
+      addDebugInfo(`Copy error: ${err.message}`);
       showError('Failed to copy to clipboard. Please try again.');
     });
+}
+
+// Add debug information
+function addDebugInfo(info) {
+  const timestamp = new Date().toLocaleTimeString();
+  const logEntry = `[${timestamp}] ${info}`;
+  
+  console.log(logEntry);
+  debugInfo.push(logEntry);
+  
+  // Limit debug info to prevent excessive memory usage
+  if (debugInfo.length > 50) {
+    debugInfo.shift();
+  }
+  
+  // Update debug info element if it exists
+  if (debugInfoElement) {
+    debugInfoElement.textContent = debugInfo.join('\n');
+  }
 }
 
 // Show/hide loading state
@@ -217,6 +297,7 @@ function showError(message) {
   errorMessageElement.textContent = message;
   errorMessageElement.classList.remove('hidden');
   statusElement.classList.add('hidden');
+  addDebugInfo(`Error displayed: ${message}`);
 }
 
 // Hide error message
