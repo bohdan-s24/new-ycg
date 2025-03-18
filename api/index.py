@@ -48,13 +48,15 @@ if OPENAI_API_KEY:
 else:
     print("Warning: OpenAI API key not found in environment variables")
 
-# Set up Webshare proxy if credentials are available
-webshare_proxy = None
+# Configure proxies for the Youtube Transcript API exactly as documented
+proxies = None
 if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
-    webshare_proxy = {
-        'http': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80/',
-        'https': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80/'
+    print(f"Configuring Webshare proxies with username: {WEBSHARE_USERNAME}")
+    proxy_dict = {
+        'http': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80',
+        'https': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80',
     }
+    proxies = proxy_dict
     print("Webshare proxy configured")
 else:
     print("No Webshare proxy configured")
@@ -73,9 +75,12 @@ api_status_cache = {
 def hello():
     try:
         proxy_status = {
-            'configured': bool(webshare_proxy),
-            'username': bool(WEBSHARE_USERNAME),
-            'password': bool(WEBSHARE_PASSWORD)
+            'configured': bool(proxies),
+            'username': WEBSHARE_USERNAME != "",
+            'password': WEBSHARE_PASSWORD != "",
+            'proxy_dict': {
+                'http': f'http://{WEBSHARE_USERNAME[:3]}...:{WEBSHARE_PASSWORD[:3]}...@p.webshare.io:80' if proxies else None
+            }
         }
         
         # Include Python version and environment info for diagnostics
@@ -88,7 +93,7 @@ def hello():
         return jsonify({
             'status': 'online',
             'message': 'YouTube Chapter Generator API is running',
-            'webshare_proxy_configured': bool(webshare_proxy),
+            'webshare_proxy_configured': bool(proxies),
             'proxy_status': proxy_status,
             'env_info': env_info,
             'cors_headers': {
@@ -110,34 +115,29 @@ def get_transcript(video_id, language_code='en'):
     """
     Get transcript for a YouTube video using youtube-transcript-api
     
-    This function follows the recommended approach from the youtube-transcript-api 
+    This function exactly follows the recommended approach from the youtube-transcript-api 
     documentation for working around IP blocks using proxies.
     """
     try:
-        # First attempt: Try without proxy
-        try:
-            print(f"Attempting to get transcript for {video_id} without proxy...")
-            return YouTubeTranscriptApi.get_transcript(video_id, languages=[language_code])
-        except Exception as e:
-            print(f"Failed to get transcript without proxy: {e}")
-            if not webshare_proxy:
-                # If no proxy is configured, re-raise the exception
-                raise
+        # Print details about the request
+        print(f"Requesting transcript for video_id: {video_id} with language: {language_code}")
+        print(f"Proxies configured: {proxies is not None}")
         
-        # Second attempt: Try with Webshare proxy if configured
-        if webshare_proxy:
-            print(f"Attempting to get transcript for {video_id} with Webshare proxy...")
-            try:
-                return YouTubeTranscriptApi.get_transcript(
-                    video_id, 
-                    languages=[language_code],
-                    proxies=webshare_proxy
-                )
-            except Exception as e:
-                print(f"Failed to get transcript with Webshare proxy: {e}")
-                raise
+        # Construct the arguments for the get_transcript call
+        kwargs = {'languages': [language_code]}
+        
+        # Only add proxies if they are configured
+        if proxies:
+            print(f"Using Webshare proxies: {proxies}")
+            kwargs['proxies'] = proxies
+            
+        # Make the API call with or without proxies based on configuration
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, **kwargs)
+        print(f"Successfully retrieved transcript with {len(transcript_list)} entries")
+        return transcript_list
+            
     except Exception as e:
-        print(f"All transcript fetching methods failed: {e}")
+        print(f"Failed to get transcript: {e}")
         traceback.print_exc()
         raise Exception(f"Could not retrieve transcript: {str(e)}")
 
@@ -183,9 +183,30 @@ def generate_chapters():
         print(f"Processing request for video_id: {video_id} with session_id: {session_id}")
         
         # Get transcript using YouTube Transcript API (with proxy if needed)
-        transcript_list = get_transcript(video_id)
+        try:
+            transcript_list = get_transcript(video_id)
+        except Exception as transcript_error:
+            # Try without proxy if the error suggests we should
+            if "NoTranscriptFound" in str(transcript_error) or "could not retrieve a transcript" in str(transcript_error):
+                print("No transcript found, this is likely not a proxy issue")
+                return jsonify({
+                    'success': False,
+                    'error': f'No transcript found for this video: {str(transcript_error)}',
+                    'session_id': session_id,
+                    'video_id': video_id
+                }), 404, response_headers
+            else:
+                # This might be a proxy issue or YouTube block
+                print(f"Transcript error that might be proxy-related: {transcript_error}")
+                return jsonify({
+                    'success': False,
+                    'error': f'Error fetching transcript: {str(transcript_error)}',
+                    'session_id': session_id,
+                    'video_id': video_id,
+                    'proxy_used': bool(proxies)
+                }), 500, response_headers
         
-        if not transcript_list:
+        if not transcript_list or len(transcript_list) == 0:
             return jsonify({
                 'success': False,
                 'error': 'No transcript found for this video',
@@ -194,13 +215,9 @@ def generate_chapters():
             }), 404, response_headers
         
         # Calculate video duration in minutes
-        if transcript_list:
-            last_entry = transcript_list[-1]
-            video_duration_seconds = last_entry['start'] + last_entry['duration']
-            video_duration_minutes = video_duration_seconds / 60
-        else:
-            video_duration_minutes = 0
-            video_duration_seconds = 0
+        last_entry = transcript_list[-1]
+        video_duration_seconds = last_entry['start'] + last_entry['duration']
+        video_duration_minutes = video_duration_seconds / 60
         
         print(f"Video duration for {video_id}: {video_duration_minutes:.2f} minutes")
         
@@ -265,7 +282,7 @@ def generate_chapters():
             "session_id": session_id,
             "video_id": video_id,
             "video_duration": format_time(video_duration_seconds),
-            "used_proxy": bool(webshare_proxy)
+            "used_proxy": bool(proxies)
         })
         
         # Add CORS headers to response
