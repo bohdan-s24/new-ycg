@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, make_response
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._transcripts import Transcript
 from youtube_transcript_api.formatters import TextFormatter
-import openai
+from openai import OpenAI
 import os
 from flask_cors import CORS
 import json
@@ -41,10 +41,11 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME", "")
 WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
 
-# Set OpenAI API key if available
+# Create OpenAI client if API key is available
+openai_client = None
 if OPENAI_API_KEY:
-    openai.api_key = OPENAI_API_KEY
-    print("OpenAI API key configured")
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    print("OpenAI client configured")
 else:
     print("Warning: OpenAI API key not found in environment variables")
 
@@ -155,7 +156,7 @@ def generate_chapters():
     
     try:
         # Validate OpenAI API key first
-        if not OPENAI_API_KEY:
+        if not openai_client:
             return jsonify({
                 'success': False,
                 'error': 'OpenAI API key is not configured on the server.',
@@ -253,8 +254,8 @@ def generate_chapters():
         print(f"Calling OpenAI for video {video_id} with transcript length: {len(formatted_transcript)} chars")
         
         try:
-            # Get chapter suggestions from OpenAI
-            response = openai.ChatCompletion.create(
+            # Get chapter suggestions from OpenAI using the new client format
+            response = openai_client.chat.completions.create(
                 model="gpt-4",  # Using the most capable model
                 messages=[
                     {"role": "system", "content": system_prompt},
