@@ -14,9 +14,14 @@ import http.client
 import urllib.request
 import ssl
 import traceback
+import sys
 
 # Load environment variables from .env file if present
-load_dotenv()
+try:
+    load_dotenv()
+    print("Environment variables loaded from .env file")
+except Exception as e:
+    print(f"Warning: Could not load .env file: {e}")
 
 app = Flask(__name__)
 # Enable CORS for all routes and all origins (including Chrome extensions)
@@ -31,10 +36,17 @@ def handle_options():
     response.headers.add('Access-Control-Allow-Methods', 'POST')
     return response
 
-# Get API keys from environment variables
-openai.api_key = os.environ.get("OPENAI_API_KEY")
-WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME")
-WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD")
+# Get API keys from environment variables with fallbacks to prevent errors
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME", "")
+WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
+
+# Set OpenAI API key if available
+if OPENAI_API_KEY:
+    openai.api_key = OPENAI_API_KEY
+    print("OpenAI API key configured")
+else:
+    print("Warning: OpenAI API key not found in environment variables")
 
 # Set up Webshare proxy if credentials are available
 webshare_proxy = None
@@ -51,25 +63,48 @@ else:
 def generate_session_id():
     return str(uuid.uuid4())
 
+# Cache for API status checks to reduce load
+api_status_cache = {
+    'timestamp': 0,
+    'data': None
+}
+
 @app.route('/api', methods=['GET'])
 def hello():
-    proxy_status = {
-        'configured': bool(webshare_proxy),
-        'username': bool(WEBSHARE_USERNAME),
-        'password': bool(WEBSHARE_PASSWORD)
-    }
-    
-    return jsonify({
-        'status': 'online',
-        'message': 'YouTube Chapter Generator API is running',
-        'webshare_proxy_configured': bool(webshare_proxy),
-        'proxy_status': proxy_status,
-        'cors_headers': {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Content-Type,Accept',
-            'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+    try:
+        proxy_status = {
+            'configured': bool(webshare_proxy),
+            'username': bool(WEBSHARE_USERNAME),
+            'password': bool(WEBSHARE_PASSWORD)
         }
-    })
+        
+        # Include Python version and environment info for diagnostics
+        env_info = {
+            'python_version': sys.version,
+            'openai_key_configured': bool(OPENAI_API_KEY),
+            'env_vars': list(os.environ.keys())[:5]  # Just show first 5 for security
+        }
+        
+        return jsonify({
+            'status': 'online',
+            'message': 'YouTube Chapter Generator API is running',
+            'webshare_proxy_configured': bool(webshare_proxy),
+            'proxy_status': proxy_status,
+            'env_info': env_info,
+            'cors_headers': {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type,Accept',
+                'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+            }
+        })
+    except Exception as e:
+        print(f"Error in /api route: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': 'API is running but encountered an error',
+            'error': str(e)
+        }), 200  # Return 200 even on error for diagnostic purposes
 
 def get_transcript(video_id, language_code='en'):
     """
@@ -119,6 +154,14 @@ def generate_chapters():
     }
     
     try:
+        # Validate OpenAI API key first
+        if not OPENAI_API_KEY:
+            return jsonify({
+                'success': False,
+                'error': 'OpenAI API key is not configured on the server.',
+                'session_id': session_id
+            }), 400, response_headers
+        
         # Get data from request
         data = request.json
         if not data:
@@ -192,18 +235,28 @@ def generate_chapters():
         
         print(f"Calling OpenAI for video {video_id} with transcript length: {len(formatted_transcript)} chars")
         
-        # Get chapter suggestions from OpenAI
-        response = openai.ChatCompletion.create(
-            model="gpt-4",  # Using the most capable model
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Here is the transcript with timestamps for YouTube video ID {video_id}:\n\n{formatted_transcript}"}
-            ]
-        )
-        
-        chapters = response.choices[0].message.content
-        
-        print(f"Generated chapters for {video_id}: {len(chapters.split('\\n'))} chapters")
+        try:
+            # Get chapter suggestions from OpenAI
+            response = openai.ChatCompletion.create(
+                model="gpt-4",  # Using the most capable model
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Here is the transcript with timestamps for YouTube video ID {video_id}:\n\n{formatted_transcript}"}
+                ]
+            )
+            
+            chapters = response.choices[0].message.content
+            
+            print(f"Generated chapters for {video_id}: {len(chapters.split('\\n'))} chapters")
+        except Exception as openai_error:
+            print(f"OpenAI API error: {openai_error}")
+            traceback.print_exc()
+            return jsonify({
+                "success": False,
+                "error": f"OpenAI API error: {str(openai_error)}",
+                "session_id": session_id,
+                "video_id": video_id
+            }), 500, response_headers
         
         # Create response with CORS headers
         result = jsonify({

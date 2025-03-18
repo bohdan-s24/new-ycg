@@ -45,6 +45,11 @@ function init() {
     });
   }
   
+  // Make debug panel visible by default to help diagnose issues
+  if (debugContentElement) {
+    debugContentElement.classList.add('visible');
+  }
+  
   // Check API server status first
   checkApiStatus()
     .then(() => {
@@ -52,7 +57,10 @@ function init() {
       getCurrentTabInfo();
     })
     .catch(error => {
-      showError(`API server is not accessible: ${error.message}. Please check your internet connection and the server status.`);
+      addDebugInfo(`API status check failed with error: ${error.message}`);
+      // Continue anyway to allow diagnostics
+      getCurrentTabInfo();
+      showError(`API server may have issues: ${error.message}. You can still try to generate chapters.`);
     });
 }
 
@@ -61,23 +69,51 @@ async function checkApiStatus() {
   try {
     addDebugInfo('Checking API status...');
     
-    const response = await fetch(PING_ENDPOINT, {
+    // Add cache buster to prevent caching
+    const cacheBuster = Date.now();
+    const response = await fetch(`${PING_ENDPOINT}?_=${cacheBuster}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json'
       }
     });
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`API server returned status ${response.status}: ${errorText}`);
+    let responseData;
+    try {
+      responseData = await response.json();
+    } catch (jsonError) {
+      addDebugInfo(`Failed to parse API response as JSON: ${jsonError.message}`);
+      throw new Error(`API returned invalid JSON. Response status: ${response.status}`);
     }
     
-    const data = await response.json();
-    addDebugInfo(`API server is online. CORS headers configured: ${JSON.stringify(data.cors_headers || {})}`);
-    addDebugInfo(`Webshare proxy status: ${JSON.stringify(data.proxy_status || {})}`);
-    
-    return data;
+    // Even if status code is not OK, check if we got a valid response with error info
+    if (responseData) {
+      if (responseData.status === 'error') {
+        addDebugInfo(`API returned error status: ${JSON.stringify(responseData)}`);
+        throw new Error(`API error: ${responseData.error || responseData.message || 'Unknown error'}`);
+      }
+      
+      if (!response.ok) {
+        addDebugInfo(`API server returned status ${response.status} but with parseable data: ${JSON.stringify(responseData)}`);
+        throw new Error(`API server returned status ${response.status}: ${JSON.stringify(responseData.error || {})}`);
+      }
+      
+      // Success case
+      addDebugInfo(`API server is online. Status: ${responseData.status}`);
+      if (responseData.cors_headers) {
+        addDebugInfo(`CORS headers configured: ${JSON.stringify(responseData.cors_headers || {})}`);
+      }
+      if (responseData.proxy_status) {
+        addDebugInfo(`Webshare proxy status: ${JSON.stringify(responseData.proxy_status || {})}`);
+      }
+      if (responseData.env_info) {
+        addDebugInfo(`Environment info: ${JSON.stringify(responseData.env_info || {})}`);
+      }
+      
+      return responseData;
+    } else {
+      throw new Error(`API server returned status ${response.status} with no valid data`);
+    }
   } catch (error) {
     addDebugInfo(`API status check failed: ${error.message}`);
     throw error;
@@ -152,8 +188,7 @@ async function generateChapters() {
   try {
     addDebugInfo(`Sending request to generate chapters for video ID: ${currentVideoId}`);
     
-    // First check API status
-    await checkApiStatus();
+    // Skip API status check to reduce potential points of failure
     
     // Try first with standard fetch
     try {
@@ -179,29 +214,27 @@ async function generateChapters() {
       });
       addDebugInfo(`Response headers: ${JSON.stringify(responseHeaders)}`);
       
+      let responseData;
+      try {
+        responseData = await response.json();
+        addDebugInfo(`Got JSON response: ${JSON.stringify(responseData).substring(0, 200)}...`);
+      } catch (jsonError) {
+        const text = await response.text();
+        addDebugInfo(`Failed to parse response as JSON. Text response: ${text.substring(0, 200)}...`);
+        throw new Error(`Server returned invalid JSON: ${jsonError.message}`);
+      }
+      
       if (!response.ok) {
-        let errorDetail;
-        try {
-          const errorJson = await response.json();
-          errorDetail = errorJson.error || `HTTP ${response.status}`;
-          addDebugInfo(`Error response JSON: ${JSON.stringify(errorJson)}`);
-        } catch {
-          const text = await response.text();
-          errorDetail = text || `HTTP ${response.status}`;
-          addDebugInfo(`Error response text: ${text}`);
-        }
-        
+        const errorDetail = responseData.error || `HTTP ${response.status}`;
+        addDebugInfo(`Error response: ${JSON.stringify(responseData)}`);
         throw new Error(`Server error: ${errorDetail}`);
       }
       
-      const data = await response.json();
-      addDebugInfo(`Success response: ${JSON.stringify(data, null, 2).substring(0, 200)}...`);
-      
-      if (data.success) {
-        displayChapters(data.chapters);
-        addDebugInfo(`Chapters generated successfully. Video duration: ${data.video_duration}, used proxy: ${data.used_proxy}`);
+      if (responseData.success) {
+        displayChapters(responseData.chapters);
+        addDebugInfo(`Chapters generated successfully. Video duration: ${responseData.video_duration}, used proxy: ${responseData.used_proxy}`);
       } else {
-        throw new Error(data.error || 'Unknown error');
+        throw new Error(responseData.error || 'Unknown error');
       }
     } catch (fetchError) {
       // Check if this is a CORS error
@@ -239,6 +272,8 @@ async function generateChapters() {
       showError(`Network error: Cannot connect to the API server. Please check your internet connection and server status.`);
     } else if (error.message.includes('Transcript is not available') || error.message.includes('Could not find the transcript')) {
       showError(`No transcript available for this video. The video might not have captions, or YouTube might be blocking access.`);
+    } else if (error.message.includes('OpenAI API key')) {
+      showError(`Server configuration error: OpenAI API key is not properly configured on the server.`);
     } else {
       showError(`Failed to generate chapters: ${error.message}`);
     }
