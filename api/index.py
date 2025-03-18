@@ -5,6 +5,9 @@ from flask_cors import CORS
 import os
 import sys
 import traceback
+import json
+import requests
+from xml.etree import ElementTree
 
 # Debug imports
 print(f"Python version: {sys.version}")
@@ -69,8 +72,25 @@ if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
         # Set proxies in environment variables for libraries that use them
         os.environ['HTTP_PROXY'] = proxy_url
         os.environ['HTTPS_PROXY'] = proxy_url
+        
+        # Set up proxy support for urllib and requests libraries
+        import urllib.request
+        proxy_handler = urllib.request.ProxyHandler(proxies)
+        opener = urllib.request.build_opener(proxy_handler)
+        urllib.request.install_opener(opener)
+        
+        # Configure requests library if it's being used
+        try:
+            import requests
+            from requests.auth import HTTPProxyAuth
             
-        print("Webshare proxy configured via environment variables")
+            # Set default proxies for requests
+            requests.Session().proxies.update(proxies)
+            print("Configured proxies for requests library")
+        except ImportError:
+            print("Requests library not installed, skipping requests proxy setup")
+            
+        print("Webshare proxy configured via environment variables and urllib")
     except Exception as e:
         print(f"ERROR configuring proxies: {e}")
         traceback.print_exc()
@@ -161,11 +181,35 @@ def generate_chapters():
         
         # Get transcript
         try:
-            # Only use the language parameter, proxies should be picked up from env vars
+            # Configure proxies for transcript API
             kwargs = {'languages': ['en']}
             
-            # We don't pass proxies directly anymore
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id, **kwargs)
+            # Add proxy configurations directly to the YouTube API call
+            if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
+                import http.client
+                http.client.HTTPConnection.debuglevel = 1
+                
+                # Set up proxy handlers manually for the transcript API
+                import urllib.request
+                proxy_handler = urllib.request.ProxyHandler({
+                    'http': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80',
+                    'https': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80'
+                })
+                opener = urllib.request.build_opener(proxy_handler)
+                urllib.request.install_opener(opener)
+                print("Applied proxy settings to urllib")
+            
+            # Try to get transcript with YouTube API first
+            try:
+                print("Attempting to fetch transcript with YouTubeTranscriptApi...")
+                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, **kwargs)
+                print(f"Successfully fetched transcript using YouTubeTranscriptApi")
+            except Exception as api_error:
+                print(f"YouTubeTranscriptApi failed: {api_error}")
+                print("Falling back to requests implementation...")
+                
+                # Try our custom implementation with explicit proxy support
+                transcript_list = fetch_transcript_with_requests(video_id, proxies=proxies)
             
             if not transcript_list:
                 return jsonify({
@@ -275,3 +319,86 @@ def generate_chapters():
 # For local development
 if __name__ == '__main__':
     app.run(debug=True) 
+
+# Backup function to fetch transcript using requests directly
+def fetch_transcript_with_requests(video_id, proxies=None):
+    """Fetch YouTube transcript using requests library with proxy support"""
+    print(f"Attempting to fetch transcript for {video_id} using requests with proxies: {bool(proxies)}")
+    
+    # First get the video page to extract available captions
+    video_url = f"https://www.youtube.com/watch?v={video_id}"
+    try:
+        print(f"Fetching video page with proxies: {bool(proxies)}")
+        response = requests.get(video_url, proxies=proxies)
+        response.raise_for_status()
+        
+        # Find the captions URL in the page
+        html = response.text
+        
+        # Extract ytInitialPlayerResponse JSON
+        start_marker = 'ytInitialPlayerResponse = '
+        end_marker = '};'
+        
+        start_idx = html.find(start_marker)
+        if start_idx == -1:
+            raise Exception("Could not find player response in page")
+        
+        start_idx += len(start_marker)
+        end_idx = html.find(end_marker, start_idx) + 1
+        
+        player_response_json = html[start_idx:end_idx]
+        player_response = json.loads(player_response_json)
+        
+        # Find caption tracks
+        captions_data = player_response.get('captions', {}).get('playerCaptionsTracklistRenderer', {}).get('captionTracks', [])
+        
+        if not captions_data:
+            raise Exception("No captions found for this video")
+        
+        # Try to find English captions
+        caption_url = None
+        for track in captions_data:
+            if track.get('languageCode') == 'en':
+                caption_url = track.get('baseUrl')
+                break
+        
+        # If no English captions, use the first available
+        if not caption_url and captions_data:
+            caption_url = captions_data[0].get('baseUrl')
+        
+        if not caption_url:
+            raise Exception("No valid caption URL found")
+        
+        # Add format parameter for JSON
+        caption_url += "&fmt=json3"
+        
+        # Fetch the captions
+        print(f"Fetching captions from {caption_url}")
+        captions_response = requests.get(caption_url, proxies=proxies)
+        captions_response.raise_for_status()
+        
+        captions_data = captions_response.json()
+        
+        # Process the transcript
+        transcript = []
+        for event in captions_data.get('events', []):
+            if 'segs' not in event or 'tStartMs' not in event:
+                continue
+                
+            text = ''.join(seg.get('utf8', '') for seg in event.get('segs', []))
+            if not text.strip():
+                continue
+                
+            transcript.append({
+                'text': text.strip(),
+                'start': event.get('tStartMs') / 1000,
+                'duration': event.get('dDurationMs', 0) / 1000
+            })
+        
+        print(f"Successfully fetched transcript with {len(transcript)} entries using requests")
+        return transcript
+        
+    except Exception as e:
+        print(f"Error fetching transcript with requests: {e}")
+        traceback.print_exc()
+        raise Exception(f"Failed to fetch transcript with requests: {str(e)}") 
