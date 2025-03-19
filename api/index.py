@@ -1,8 +1,8 @@
+import os
 from flask import Flask, request, jsonify, make_response
 from youtube_transcript_api import YouTubeTranscriptApi
 from openai import OpenAI
 from flask_cors import CORS
-import os
 import sys
 import traceback
 import json
