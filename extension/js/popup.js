@@ -176,107 +176,80 @@ function handleVideoInfo(videoId, videoTitle) {
 }
 
 // Generate chapters
-async function generateChapters() {
-  if (!currentVideoId || isGenerating) return;
+async function generateChapters(forceRefresh = false) {
+  if (!currentVideoId) {
+    showError('No YouTube video ID found.');
+    return;
+  }
   
-  isGenerating = true;
+  if (isGenerating) {
+    addDebugInfo('Already generating chapters, please wait...');
+    return;
+  }
   
-  // Update UI
-  showLoading(true);
   hideError();
+  showLoading(true);
+  isGenerating = true;
   
   try {
     addDebugInfo(`Sending request to generate chapters for video ID: ${currentVideoId}`);
+    addDebugInfo(`Fetch request to ${GENERATE_CHAPTERS_ENDPOINT} with video_id=${currentVideoId}${forceRefresh ? ' (force refresh)' : ''}`);
     
-    // Skip API status check to reduce potential points of failure
+    const response = await fetch(GENERATE_CHAPTERS_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        video_id: currentVideoId,
+        force_refresh: forceRefresh
+      })
+    });
     
-    // Try first with standard fetch
+    // Log response status and headers for debugging
+    addDebugInfo(`Response status: ${response.status} `);
+    addDebugInfo(`Response headers: ${JSON.stringify(Object.fromEntries([...response.headers]))}`);
+    
+    let jsonResponse;
     try {
-      addDebugInfo(`Fetch request to ${GENERATE_CHAPTERS_ENDPOINT} with video_id=${currentVideoId}`);
-      
-      const response = await fetch(GENERATE_CHAPTERS_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          video_id: currentVideoId
-        }),
-      });
-      
-      addDebugInfo(`Response status: ${response.status} ${response.statusText}`);
-      
-      // Log response headers for debugging
-      const responseHeaders = {};
-      response.headers.forEach((value, key) => {
-        responseHeaders[key] = value;
-      });
-      addDebugInfo(`Response headers: ${JSON.stringify(responseHeaders)}`);
-      
-      let responseData;
-      try {
-        responseData = await response.json();
-        addDebugInfo(`Got JSON response: ${JSON.stringify(responseData).substring(0, 200)}...`);
-      } catch (jsonError) {
-        const text = await response.text();
-        addDebugInfo(`Failed to parse response as JSON. Text response: ${text.substring(0, 200)}...`);
-        throw new Error(`Server returned invalid JSON: ${jsonError.message}`);
-      }
-      
-      if (!response.ok) {
-        const errorDetail = responseData.error || `HTTP ${response.status}`;
-        addDebugInfo(`Error response: ${JSON.stringify(responseData)}`);
-        throw new Error(`Server error: ${errorDetail}`);
-      }
-      
-      if (responseData.success) {
-        displayChapters(responseData.chapters);
-        addDebugInfo(`Chapters generated successfully. Video duration: ${responseData.video_duration}, used proxy: ${responseData.used_proxy}`);
-      } else {
-        throw new Error(responseData.error || 'Unknown error');
-      }
-    } catch (fetchError) {
-      // Check if this is a CORS error
-      if (fetchError.message.includes('CORS') || 
-          fetchError.name === 'TypeError' && fetchError.message.includes('Failed to fetch')) {
-        
-        addDebugInfo(`CORS error detected: ${fetchError.message}`);
-        
-        // Try direct API ping to diagnose connectivity
-        try {
-          await fetch(PING_ENDPOINT, { 
-            method: 'GET',
-            mode: 'no-cors' // This will succeed if the server is accessible
-          });
-          
-          addDebugInfo('API server is reachable with no-cors mode');
-          throw new Error(`CORS issue detected. The server is running but cannot accept cross-origin requests from this extension.`);
-        } catch (pingError) {
-          // If this fails too, the server is likely down
-          addDebugInfo(`API ping failed: ${pingError.message}`);
-          throw new Error(`Cannot connect to API server. Please check if the server is running.`);
-        }
-      }
-      
-      // Not a CORS issue or couldn't diagnose further
-      throw fetchError;
+      const responseText = await response.text();
+      addDebugInfo(`Got JSON response: ${responseText.substring(0, 150)}...`);
+      jsonResponse = JSON.parse(responseText);
+    } catch (jsonError) {
+      addDebugInfo(`Failed to parse response as JSON: ${jsonError.message}`);
+      throw new Error(`Failed to parse response as JSON: ${jsonError.message}`);
     }
-  } catch (error) {
-    console.error('Error generating chapters:', error);
-    addDebugInfo(`Final error: ${error.message}`);
     
-    if (error.message.includes('CORS')) {
-      showError(`CORS error: The server is not properly configured to accept requests from this extension. Please check the server deployment.`);
-    } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-      showError(`Network error: Cannot connect to the API server. Please check your internet connection and server status.`);
-    } else if (error.message.includes('Transcript is not available') || error.message.includes('Could not find the transcript')) {
-      showError(`No transcript available for this video. The video might not have captions, or YouTube might be blocking access.`);
-    } else if (error.message.includes('OpenAI API key')) {
-      showError(`Server configuration error: OpenAI API key is not properly configured on the server.`);
-    } else {
-      showError(`Failed to generate chapters: ${error.message}`);
+    if (!response.ok) {
+      if (jsonResponse && jsonResponse.error) {
+        addDebugInfo(`Error response: ${JSON.stringify(jsonResponse)}`);
+        throw new Error(`Server error: ${JSON.stringify(jsonResponse.error)}`);
+      } else {
+        throw new Error(`Server returned status ${response.status}`);
+      }
     }
+    
+    if (!jsonResponse.success) {
+      const errorMessage = jsonResponse.error || 'Unknown error occurred';
+      addDebugInfo(`API reported error: ${errorMessage}`);
+      throw new Error(errorMessage);
+    }
+    
+    // Success!
+    const chapters = jsonResponse.chapters;
+    const fromCache = jsonResponse.from_cache || false;
+    
+    addDebugInfo(`Chapters generated ${fromCache ? 'from cache' : 'successfully'}. Video duration: ${jsonResponse.video_duration_minutes}, used proxy: ${jsonResponse.used_proxy}`);
+    
+    displayChapters(chapters);
+    regenerateButton.disabled = false;
+    return chapters;
+    
+  } catch (error) {
+    addDebugInfo(`Final error: ${error.message}`);
+    showError(`Failed to generate chapters: ${error.message}`);
+    throw error;
   } finally {
     showLoading(false);
     isGenerating = false;
@@ -362,6 +335,5 @@ function handleCopyClick() {
 }
 
 function handleRegenerateClick() {
-  chaptersContainerElement.classList.add('hidden');
-  generateChapters();
+  generateChapters(true); // Pass true to force a refresh from the server
 } 

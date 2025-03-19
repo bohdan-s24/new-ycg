@@ -10,6 +10,9 @@ from openai import OpenAI
 from flask_cors import CORS
 import time
 
+# Simple in-memory cache
+CHAPTERS_CACHE = {}
+
 # Print debug info
 print(f"Python version: {sys.version}")
 print(f"Current working directory: {os.getcwd()}")
@@ -161,6 +164,29 @@ def generate_chapters():
         video_id = data['video_id']
         print(f"Processing request for video_id: {video_id}")
         
+        # Check if we have cached results for this video
+        force_refresh = data.get('force_refresh', False)
+        if not force_refresh and video_id in CHAPTERS_CACHE:
+            print(f"Returning cached chapters for {video_id}")
+            cached_result = CHAPTERS_CACHE[video_id]
+            
+            # Create response from cache
+            result = jsonify({
+                "success": True,
+                "chapters": cached_result["chapters"],
+                "video_id": video_id,
+                "video_duration_minutes": cached_result["video_duration_minutes"],
+                "used_proxy": cached_result["used_proxy"],
+                "from_cache": True
+            })
+            
+            # Add CORS headers
+            result.headers.add('Access-Control-Allow-Origin', '*')
+            result.headers.add('Access-Control-Allow-Headers', 'Content-Type,Accept')
+            result.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+            
+            return result
+        
         # Get transcript - using a timeout to avoid Vercel function timeouts
         start_time = time.time()
         timeout_limit = 20  # seconds - leave room for the rest of processing
@@ -193,13 +219,21 @@ def generate_chapters():
         chapter_count = len(chapters.strip().split("\n"))
         print(f"Generated {chapter_count} chapters for {video_id}")
         
+        # Cache the results
+        CHAPTERS_CACHE[video_id] = {
+            "chapters": chapters,
+            "video_duration_minutes": f"{video_duration_minutes:.2f}",
+            "used_proxy": bool(Config.get_webshare_proxy_config())
+        }
+        
         # Create successful response
         result = jsonify({
             "success": True,
             "chapters": chapters,
             "video_id": video_id,
             "video_duration_minutes": f"{video_duration_minutes:.2f}",
-            "used_proxy": bool(Config.get_webshare_proxy_config())
+            "used_proxy": bool(Config.get_webshare_proxy_config()),
+            "from_cache": False
         })
         
         # Add CORS headers
