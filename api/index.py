@@ -51,8 +51,8 @@ class Config:
     def get_webshare_proxy_config(cls):
         if cls.WEBSHARE_USERNAME and cls.WEBSHARE_PASSWORD:
             return WebshareProxyConfig(
-                username=cls.WEBSHARE_USERNAME,
-                password=cls.WEBSHARE_PASSWORD
+                proxy_username=cls.WEBSHARE_USERNAME,
+                proxy_password=cls.WEBSHARE_PASSWORD
             )
         return None
 
