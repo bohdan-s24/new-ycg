@@ -214,12 +214,23 @@ def fetch_transcript(video_id):
     and fallbacks.
     """
     error_messages = []
-    proxy_config = Config.get_webshare_proxy_config()
     
-    # First try: List transcripts using WebShare proxy
+    # Initialize YouTubeTranscriptApi with proxy configuration if available
+    if Config.WEBSHARE_USERNAME and Config.WEBSHARE_PASSWORD:
+        proxy_config = WebshareProxyConfig(
+            proxy_username=Config.WEBSHARE_USERNAME,
+            proxy_password=Config.WEBSHARE_PASSWORD
+        )
+        youtube_transcript_api = YouTubeTranscriptApi(proxy_config=proxy_config)
+        print("Initialized YouTubeTranscriptApi with WebshareProxyConfig")
+    else:
+        youtube_transcript_api = YouTubeTranscriptApi()
+        print("Initialized YouTubeTranscriptApi without proxy")
+    
+    # First try: List transcripts
     try:
-        print("Attempting to list available transcripts with WebShare proxy...")
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=Config.get_proxy_dict())
+        print("Attempting to list available transcripts...")
+        transcript_list = youtube_transcript_api.list(video_id)
         
         print("Available transcripts:")
         transcript_count = 0
@@ -242,6 +253,9 @@ def fetch_transcript(video_id):
                 if transcript_data and len(transcript_data) > 0:
                     print(f"Successfully found transcript in {lang} with {len(transcript_data)} entries")
                     # Convert FetchedTranscriptSnippet objects to dictionaries if needed
+                    if hasattr(transcript_data, 'to_raw_data'):
+                        return transcript_data.to_raw_data()
+                    # Try to process as FetchedTranscriptSnippet objects
                     if hasattr(transcript_data[0], 'to_dict'):
                         return [snippet.to_dict() for snippet in transcript_data]
                     return transcript_data
@@ -265,6 +279,9 @@ def fetch_transcript(video_id):
                         transcript_data = english_transcript.fetch()
                         print(f"Successfully translated transcript to English with {len(transcript_data)} entries")
                         # Convert FetchedTranscriptSnippet objects to dictionaries if needed
+                        if hasattr(transcript_data, 'to_raw_data'):
+                            return transcript_data.to_raw_data()
+                        # Try to process as FetchedTranscriptSnippet objects
                         if hasattr(transcript_data[0], 'to_dict'):
                             return [snippet.to_dict() for snippet in transcript_data]
                         return transcript_data
@@ -277,6 +294,9 @@ def fetch_transcript(video_id):
                 if transcript_data and len(transcript_data) > 0:
                     print(f"Using original language transcript with {len(transcript_data)} entries")
                     # Convert FetchedTranscriptSnippet objects to dictionaries if needed
+                    if hasattr(transcript_data, 'to_raw_data'):
+                        return transcript_data.to_raw_data()
+                    # Try to process as FetchedTranscriptSnippet objects
                     if hasattr(transcript_data[0], 'to_dict'):
                         return [snippet.to_dict() for snippet in transcript_data]
                     return transcript_data
@@ -295,31 +315,37 @@ def fetch_transcript(video_id):
         error_messages.append(f"Listing transcripts failed (unexpected error): {error_message}")
         print(f"Listing transcripts failed (unexpected error): {error_message}")
     
-    # Second try: Direct transcript fetching with proxy
+    # Second try: Direct transcript fetching
     try:
-        print("Attempting direct transcript fetching with WebShare proxy...")
-        transcript_data = YouTubeTranscriptApi.get_transcript(
+        print("Attempting direct transcript fetching...")
+        transcript_data = youtube_transcript_api.fetch(
             video_id, 
-            languages=Config.TRANSCRIPT_LANGUAGES,
-            proxies=Config.get_proxy_dict()
+            languages=Config.TRANSCRIPT_LANGUAGES
         )
         if transcript_data and len(transcript_data) > 0:
-            print(f"Successfully fetched transcript directly with proxy: {len(transcript_data)} entries")
+            print(f"Successfully fetched transcript directly: {len(transcript_data)} entries")
+            # Convert to raw data if needed
+            if hasattr(transcript_data, 'to_raw_data'):
+                return transcript_data.to_raw_data()
             return transcript_data
     except Exception as e:
         error_message = str(e)
-        error_messages.append(f"Direct transcript fetch with proxy failed: {error_message}")
-        print(f"Direct transcript fetch with proxy failed: {error_message}")
+        error_messages.append(f"Direct transcript fetch failed: {error_message}")
+        print(f"Direct transcript fetch failed: {error_message}")
     
-    # Third try: Direct transcript fetching without proxy
+    # Third try: Try without proxy
     try:
         print("Attempting direct transcript fetching without proxy...")
-        transcript_data = YouTubeTranscriptApi.get_transcript(
+        no_proxy_api = YouTubeTranscriptApi()
+        transcript_data = no_proxy_api.fetch(
             video_id, 
             languages=Config.TRANSCRIPT_LANGUAGES
         )
         if transcript_data and len(transcript_data) > 0:
             print(f"Successfully fetched transcript directly without proxy: {len(transcript_data)} entries")
+            # Convert to raw data if needed
+            if hasattr(transcript_data, 'to_raw_data'):
+                return transcript_data.to_raw_data()
             return transcript_data
     except Exception as e:
         error_message = str(e)
