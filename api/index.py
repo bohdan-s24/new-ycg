@@ -441,4 +441,4 @@ def fetch_transcript_with_requests(video_id, proxies=None, session=None):
     except Exception as e:
         print(f"Error fetching transcript with requests: {e}")
         traceback.print_exc()
-        raise Exception(f"Failed to fetch transcript with requests: {str(e)}") 
+        raise Exception(f"Failed to fetch transcript with requests: {str(e)}") # Enforcing a manual deployment trigger
