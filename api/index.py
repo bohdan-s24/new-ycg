@@ -203,15 +203,15 @@ def generate_chapters():
         video_duration_seconds = last_entry['start'] + last_entry['duration']
         video_duration_minutes = video_duration_seconds / 60
         
-        # Format transcript for OpenAI - using the simplified format
-        formatted_transcript, transcript_length = prepare_efficient_transcript(transcript_data)
-        print(f"Prepared efficient transcript format with {transcript_length} lines")
+        # Format transcript for OpenAI - using the full transcript
+        formatted_transcript, transcript_length = format_transcript(transcript_data)
+        print(f"Prepared transcript format with {transcript_length} lines")
         
         # Create prompt
-        system_prompt = create_efficient_chapter_prompt(video_duration_minutes)
+        system_prompt = create_chapter_prompt(video_duration_minutes)
         
-        # Generate chapters with OpenAI - quick version
-        chapters = generate_chapters_efficiently(system_prompt, video_id, formatted_transcript)
+        # Generate chapters with OpenAI
+        chapters = generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         if not chapters:
             return create_error_response('Failed to generate chapters with OpenAI', 500)
         
@@ -446,43 +446,13 @@ def fetch_transcript(video_id, timeout_limit=30):
     print(f"All transcript fetch methods failed: {combined_errors}")
     return None
 
-def prepare_efficient_transcript(transcript_list):
-    """Format transcript in a minimalist way optimized for OpenAI processing"""
-    # Use a more compact format with just timestamps and text
+def format_transcript(transcript_list):
+    """Format transcript for processing - use the full transcript"""
+    # Use a full transcript with timestamps and text
     formatted_entries = []
     
-    # Sample the transcript: beginning, middle parts, and end
-    # This uses a strategic sampling to capture key moments throughout the video
-    total_entries = len(transcript_list)
-    
-    if total_entries <= 300:
-        # For shorter transcripts, use everything
-        entries_to_use = transcript_list
-    else:
-        # For longer transcripts, take samples from throughout the video
-        # Take more from the beginning and end, which tend to have more context
-        beginning = transcript_list[:100]
-        
-        # Take samples from the middle at regular intervals
-        middle_length = total_entries - 200  # 100 from beginning, 100 from end
-        num_samples = 100  # Take 100 samples from the middle
-        
-        # Calculate step size to evenly distribute samples
-        step = max(1, middle_length // num_samples)
-        
-        # Take samples at regular intervals from the middle
-        middle_samples = []
-        for i in range(100, total_entries - 100, step):
-            if len(middle_samples) < num_samples:
-                middle_samples.append(transcript_list[i])
-                
-        end = transcript_list[-100:]
-        
-        # Combine the parts
-        entries_to_use = beginning + middle_samples + end
-    
-    # Format the selected entries
-    for item in entries_to_use:
+    # Process all entries in the transcript
+    for item in transcript_list:
         # Convert seconds to MM:SS format
         minutes, seconds = divmod(int(item['start']), 60)
         hours, minutes = divmod(minutes, 60)
@@ -496,11 +466,11 @@ def prepare_efficient_transcript(transcript_list):
     
     return "\n".join(formatted_entries), len(formatted_entries)
 
-def create_efficient_chapter_prompt(video_duration_minutes):
-    """Create a streamlined prompt for OpenAI based on video duration"""
+def create_chapter_prompt(video_duration_minutes):
+    """Create a prompt for OpenAI based on video duration"""
     system_prompt = (
         "You are a YouTube chapter creator. Extract the main topics from this transcript and create time-based chapters. "
-        "Be efficient and focus on significant topic changes. The first chapter must start at 00:00."
+        "The first chapter must start at 00:00."
         "\n\n"
         "Format your response as a list of timestamps and titles only, like:\n"
         "00:00 Introduction\n"
@@ -521,8 +491,8 @@ def create_efficient_chapter_prompt(video_duration_minutes):
     
     return system_prompt
 
-def generate_chapters_efficiently(system_prompt, video_id, formatted_transcript):
-    """Generate chapters using OpenAI with optimization for speed and reliability"""
+def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript):
+    """Generate chapters using OpenAI"""
     if not openai_client:
         print("OpenAI client not configured")
         return None
@@ -531,7 +501,7 @@ def generate_chapters_efficiently(system_prompt, video_id, formatted_transcript)
         try:
             print(f"Attempting to generate chapters with {model}...")
             
-            # Prepare a concise message for the API
+            # Prepare message for the API
             user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
             
             # Send request to OpenAI
@@ -541,8 +511,8 @@ def generate_chapters_efficiently(system_prompt, video_id, formatted_transcript)
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
                 ],
-                temperature=0.7,  # Slightly creative but mostly focused
-                max_tokens=300    # Limit token usage to speed up response
+                temperature=0.7,
+                max_tokens=300
             )
             
             chapters = response.choices[0].message.content
