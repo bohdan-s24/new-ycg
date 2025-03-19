@@ -9,6 +9,7 @@ from youtube_transcript_api.proxies import WebshareProxyConfig
 from openai import OpenAI
 from flask_cors import CORS
 import time
+import re
 
 # Simple in-memory cache
 CHAPTERS_CACHE = {}
@@ -33,6 +34,12 @@ class Config:
     # API configurations
     OPENAI_MODELS = ["gpt-3.5-turbo-16k", "gpt-3.5-turbo"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
+    
+    # Token limits - a conservative estimate to leave room for the response
+    MAX_TOKENS = {
+        "gpt-3.5-turbo-16k": 14000,
+        "gpt-3.5-turbo": 3500
+    }
     
     # Proxy configuration
     @classmethod
@@ -203,8 +210,8 @@ def generate_chapters():
         video_duration_seconds = last_entry['start'] + last_entry['duration']
         video_duration_minutes = video_duration_seconds / 60
         
-        # Format transcript for OpenAI - using the full transcript
-        formatted_transcript, transcript_length = format_transcript(transcript_data)
+        # Format transcript for OpenAI with intelligent handling of long transcripts
+        formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
         print(f"Prepared transcript format with {transcript_length} lines")
         
         # Create prompt
@@ -446,12 +453,20 @@ def fetch_transcript(video_id, timeout_limit=30):
     print(f"All transcript fetch methods failed: {combined_errors}")
     return None
 
-def format_transcript(transcript_list):
-    """Format transcript for processing - use the full transcript"""
-    # Use a full transcript with timestamps and text
+def estimate_tokens(text):
+    """
+    Estimate the number of tokens in a text.
+    This is a simple estimation method - roughly 4 characters per token.
+    """
+    return len(text) // 4
+
+def format_transcript_for_model(transcript_list):
+    """
+    Format transcript for processing with intelligent token management
+    Will use the whole transcript if it fits, or sample it if too large
+    """
+    # Step 1: Format transcript entries with timestamps
     formatted_entries = []
-    
-    # Process all entries in the transcript
     for item in transcript_list:
         # Convert seconds to MM:SS format
         minutes, seconds = divmod(int(item['start']), 60)
@@ -464,7 +479,75 @@ def format_transcript(transcript_list):
             
         formatted_entries.append(f"{timestamp}: {item['text']}")
     
-    return "\n".join(formatted_entries), len(formatted_entries)
+    # Step 2: Join all entries and check if it fits in token limit
+    full_transcript = "\n".join(formatted_entries)
+    estimated_tokens = estimate_tokens(full_transcript)
+    print(f"Estimated tokens for full transcript: {estimated_tokens}")
+    
+    # Step 3: If we're under the token limit for 16k model, use the full transcript
+    if estimated_tokens <= Config.MAX_TOKENS["gpt-3.5-turbo-16k"]:
+        print("Using full transcript - under token limit")
+        return full_transcript, len(formatted_entries)
+    
+    # Step 4: We need to sample the transcript to fit token limits
+    print(f"Transcript too large ({estimated_tokens} tokens), sampling to fit token limit")
+    
+    # Get total entries and determine sample size
+    total_entries = len(formatted_entries)
+    
+    # Take more from beginning and end, and sample the middle
+    beginning_size = min(100, total_entries // 4)
+    end_size = min(100, total_entries // 4)
+    
+    # Calculate how many entries we can sample from the middle
+    # We want to stay under 14k tokens (conservative limit for 16k model)
+    target_tokens = Config.MAX_TOKENS["gpt-3.5-turbo-16k"]
+    
+    # Sample timestamps throughout the video for better coverage
+    beginning = formatted_entries[:beginning_size]
+    end = formatted_entries[-end_size:]
+    
+    # Calculate middle section and how many samples we can take
+    middle_length = total_entries - beginning_size - end_size
+    
+    # We'll take samples at regular intervals from the middle section
+    # Estimate how many samples we can take while staying under token limit
+    
+    # Estimate tokens used by beginning and end
+    beginning_end_tokens = estimate_tokens("\n".join(beginning + end))
+    remaining_tokens = target_tokens - beginning_end_tokens
+    
+    # Estimate how many middle entries we can include
+    avg_entry_tokens = (estimated_tokens / total_entries) if total_entries > 0 else 0
+    middle_sample_size = int(remaining_tokens / avg_entry_tokens) if avg_entry_tokens > 0 else 0
+    
+    # Ensure we take at least some middle samples if possible
+    middle_sample_size = max(min(middle_sample_size, middle_length), min(50, middle_length))
+    
+    # Calculate step size to distribute samples evenly
+    step = max(1, middle_length // middle_sample_size) if middle_sample_size > 0 else 1
+    
+    # Take samples at regular intervals from the middle
+    middle_samples = []
+    for i in range(beginning_size, total_entries - end_size, step):
+        if len(middle_samples) < middle_sample_size and i < total_entries - end_size:
+            middle_samples.append(formatted_entries[i])
+    
+    # Combine beginning, middle samples, and end
+    sampled_entries = beginning + middle_samples + end
+    
+    # Create the sampled transcript
+    sampled_transcript = "\n".join(sampled_entries)
+    final_estimated_tokens = estimate_tokens(sampled_transcript)
+    
+    print(f"Created sampled transcript with {len(sampled_entries)} entries, estimated {final_estimated_tokens} tokens")
+    print(f"Used {beginning_size} entries from beginning, {len(middle_samples)} from middle, {end_size} from end")
+    
+    return sampled_transcript, len(sampled_entries)
+
+def format_transcript(transcript_list):
+    """Legacy function for compatibility - use format_transcript_for_model instead"""
+    return format_transcript_for_model(transcript_list)
 
 def create_chapter_prompt(video_duration_minutes):
     """Create a prompt for OpenAI based on video duration"""
