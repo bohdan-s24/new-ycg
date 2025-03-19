@@ -19,11 +19,6 @@
       ]
     }
   ],
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 60
-    }
-  },
   "public": true,
   "regions": ["iad1"]
 } 
