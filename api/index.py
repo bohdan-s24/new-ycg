@@ -8,6 +8,7 @@ from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, No
 from youtube_transcript_api.proxies import WebshareProxyConfig
 from openai import OpenAI
 from flask_cors import CORS
+import time
 
 # Print debug info
 print(f"Python version: {sys.version}")
@@ -160,12 +161,16 @@ def generate_chapters():
         video_id = data['video_id']
         print(f"Processing request for video_id: {video_id}")
         
-        # Get transcript
-        transcript_data = fetch_transcript(video_id)
+        # Get transcript - using a timeout to avoid Vercel function timeouts
+        start_time = time.time()
+        timeout_limit = 25  # seconds - leave room for the rest of processing
+        transcript_data = fetch_transcript(video_id, timeout_limit)
+        
         if not transcript_data:
             return create_error_response('Failed to fetch transcript after multiple attempts', 500)
-            
-        print(f"Successfully retrieved transcript for {video_id} with {len(transcript_data)} entries")
+        
+        elapsed_time = time.time() - start_time
+        print(f"Successfully retrieved transcript for {video_id} with {len(transcript_data)} entries in {elapsed_time:.2f} seconds")
         
         # Calculate video duration
         last_entry = transcript_data[-1]
@@ -208,12 +213,17 @@ def generate_chapters():
         traceback.print_exc()
         return create_error_response(str(e), 500)
 
-def fetch_transcript(video_id):
+def fetch_transcript(video_id, timeout_limit=30):
     """
     Fetch transcript using the YouTube Transcript API with proper error handling
     and fallbacks.
+    
+    Args:
+        video_id: YouTube video ID
+        timeout_limit: Maximum time in seconds to spend fetching the transcript
     """
     error_messages = []
+    start_time = time.time()
     
     # Initialize YouTubeTranscriptApi with proxy configuration if available
     if Config.WEBSHARE_USERNAME and Config.WEBSHARE_PASSWORD:
@@ -227,8 +237,16 @@ def fetch_transcript(video_id):
         youtube_transcript_api = YouTubeTranscriptApi()
         print("Initialized YouTubeTranscriptApi without proxy")
     
+    def time_left():
+        """Check if we still have time to continue operations"""
+        elapsed = time.time() - start_time
+        return timeout_limit - elapsed
+    
     # First try: List transcripts
     try:
+        if time_left() < 2:  # If less than 2 seconds left, skip this method
+            raise TimeoutError("Time limit approaching, skipping transcript listing")
+            
         print("Attempting to list available transcripts...")
         transcript_list = youtube_transcript_api.list(video_id)
         
@@ -246,6 +264,9 @@ def fetch_transcript(video_id):
         
         # Try to find transcript in preferred languages
         for lang in Config.TRANSCRIPT_LANGUAGES:
+            if time_left() < 2:  # If less than 2 seconds left, skip to faster methods
+                raise TimeoutError("Time limit approaching, skipping language search")
+                
             try:
                 print(f"Trying to find transcript in language: {lang}")
                 transcript = transcript_list.find_transcript([lang])
@@ -264,6 +285,9 @@ def fetch_transcript(video_id):
                 continue
         
         # If no preferred language is found, try to get any transcript and translate it
+        if time_left() < 5:  # Skip translation if we're running out of time
+            raise TimeoutError("Time limit approaching, skipping translation")
+            
         print("No preferred language found, trying to get any transcript and translate it")
         try:
             # Get the first available transcript
@@ -306,6 +330,8 @@ def fetch_transcript(video_id):
             error_message = str(e)
             error_messages.append(f"Processing first available transcript failed: {error_message}")
             print(f"Processing first available transcript failed: {error_message}")
+    except TimeoutError as te:
+        print(f"Timeout warning: {str(te)}")
     except (RequestBlocked, AgeRestricted, VideoUnplayable) as e:
         error_message = str(e)
         error_messages.append(f"Listing transcripts failed (blocked/restricted): {error_message}")
@@ -317,6 +343,9 @@ def fetch_transcript(video_id):
     
     # Second try: Direct transcript fetching
     try:
+        if time_left() < 2:  # If less than 2 seconds left, skip this method
+            raise TimeoutError("Time limit approaching, skipping direct fetch")
+            
         print("Attempting direct transcript fetching...")
         transcript_data = youtube_transcript_api.fetch(
             video_id, 
@@ -328,6 +357,8 @@ def fetch_transcript(video_id):
             if hasattr(transcript_data, 'to_raw_data'):
                 return transcript_data.to_raw_data()
             return transcript_data
+    except TimeoutError as te:
+        print(f"Timeout warning: {str(te)}")
     except Exception as e:
         error_message = str(e)
         error_messages.append(f"Direct transcript fetch failed: {error_message}")
@@ -335,6 +366,9 @@ def fetch_transcript(video_id):
     
     # Third try: Try without proxy
     try:
+        if time_left() < 2:  # If less than 2 seconds left, skip this method
+            raise TimeoutError("Time limit approaching, skipping no-proxy fetch")
+            
         print("Attempting direct transcript fetching without proxy...")
         no_proxy_api = YouTubeTranscriptApi()
         transcript_data = no_proxy_api.fetch(
@@ -347,6 +381,8 @@ def fetch_transcript(video_id):
             if hasattr(transcript_data, 'to_raw_data'):
                 return transcript_data.to_raw_data()
             return transcript_data
+    except TimeoutError as te:
+        print(f"Timeout warning: {str(te)}")
     except Exception as e:
         error_message = str(e)
         error_messages.append(f"Direct transcript fetch without proxy failed: {error_message}")
@@ -354,12 +390,17 @@ def fetch_transcript(video_id):
     
     # Final fallback: Use custom requests implementation
     try:
+        if time_left() < 5:  # If less than 5 seconds left, skip this method
+            raise TimeoutError("Time limit approaching, skipping custom requests method")
+            
         print("Attempting fallback method with direct requests...")
         proxy_dict = Config.get_proxy_dict()
-        transcript_list = fetch_transcript_with_requests(video_id, proxy_dict)
+        transcript_list = fetch_transcript_with_requests(video_id, proxy_dict, timeout=min(5, time_left()))
         if transcript_list and len(transcript_list) > 0:
             print(f"Successfully fetched transcript with requests: {len(transcript_list)} entries")
             return transcript_list
+    except TimeoutError as te:
+        print(f"Timeout warning: {str(te)}")
     except Exception as e:
         error_message = str(e)
         error_messages.append(f"Direct requests method failed: {error_message}")
@@ -383,6 +424,20 @@ def format_transcript_for_openai(transcript_list):
             timestamp = f"{minutes:02d}:{seconds:02d}"
             
         formatted_transcript += f"{timestamp} - {item['text']}\n"
+    
+    # Limit transcript length to avoid OpenAI rate limits
+    # GPT models have a context window limit, so we need to truncate long transcripts
+    # Strategy: Keep beginning and end portions, as they often contain important context
+    formatted_lines = formatted_transcript.split('\n')
+    if len(formatted_lines) > 500:  # If more than 500 lines
+        print(f"Transcript is very long ({len(formatted_lines)} lines). Truncating to avoid rate limits.")
+        # Take first 200 lines and last 300 lines
+        beginning = '\n'.join(formatted_lines[:200])
+        ending = '\n'.join(formatted_lines[-300:])
+        middle_note = "\n...[TRANSCRIPT TRUNCATED DUE TO LENGTH]...\n"
+        formatted_transcript = beginning + middle_note + ending
+        print(f"Truncated transcript from {len(formatted_lines)} to {500} lines")
+    
     return formatted_transcript
 
 def create_chapter_prompt(video_duration_minutes):
@@ -420,6 +475,12 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
     for model in Config.OPENAI_MODELS:
         try:
             print(f"Attempting to generate chapters with {model}...")
+            
+            # For very long transcripts, use a more efficient model first
+            if len(formatted_transcript) > 30000 and model == "gpt-4":
+                print("Transcript is too long for GPT-4. Skipping to gpt-3.5-turbo for efficiency.")
+                continue
+                
             response = openai_client.chat.completions.create(
                 model=model,
                 messages=[
@@ -432,6 +493,27 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
             return chapters
         except Exception as e:
             print(f"Error generating chapters with {model}: {e}")
+            # If it's a rate limit issue, try with a smaller chunk of the transcript
+            if "429" in str(e) and "rate_limit" in str(e).lower():
+                try:
+                    print("Hit rate limit. Trying with a reduced transcript...")
+                    # Take just the first third and last third of the transcript
+                    lines = formatted_transcript.split('\n')
+                    third = len(lines) // 3
+                    reduced_transcript = '\n'.join(lines[:third]) + "\n...[CONTENT OMITTED FOR BREVITY]...\n" + '\n'.join(lines[-third:])
+                    
+                    response = openai_client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": f"Here is a partial transcript for YouTube video ID {video_id}. Due to length limitations, only parts of the transcript are shown:\n\n{reduced_transcript}"}
+                        ]
+                    )
+                    
+                    chapters = response.choices[0].message.content
+                    return chapters
+                except Exception as e2:
+                    print(f"Error with reduced transcript approach: {e2}")
             continue
     
     # All models failed
@@ -439,7 +521,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
     return None
 
 # Backup function to fetch transcript using requests directly
-def fetch_transcript_with_requests(video_id, proxy_dict=None):
+def fetch_transcript_with_requests(video_id, proxy_dict=None, timeout=10):
     """Fetch YouTube transcript using requests library with proxy support"""
     print(f"Attempting to fetch transcript for {video_id} using requests with proxies: {bool(proxy_dict)}")
     
@@ -452,7 +534,7 @@ def fetch_transcript_with_requests(video_id, proxy_dict=None):
     video_url = f"https://www.youtube.com/watch?v={video_id}"
     try:
         print(f"Fetching video page with proxies: {bool(proxy_dict)}")
-        response = session.get(video_url, timeout=10)
+        response = session.get(video_url, timeout=timeout)
         response.raise_for_status()
         
         # Find the captions URL in the page
@@ -497,7 +579,7 @@ def fetch_transcript_with_requests(video_id, proxy_dict=None):
         
         # Fetch the captions
         print(f"Fetching captions from {caption_url}")
-        captions_response = session.get(caption_url, timeout=10)
+        captions_response = session.get(caption_url, timeout=timeout)
         captions_response.raise_for_status()
         
         captions_data = captions_response.json()
