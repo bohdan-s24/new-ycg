@@ -28,7 +28,7 @@ class Config:
     WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
     
     # API configurations
-    OPENAI_MODELS = ["gpt-4", "gpt-3.5-turbo"]
+    OPENAI_MODELS = ["gpt-3.5-turbo-16k", "gpt-3.5-turbo"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
     
     # Proxy configuration
@@ -163,7 +163,7 @@ def generate_chapters():
         
         # Get transcript - using a timeout to avoid Vercel function timeouts
         start_time = time.time()
-        timeout_limit = 25  # seconds - leave room for the rest of processing
+        timeout_limit = 20  # seconds - leave room for the rest of processing
         transcript_data = fetch_transcript(video_id, timeout_limit)
         
         if not transcript_data:
@@ -177,14 +177,15 @@ def generate_chapters():
         video_duration_seconds = last_entry['start'] + last_entry['duration']
         video_duration_minutes = video_duration_seconds / 60
         
-        # Format transcript for OpenAI
-        formatted_transcript = format_transcript_for_openai(transcript_data)
+        # Format transcript for OpenAI - using the simplified format
+        formatted_transcript, transcript_length = prepare_efficient_transcript(transcript_data)
+        print(f"Prepared efficient transcript format with {transcript_length} lines")
         
         # Create prompt
-        system_prompt = create_chapter_prompt(video_duration_minutes)
+        system_prompt = create_efficient_chapter_prompt(video_duration_minutes)
         
-        # Generate chapters with OpenAI
-        chapters = generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
+        # Generate chapters with OpenAI - quick version
+        chapters = generate_chapters_efficiently(system_prompt, video_id, formatted_transcript)
         if not chapters:
             return create_error_response('Failed to generate chapters with OpenAI', 500)
         
@@ -411,10 +412,44 @@ def fetch_transcript(video_id, timeout_limit=30):
     print(f"All transcript fetch methods failed: {combined_errors}")
     return None
 
-def format_transcript_for_openai(transcript_list):
-    """Format transcript in a way that's suitable for OpenAI processing"""
-    formatted_transcript = ""
-    for item in transcript_list:
+def prepare_efficient_transcript(transcript_list):
+    """Format transcript in a minimalist way optimized for OpenAI processing"""
+    # Use a more compact format with just timestamps and text
+    formatted_entries = []
+    
+    # Sample the transcript: beginning, middle parts, and end
+    # This uses a strategic sampling to capture key moments throughout the video
+    total_entries = len(transcript_list)
+    
+    if total_entries <= 300:
+        # For shorter transcripts, use everything
+        entries_to_use = transcript_list
+    else:
+        # For longer transcripts, take samples from throughout the video
+        # Take more from the beginning and end, which tend to have more context
+        beginning = transcript_list[:100]
+        
+        # Take samples from the middle at regular intervals
+        middle_length = total_entries - 200  # 100 from beginning, 100 from end
+        num_samples = 100  # Take 100 samples from the middle
+        
+        # Calculate step size to evenly distribute samples
+        step = max(1, middle_length // num_samples)
+        
+        # Take samples at regular intervals from the middle
+        middle_samples = []
+        for i in range(100, total_entries - 100, step):
+            if len(middle_samples) < num_samples:
+                middle_samples.append(transcript_list[i])
+                
+        end = transcript_list[-100:]
+        
+        # Combine the parts
+        entries_to_use = beginning + middle_samples + end
+    
+    # Format the selected entries
+    for item in entries_to_use:
+        # Convert seconds to MM:SS format
         minutes, seconds = divmod(int(item['start']), 60)
         hours, minutes = divmod(minutes, 60)
         
@@ -423,29 +458,15 @@ def format_transcript_for_openai(transcript_list):
         else:
             timestamp = f"{minutes:02d}:{seconds:02d}"
             
-        formatted_transcript += f"{timestamp} - {item['text']}\n"
+        formatted_entries.append(f"{timestamp}: {item['text']}")
     
-    # Limit transcript length to avoid OpenAI rate limits
-    # GPT models have a context window limit, so we need to truncate long transcripts
-    # Strategy: Keep beginning and end portions, as they often contain important context
-    formatted_lines = formatted_transcript.split('\n')
-    if len(formatted_lines) > 500:  # If more than 500 lines
-        print(f"Transcript is very long ({len(formatted_lines)} lines). Truncating to avoid rate limits.")
-        # Take first 200 lines and last 300 lines
-        beginning = '\n'.join(formatted_lines[:200])
-        ending = '\n'.join(formatted_lines[-300:])
-        middle_note = "\n...[TRANSCRIPT TRUNCATED DUE TO LENGTH]...\n"
-        formatted_transcript = beginning + middle_note + ending
-        print(f"Truncated transcript from {len(formatted_lines)} to {500} lines")
-    
-    return formatted_transcript
+    return "\n".join(formatted_entries), len(formatted_entries)
 
-def create_chapter_prompt(video_duration_minutes):
-    """Create a prompt for OpenAI based on video duration"""
+def create_efficient_chapter_prompt(video_duration_minutes):
+    """Create a streamlined prompt for OpenAI based on video duration"""
     system_prompt = (
-        "You are a YouTube chapter creator. Create concise, descriptive chapters for this video "
-        "based on topic changes. Each chapter should be 2-4 minutes long. The first chapter "
-        "should always start at 00:00."
+        "You are a YouTube chapter creator. Extract the main topics from this transcript and create time-based chapters. "
+        "Be efficient and focus on significant topic changes. The first chapter must start at 00:00."
         "\n\n"
         "Format your response as a list of timestamps and titles only, like:\n"
         "00:00 Introduction\n"
@@ -466,8 +487,8 @@ def create_chapter_prompt(video_duration_minutes):
     
     return system_prompt
 
-def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript):
-    """Generate chapters using OpenAI with model fallback"""
+def generate_chapters_efficiently(system_prompt, video_id, formatted_transcript):
+    """Generate chapters using OpenAI with optimization for speed and reliability"""
     if not openai_client:
         print("OpenAI client not configured")
         return None
@@ -476,44 +497,24 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         try:
             print(f"Attempting to generate chapters with {model}...")
             
-            # For very long transcripts, use a more efficient model first
-            if len(formatted_transcript) > 30000 and model == "gpt-4":
-                print("Transcript is too long for GPT-4. Skipping to gpt-3.5-turbo for efficiency.")
-                continue
-                
+            # Prepare a concise message for the API
+            user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
+            
+            # Send request to OpenAI
             response = openai_client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Here is the transcript for YouTube video ID {video_id}:\n\n{formatted_transcript}"}
-                ]
+                    {"role": "user", "content": user_content}
+                ],
+                temperature=0.7,  # Slightly creative but mostly focused
+                max_tokens=300    # Limit token usage to speed up response
             )
             
             chapters = response.choices[0].message.content
             return chapters
         except Exception as e:
             print(f"Error generating chapters with {model}: {e}")
-            # If it's a rate limit issue, try with a smaller chunk of the transcript
-            if "429" in str(e) and "rate_limit" in str(e).lower():
-                try:
-                    print("Hit rate limit. Trying with a reduced transcript...")
-                    # Take just the first third and last third of the transcript
-                    lines = formatted_transcript.split('\n')
-                    third = len(lines) // 3
-                    reduced_transcript = '\n'.join(lines[:third]) + "\n...[CONTENT OMITTED FOR BREVITY]...\n" + '\n'.join(lines[-third:])
-                    
-                    response = openai_client.chat.completions.create(
-                        model=model,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": f"Here is a partial transcript for YouTube video ID {video_id}. Due to length limitations, only parts of the transcript are shown:\n\n{reduced_transcript}"}
-                        ]
-                    )
-                    
-                    chapters = response.choices[0].message.content
-                    return chapters
-                except Exception as e2:
-                    print(f"Error with reduced transcript approach: {e2}")
             continue
     
     # All models failed
