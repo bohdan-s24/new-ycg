@@ -1,113 +1,88 @@
 import os
-from flask import Flask, request, jsonify, make_response
-from youtube_transcript_api import YouTubeTranscriptApi
-from openai import OpenAI
-from flask_cors import CORS
 import sys
 import traceback
 import json
 import requests
-from xml.etree import ElementTree
+from flask import Flask, request, jsonify, make_response
+from youtube_transcript_api import YouTubeTranscriptApi
+from openai import OpenAI
+from flask_cors import CORS
 
-# Debug imports
+# Print debug info
 print(f"Python version: {sys.version}")
 print(f"Current working directory: {os.getcwd()}")
 print(f"Files in current directory: {os.listdir()}")
 
-# Import dependencies with error handling
-try:
-    from flask import Flask, request, jsonify, make_response
-    print("Flask imported successfully")
-except ImportError as e:
-    print(f"ERROR importing Flask: {e}")
-    traceback.print_exc()
-
-try:
-    from youtube_transcript_api import YouTubeTranscriptApi
-    print("YouTubeTranscriptApi imported successfully")
-except ImportError as e:
-    print(f"ERROR importing YouTubeTranscriptApi: {e}")
-    traceback.print_exc()
-
-try:
-    from openai import OpenAI
-    print("OpenAI imported successfully")
-except ImportError as e:
-    print(f"ERROR importing OpenAI: {e}")
-    traceback.print_exc()
-    
-try:
-    from flask_cors import CORS
-    print("CORS imported successfully")
-except ImportError as e:
-    print(f"ERROR importing CORS: {e}")
-    traceback.print_exc()
-
 # Create Flask app
-try:
-    app = Flask(__name__)
-    CORS(app, resources={r"/*": {"origins": "*"}})
-    print("Flask app created and CORS configured")
-except Exception as e:
-    print(f"ERROR creating Flask app: {e}")
-    traceback.print_exc()
+app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
+print("Flask app created and CORS configured")
 
-# Get environment variables
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME", "")
-WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
+# Centralized configuration management
+class Config:
+    # Environment variables
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+    WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME", "")
+    WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
+    
+    # API configurations
+    OPENAI_MODELS = ["gpt-4", "gpt-3.5-turbo"]
+    TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
+    
+    # Proxy configuration
+    @classmethod
+    def get_proxy_url(cls):
+        if cls.WEBSHARE_USERNAME and cls.WEBSHARE_PASSWORD:
+            return f"http://{cls.WEBSHARE_USERNAME}:{cls.WEBSHARE_PASSWORD}@p.webshare.io:80"
+        return None
+    
+    @classmethod
+    def get_proxy_dict(cls):
+        proxy_url = cls.get_proxy_url()
+        if proxy_url:
+            return {
+                'http': proxy_url,
+                'https': proxy_url
+            }
+        return None
 
-print(f"Environment variables loaded: OPENAI_API_KEY={'✓' if OPENAI_API_KEY else '✗'}, WEBSHARE_USERNAME={'✓' if WEBSHARE_USERNAME else '✗'}, WEBSHARE_PASSWORD={'✓' if WEBSHARE_PASSWORD else '✗'}")
-
-# Configure proxies if credentials available
-proxies = None
-if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
-    try:
-        proxy_url = f"http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80"
-        proxies = {
-            'http': proxy_url,
-            'https': proxy_url
-        }
-        
-        # Set proxies in environment variables for libraries that use them
-        os.environ['HTTP_PROXY'] = proxy_url
-        os.environ['HTTPS_PROXY'] = proxy_url
-        
-        # Set up proxy support for urllib and requests libraries
-        import urllib.request
-        proxy_handler = urllib.request.ProxyHandler(proxies)
-        opener = urllib.request.build_opener(proxy_handler)
-        urllib.request.install_opener(opener)
-        
-        # Configure requests library if it's being used
-        try:
-            import requests
-            from requests.auth import HTTPProxyAuth
-            
-            # Set default proxies for requests
-            requests.Session().proxies.update(proxies)
-            print("Configured proxies for requests library")
-        except ImportError:
-            print("Requests library not installed, skipping requests proxy setup")
-            
-        print("Webshare proxy configured via environment variables and urllib")
-    except Exception as e:
-        print(f"ERROR configuring proxies: {e}")
-        traceback.print_exc()
-else:
-    print("No Webshare proxy configured")
+# Print config information
+print(f"Environment variables loaded: OPENAI_API_KEY={'✓' if Config.OPENAI_API_KEY else '✗'}, "
+      f"WEBSHARE_USERNAME={'✓' if Config.WEBSHARE_USERNAME else '✗'}, "
+      f"WEBSHARE_PASSWORD={'✓' if Config.WEBSHARE_PASSWORD else '✗'}")
 
 # Create OpenAI client if API key is available
 openai_client = None
-if OPENAI_API_KEY:
+if Config.OPENAI_API_KEY:
     try:
-        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
         print("OpenAI client configured")
     except Exception as e:
         print(f"ERROR configuring OpenAI client: {e}")
         traceback.print_exc()
 else:
     print("Warning: OpenAI API key not found in environment variables")
+
+# Standardized error response helper
+def create_error_response(message, status_code=500, extra_data=None):
+    response_data = {
+        'success': False,
+        'error': message
+    }
+    if extra_data:
+        response_data.update(extra_data)
+    
+    response_headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type,Accept',
+        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+    }
+    
+    response = jsonify(response_data)
+    for key, value in response_headers.items():
+        response.headers.add(key, value)
+    
+    return response, status_code
 
 # Simple health check
 @app.route('/', methods=['GET'])
@@ -121,47 +96,34 @@ def hello():
         # Test direct connection to YouTube
         direct_connection_success = False
         try:
-            # Temporarily clear proxy settings
-            old_http_proxy = os.environ.pop('HTTP_PROXY', None)
-            old_https_proxy = os.environ.pop('HTTPS_PROXY', None)
-            
-            # Try a quick direct connection
+            # Create a fresh session for this test
             with requests.Session() as test_session:
                 test_session.proxies.clear()
                 response = test_session.get("https://www.youtube.com", timeout=5)
                 direct_connection_success = response.status_code == 200
-                
-            # Restore environment
-            if old_http_proxy:
-                os.environ['HTTP_PROXY'] = old_http_proxy
-            if old_https_proxy:
-                os.environ['HTTPS_PROXY'] = old_https_proxy
-        except:
+        except Exception as e:
+            print(f"Direct connection test failed: {e}")
             direct_connection_success = False
         
         # Basic environment info for diagnostics
         env_info = {
             'python_version': sys.version,
-            'openai_key_configured': bool(OPENAI_API_KEY),
-            'webshare_username_configured': bool(WEBSHARE_USERNAME),
-            'webshare_password_configured': bool(WEBSHARE_PASSWORD)
+            'openai_key_configured': bool(Config.OPENAI_API_KEY),
+            'webshare_username_configured': bool(Config.WEBSHARE_USERNAME),
+            'webshare_password_configured': bool(Config.WEBSHARE_PASSWORD)
         }
         
         return jsonify({
             'status': 'online',
             'message': 'YouTube Chapter Generator API is running',
-            'proxy_configured': bool(proxies),
+            'proxy_configured': bool(Config.get_proxy_dict()),
             'direct_connection_available': direct_connection_success,
             'env_info': env_info
         })
     except Exception as e:
         print(f"Error in /api route: {e}")
         traceback.print_exc()
-        return jsonify({
-            'status': 'error',
-            'message': 'API error',
-            'error': str(e)
-        }), 200  # Return 200 even on error for diagnostic purposes
+        return create_error_response(f"API error: {str(e)}", 500)
 
 @app.route('/api/generate-chapters', methods=['POST', 'OPTIONS'])
 def generate_chapters():
@@ -175,91 +137,25 @@ def generate_chapters():
         response.headers.add('Access-Control-Allow-Methods', 'POST')
         return response
     
-    # Response headers
-    response_headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type,Accept',
-        'Access-Control-Allow-Methods': 'POST,OPTIONS'
-    }
-    
     try:
         # Validate OpenAI API key
         if not openai_client:
-            return jsonify({
-                'success': False,
-                'error': 'OpenAI API key is not configured on the server.'
-            }), 400, response_headers
+            return create_error_response('OpenAI API key is not configured on the server.', 400)
         
         # Get data from request
         data = request.json
         if not data or 'video_id' not in data:
-            return jsonify({
-                'success': False,
-                'error': 'No video ID provided'
-            }), 400, response_headers
+            return create_error_response('No video ID provided', 400)
         
         video_id = data['video_id']
         print(f"Processing request for video_id: {video_id}")
         
         # Get transcript
-        try:
-            transcript_list = None
-            error_messages = []
+        transcript_list = fetch_transcript(video_id)
+        if not transcript_list:
+            return create_error_response('Failed to fetch transcript after multiple attempts', 500)
             
-            # Setup proxies according to youtube-transcript-api documentation
-            if WEBSHARE_USERNAME and WEBSHARE_PASSWORD:
-                # Format proxies for youtube-transcript-api
-                proxies_dict = {
-                    'http': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80',
-                    'https': f'http://{WEBSHARE_USERNAME}:{WEBSHARE_PASSWORD}@p.webshare.io:80'
-                }
-                print(f"Configured proxies for youtube-transcript-api: {proxies_dict}")
-            else:
-                proxies_dict = None
-                print("No proxy credentials found, will attempt without proxy")
-            
-            # Try with Webshare proxies first
-            try:
-                print("Attempting to fetch transcript with proxies directly in YouTubeTranscriptApi...")
-                # Pass proxies directly to the API call as documented
-                transcript_list = YouTubeTranscriptApi.get_transcript(
-                    video_id, 
-                    languages=['en'],
-                    proxies=proxies_dict
-                )
-                print(f"Successfully fetched transcript with {len(transcript_list)} entries")
-            except Exception as e1:
-                error_message = str(e1)
-                error_messages.append(f"Proxy method failed: {error_message}")
-                print(f"Proxy method failed: {error_message}")
-                
-                # Try without proxy as fallback
-                try:
-                    print("Attempting to fetch transcript without proxy...")
-                    transcript_list = YouTubeTranscriptApi.get_transcript(
-                        video_id, 
-                        languages=['en'],
-                        proxies=None
-                    )
-                    print(f"Successfully fetched transcript without proxy: {len(transcript_list)} entries")
-                except Exception as e2:
-                    error_messages.append(f"Direct method failed: {str(e2)}")
-                    print(f"Direct method failed: {str(e2)}")
-            
-            # If all methods failed
-            if not transcript_list:
-                combined_errors = " | ".join(error_messages)
-                return jsonify({
-                    'success': False,
-                    'error': f'Failed to fetch transcript: {combined_errors}'
-                }), 500, response_headers
-                
-            print(f"Successfully retrieved transcript for {video_id} with {len(transcript_list)} entries")
-        except Exception as transcript_error:
-            return jsonify({
-                'success': False,
-                'error': f'Error fetching transcript: {str(transcript_error)}'
-            }), 500, response_headers
+        print(f"Successfully retrieved transcript for {video_id} with {len(transcript_list)} entries")
         
         # Calculate video duration
         last_entry = transcript_list[-1]
@@ -267,61 +163,19 @@ def generate_chapters():
         video_duration_minutes = video_duration_seconds / 60
         
         # Format transcript for OpenAI
-        formatted_transcript = ""
-        for item in transcript_list:
-            minutes, seconds = divmod(int(item['start']), 60)
-            hours, minutes = divmod(minutes, 60)
-            
-            if hours > 0:
-                timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            else:
-                timestamp = f"{minutes:02d}:{seconds:02d}"
-                
-            formatted_transcript += f"{timestamp} - {item['text']}\n"
+        formatted_transcript = format_transcript_for_openai(transcript_list)
         
         # Create prompt
-        system_prompt = (
-            "You are a YouTube chapter creator. Create concise, descriptive chapters for this video "
-            "based on topic changes. Each chapter should be 2-4 minutes long. The first chapter "
-            "should always start at 00:00."
-            "\n\n"
-            "Format your response as a list of timestamps and titles only, like:\n"
-            "00:00 Introduction\n"
-            "02:30 First Topic\n"
-            "05:45 Second Topic"
-            "\n\n"
-        )
-        
-        # Adjust chapters based on video length
-        if video_duration_minutes <= 10:
-            system_prompt += "Provide 3-5 chapters."
-        elif video_duration_minutes <= 20:
-            system_prompt += "Provide 5-7 chapters."
-        elif video_duration_minutes <= 40:
-            system_prompt += "Provide 7-10 chapters."
-        else:
-            system_prompt += "Provide 10-15 chapters."
+        system_prompt = create_chapter_prompt(video_duration_minutes)
         
         # Generate chapters with OpenAI
-        try:
-            response = openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Here is the transcript for YouTube video ID {video_id}:\n\n{formatted_transcript}"}
-                ]
-            )
-            
-            chapters = response.choices[0].message.content
-            chapter_count = len(chapters.split("\n"))
-            print(f"Generated {chapter_count} chapters for {video_id}")
-        except Exception as openai_error:
-            print(f"OpenAI API error: {openai_error}")
-            traceback.print_exc()
-            return jsonify({
-                "success": False,
-                "error": f"Error generating chapters: {str(openai_error)}"
-            }), 500, response_headers
+        chapters = generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
+        if not chapters:
+            return create_error_response('Failed to generate chapters with OpenAI', 500)
+        
+        # Count chapters
+        chapter_count = len(chapters.strip().split("\n"))
+        print(f"Generated {chapter_count} chapters for {video_id}")
         
         # Create successful response
         result = jsonify({
@@ -329,47 +183,196 @@ def generate_chapters():
             "chapters": chapters,
             "video_id": video_id,
             "video_duration_minutes": f"{video_duration_minutes:.2f}",
-            "used_proxy": bool(proxies)
+            "used_proxy": bool(Config.get_proxy_dict())
         })
         
         # Add CORS headers
-        for key, value in response_headers.items():
-            result.headers.add(key, value)
+        result.headers.add('Access-Control-Allow-Origin', '*')
+        result.headers.add('Access-Control-Allow-Headers', 'Content-Type,Accept')
+        result.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
         
         return result
         
     except Exception as e:
         print(f"Error in generate_chapters: {e}")
         traceback.print_exc()
-        
-        error_response = jsonify({
-            "success": False,
-            "error": str(e)
-        })
-        
-        # Add CORS headers
-        for key, value in response_headers.items():
-            error_response.headers.add(key, value)
-        
-        return error_response, 500
+        return create_error_response(str(e), 500)
 
-# For local development
-if __name__ == '__main__':
-    app.run(debug=True) 
+def fetch_transcript(video_id):
+    """
+    Fetch transcript using the YouTube Transcript API with proper error handling
+    and fallbacks.
+    """
+    error_messages = []
+    proxy_dict = Config.get_proxy_dict()
+    
+    # First try: Get transcript list and find available languages
+    try:
+        print("Attempting to fetch transcript list...")
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        
+        # Try to find transcript in preferred languages
+        for lang in Config.TRANSCRIPT_LANGUAGES:
+            try:
+                print(f"Trying to find transcript in language: {lang}")
+                transcript = transcript_list.find_transcript([lang])
+                transcript_data = transcript.fetch()
+                if transcript_data and len(transcript_data) > 0:
+                    print(f"Successfully found transcript in {lang} with {len(transcript_data)} entries")
+                    return transcript_data
+            except Exception as e:
+                print(f"Could not find transcript in {lang}: {e}")
+                continue
+        
+        # If no preferred language is found, try to get any transcript and translate it
+        print("No preferred language found, trying to get any transcript and translate it")
+        available_transcripts = list(transcript_list)
+        if available_transcripts:
+            try:
+                # Get the first available transcript
+                transcript = available_transcripts[0]
+                print(f"Found transcript in {transcript.language_code} ({transcript.language})")
+                
+                # Try to translate it to English
+                english_transcript = transcript.translate('en')
+                transcript_data = english_transcript.fetch()
+                if transcript_data and len(transcript_data) > 0:
+                    print(f"Successfully translated transcript to English with {len(transcript_data)} entries")
+                    return transcript_data
+            except Exception as e:
+                error_messages.append(f"Translation failed: {str(e)}")
+                print(f"Translation failed: {e}")
+    except Exception as e1:
+        error_message = str(e1)
+        error_messages.append(f"Transcript list retrieval failed: {error_message}")
+        print(f"Transcript list retrieval failed: {error_message}")
+    
+    # Fallback to legacy method (direct get_transcript)
+    try:
+        print("Falling back to legacy API method with proxies...")
+        transcript_list = YouTubeTranscriptApi.get_transcript(
+            video_id, 
+            languages=Config.TRANSCRIPT_LANGUAGES,
+            proxies=proxy_dict
+        )
+        print(f"Successfully fetched transcript with legacy API and proxies: {len(transcript_list)} entries")
+        return transcript_list
+    except Exception as e3:
+        error_messages.append(f"Legacy API with proxy failed: {str(e3)}")
+        print(f"Legacy API with proxy failed: {str(e3)}")
+    
+    # Try again without proxies
+    try:
+        print("Falling back to legacy API method without proxies...")
+        transcript_list = YouTubeTranscriptApi.get_transcript(
+            video_id, 
+            languages=Config.TRANSCRIPT_LANGUAGES
+        )
+        print(f"Successfully fetched transcript with legacy API without proxies: {len(transcript_list)} entries")
+        return transcript_list
+    except Exception as e4:
+        error_messages.append(f"Legacy API without proxy failed: {str(e4)}")
+        print(f"Legacy API without proxy failed: {str(e4)}")
+    
+    # Final try: Use custom requests implementation
+    try:
+        print("Attempting fallback method with direct requests...")
+        transcript_list = fetch_transcript_with_requests(video_id, proxy_dict)
+        if transcript_list and len(transcript_list) > 0:
+            print(f"Successfully fetched transcript with requests: {len(transcript_list)} entries")
+            return transcript_list
+    except Exception as e5:
+        error_messages.append(f"Direct requests method failed: {str(e5)}")
+        print(f"Direct requests method failed: {str(e5)}")
+    
+    # All methods failed
+    combined_errors = " | ".join(error_messages)
+    print(f"All transcript fetch methods failed: {combined_errors}")
+    return None
+
+def format_transcript_for_openai(transcript_list):
+    """Format transcript in a way that's suitable for OpenAI processing"""
+    formatted_transcript = ""
+    for item in transcript_list:
+        minutes, seconds = divmod(int(item['start']), 60)
+        hours, minutes = divmod(minutes, 60)
+        
+        if hours > 0:
+            timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        else:
+            timestamp = f"{minutes:02d}:{seconds:02d}"
+            
+        formatted_transcript += f"{timestamp} - {item['text']}\n"
+    return formatted_transcript
+
+def create_chapter_prompt(video_duration_minutes):
+    """Create a prompt for OpenAI based on video duration"""
+    system_prompt = (
+        "You are a YouTube chapter creator. Create concise, descriptive chapters for this video "
+        "based on topic changes. Each chapter should be 2-4 minutes long. The first chapter "
+        "should always start at 00:00."
+        "\n\n"
+        "Format your response as a list of timestamps and titles only, like:\n"
+        "00:00 Introduction\n"
+        "02:30 First Topic\n"
+        "05:45 Second Topic"
+        "\n\n"
+    )
+    
+    # Adjust chapters based on video length
+    if video_duration_minutes <= 10:
+        system_prompt += "Provide 3-5 chapters."
+    elif video_duration_minutes <= 20:
+        system_prompt += "Provide 5-7 chapters."
+    elif video_duration_minutes <= 40:
+        system_prompt += "Provide 7-10 chapters."
+    else:
+        system_prompt += "Provide 10-15 chapters."
+    
+    return system_prompt
+
+def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript):
+    """Generate chapters using OpenAI with model fallback"""
+    if not openai_client:
+        print("OpenAI client not configured")
+        return None
+    
+    for model in Config.OPENAI_MODELS:
+        try:
+            print(f"Attempting to generate chapters with {model}...")
+            response = openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Here is the transcript for YouTube video ID {video_id}:\n\n{formatted_transcript}"}
+                ]
+            )
+            
+            chapters = response.choices[0].message.content
+            return chapters
+        except Exception as e:
+            print(f"Error generating chapters with {model}: {e}")
+            continue
+    
+    # All models failed
+    print("All OpenAI models failed to generate chapters")
+    return None
 
 # Backup function to fetch transcript using requests directly
-def fetch_transcript_with_requests(video_id, proxies=None, session=None):
+def fetch_transcript_with_requests(video_id, proxy_dict=None):
     """Fetch YouTube transcript using requests library with proxy support"""
-    print(f"Attempting to fetch transcript for {video_id} using requests with proxies: {bool(proxies)}")
+    print(f"Attempting to fetch transcript for {video_id} using requests with proxies: {bool(proxy_dict)}")
     
-    # Use provided session or create a new one
-    req_session = session if session else requests
+    # Create a session for this request
+    session = requests.Session()
+    if proxy_dict:
+        session.proxies.update(proxy_dict)
     
     # First get the video page to extract available captions
     video_url = f"https://www.youtube.com/watch?v={video_id}"
     try:
-        print(f"Fetching video page with proxies: {bool(proxies)}")
-        response = req_session.get(video_url, proxies=proxies)
+        print(f"Fetching video page with proxies: {bool(proxy_dict)}")
+        response = session.get(video_url, timeout=10)
         response.raise_for_status()
         
         # Find the captions URL in the page
@@ -398,7 +401,7 @@ def fetch_transcript_with_requests(video_id, proxies=None, session=None):
         # Try to find English captions
         caption_url = None
         for track in captions_data:
-            if track.get('languageCode') == 'en':
+            if track.get('languageCode') in Config.TRANSCRIPT_LANGUAGES:
                 caption_url = track.get('baseUrl')
                 break
         
@@ -414,7 +417,7 @@ def fetch_transcript_with_requests(video_id, proxies=None, session=None):
         
         # Fetch the captions
         print(f"Fetching captions from {caption_url}")
-        captions_response = req_session.get(caption_url, proxies=proxies)
+        captions_response = session.get(caption_url, timeout=10)
         captions_response.raise_for_status()
         
         captions_data = captions_response.json()
@@ -441,5 +444,8 @@ def fetch_transcript_with_requests(video_id, proxies=None, session=None):
     except Exception as e:
         print(f"Error fetching transcript with requests: {e}")
         traceback.print_exc()
-        raise Exception(f"Failed to fetch transcript with requests: {str(e)}") # Enforcing a manual deployment trigger
-# Added direct connection handling code
+        raise Exception(f"Failed to fetch transcript with requests: {str(e)}")
+
+# For local development
+if __name__ == '__main__':
+    app.run(debug=True)
