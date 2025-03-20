@@ -489,27 +489,27 @@ def format_transcript(transcript_list):
     return format_transcript_for_model(transcript_list)
 
 def create_chapter_prompt(video_duration_minutes):
-    """Create a prompt for OpenAI based on video duration"""
+    """Create an advanced prompt for OpenAI based on video duration"""
     system_prompt = (
-        "You are a YouTube chapter creator. Extract the main topics from this transcript and create time-based chapters. "
-        "The first chapter must start at 00:00."
-        "\n\n"
-        "Format your response as a list of timestamps and titles only, like:\n"
-        "00:00 Introduction\n"
-        "02:30 First Topic\n"
-        "05:45 Second Topic"
-        "\n\n"
+        "You are an expert in content optimization for YouTube. Your task is to create highly engaging, SEO-optimized YouTube chapters for the given transcript.\n\n"
+        "Instructions:\n"
+        "- Extract timestamps based on key topic transitions, major concepts, or engaging moments.\n"
+        "- Ensure even spacing (aim for 2-6 minute intervals) across the full video length.\n"
+        "- Titles must be catchy, emotionally intriguing, and optimized for search (include high-search-volume keywords).\n"
+        "- Use action verbs, limit titles to 60 characters, and avoid generic descriptions.\n"
+        "- Format output as: [MM:SS] (or [HH:MM:SS] if video longer than 1 hour) - Title.\n"
+        "- The first chapter MUST start at 00:00.\n\n"
     )
     
-    # Adjust chapters based on video length
+    # Adjust number of chapters based on video length
     if video_duration_minutes <= 10:
-        system_prompt += "Provide 3-5 chapters."
+        system_prompt += "Create 5-7 chapters evenly distributed throughout the video."
     elif video_duration_minutes <= 20:
-        system_prompt += "Provide 5-7 chapters."
+        system_prompt += "Create 7-10 chapters evenly distributed throughout the video."
     elif video_duration_minutes <= 40:
-        system_prompt += "Provide 7-10 chapters."
+        system_prompt += "Create 10-12 chapters evenly distributed throughout the video."
     else:
-        system_prompt += "Provide 10-15 chapters."
+        system_prompt += "Create 12-15 chapters evenly distributed throughout the video."
     
     return system_prompt
 
@@ -534,7 +534,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "user", "content": user_content}
                 ],
                 temperature=0.7,
-                max_tokens=300
+                max_tokens=2000  # Increased max_tokens for more detailed chapters
             )
             
             chapters = response.choices[0].message.content
