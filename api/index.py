@@ -489,37 +489,35 @@ def format_transcript(transcript_list):
     return format_transcript_for_model(transcript_list)
 
 def create_chapter_prompt(video_duration_minutes):
-    """Create an ultra-viral, engagement-optimized prompt for OpenAI based on video duration"""
+    """Create an advanced SEO-optimized prompt for OpenAI based on video duration"""
     system_prompt = (
-        "You are an expert in viral YouTube content, skilled in crafting **highly engaging, emotionally charged, and ultra-clickable** chapter titles. "
-        "Your goal is to create **5-15 high-impact timestamps** that maximize **watch time, engagement, and click-through rate (CTR).** \n\n"
-        "### 🚀 **Core Instructions:**\n"
-        "1. **Pinpoint Attention-Grabbing Moments**\n"
-        "   - Find the **most surprising, controversial, or exciting moments**\n"
-        "   - Identify **game-changing insights, massive revelations, or shocking facts**\n"
-        "   - Spot **mistakes people are making or secrets they don't know**\n\n"
-        "2. **Create Irresistible Clickbait Titles**\n"
-        "   - Use **power words & emotional triggers**: (*shocking, insane, genius, revealed, finally, must-know!*)\n"
-        "   - Make it feel like a **must-watch**: (\"You'll Regret Skipping This!\")\n"
-        "   - Use **suspense**: (\"What Happens Next Will Shock You…\")\n"
-        "   - Keep it **under 60 characters**\n"
-        "   - Make it **SEO-optimized & high-search-volume**\n\n"
-        "### 📝 **Exact Output Format:**\n"
-        "MM:SS] (or [HH:MM:SS] if video longer than 1 hour) - Viral, Clickbait-Style Chapter Title\n\n"
-        "### 💡 **Example Titles:**\n"
-        "- [01:45] - **You've Been Doing This WRONG Your Whole Life!**\n"
-        "- [05:30] - **The Secret Hack Nobody Talks About (Until Now)**\n"
-        "- [12:15] - **WARNING: This Mistake Kills Your Views!**\n"
-        "- [20:55] - **Finally Revealed: The Trick That SKYROCKETS Growth!**\n"
-        "- [35:10] - **This Change Will 10X Your Results Instantly**\n\n"
+        "You are an expert in content optimization for YouTube and copywriting, skilled in crafting **highly engaging, emotionally compelling, and SEO-optimized** chapter titles. "
+        "Your goal is to create strategic chapters that maximize viewer retention and drive traffic.\n\n"
+        "### 🔹 **Key Optimization Guidelines:**\n"
+        "1. **Identify Key Moments**\n"
+        "   - Detect major topic transitions, game-changing insights, and \"aha\" moments\n"
+        "   - Prioritize parts where viewers learn something surprising or get high-value takeaways\n"
+        "   - Keep chapter intervals between 2-6 minutes\n\n"
+        "2. **Craft viral Chapter Titles**\n"
+        "   - Titles should evoke curiosity, excitement, or urgency\n"
+        "   - Use powerful, emotional, or intriguing wording\n"
+        "   - SEO-optimized: Include high-search-volume keywords\n"
+        "   - Keep titles under 60 characters\n"
+        "   - Use numbers if there is enumeration of some points\n"
+        "   - Use action verbs & create suspense\n\n"
+        "### 📝 **Output Format:**\n"
+        "[MM:SS] - Catchy, Clickbait-Style Chapter Title\n"
+        "(Use [HH:MM:SS] if video is longer than 1 hour)\n\n"
     )
     
     # Adjust number of chapters based on video length
     if video_duration_minutes <= 10:
-        system_prompt += "Create 5-7 chapters evenly distributed throughout the video."
+        system_prompt += "Create 3-5 chapters evenly distributed throughout the video."
     elif video_duration_minutes <= 20:
-        system_prompt += "Create 7-10 chapters evenly distributed throughout the video."
+        system_prompt += "Create 5-7 chapters evenly distributed throughout the video."
     elif video_duration_minutes <= 40:
+        system_prompt += "Create 7-10 chapters evenly distributed throughout the video."
+    elif video_duration_minutes <= 60:
         system_prompt += "Create 10-12 chapters evenly distributed throughout the video."
     else:
         system_prompt += "Create 12-15 chapters evenly distributed throughout the video."
