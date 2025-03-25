@@ -489,27 +489,40 @@ def format_transcript(transcript_list):
     return format_transcript_for_model(transcript_list)
 
 def create_chapter_prompt(video_duration_minutes):
-    """Create a prompt for OpenAI based on video duration"""
+    """Create an ultra-viral, engagement-optimized prompt for OpenAI based on video duration"""
     system_prompt = (
-        "You are a YouTube chapter creator. Extract the main topics from this transcript and create time-based chapters. "
-        "The first chapter must start at 00:00."
-        "\n\n"
-        "Format your response as a list of timestamps and titles only, like:\n"
-        "00:00 Introduction\n"
-        "02:30 First Topic\n"
-        "05:45 Second Topic"
-        "\n\n"
+        "You are an expert in viral YouTube content, skilled in crafting **highly engaging, emotionally charged, and ultra-clickable** chapter titles. "
+        "Your goal is to create **5-15 high-impact timestamps** that maximize **watch time, engagement, and click-through rate (CTR).** \n\n"
+        "### 🚀 **Core Instructions:**\n"
+        "1. **Pinpoint Attention-Grabbing Moments**\n"
+        "   - Find the **most surprising, controversial, or exciting moments**\n"
+        "   - Identify **game-changing insights, massive revelations, or shocking facts**\n"
+        "   - Spot **mistakes people are making or secrets they don't know**\n\n"
+        "2. **Create Irresistible Clickbait Titles**\n"
+        "   - Use **power words & emotional triggers**: (*shocking, insane, genius, revealed, finally, must-know!*)\n"
+        "   - Make it feel like a **must-watch**: (\"You'll Regret Skipping This!\")\n"
+        "   - Use **suspense**: (\"What Happens Next Will Shock You…\")\n"
+        "   - Keep it **under 60 characters**\n"
+        "   - Make it **SEO-optimized & high-search-volume**\n\n"
+        "### 📝 **Exact Output Format:**\n"
+        "MM:SS] (or [HH:MM:SS] if video longer than 1 hour) - Viral, Clickbait-Style Chapter Title\n\n"
+        "### 💡 **Example Titles:**\n"
+        "- [01:45] - **You've Been Doing This WRONG Your Whole Life!**\n"
+        "- [05:30] - **The Secret Hack Nobody Talks About (Until Now)**\n"
+        "- [12:15] - **WARNING: This Mistake Kills Your Views!**\n"
+        "- [20:55] - **Finally Revealed: The Trick That SKYROCKETS Growth!**\n"
+        "- [35:10] - **This Change Will 10X Your Results Instantly**\n\n"
     )
     
-    # Adjust chapters based on video length
+    # Adjust number of chapters based on video length
     if video_duration_minutes <= 10:
-        system_prompt += "Provide 3-5 chapters."
+        system_prompt += "Create 5-7 chapters evenly distributed throughout the video."
     elif video_duration_minutes <= 20:
-        system_prompt += "Provide 5-7 chapters."
+        system_prompt += "Create 7-10 chapters evenly distributed throughout the video."
     elif video_duration_minutes <= 40:
-        system_prompt += "Provide 7-10 chapters."
+        system_prompt += "Create 10-12 chapters evenly distributed throughout the video."
     else:
-        system_prompt += "Provide 10-15 chapters."
+        system_prompt += "Create 12-15 chapters evenly distributed throughout the video."
     
     return system_prompt
 
@@ -534,7 +547,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "user", "content": user_content}
                 ],
                 temperature=0.7,
-                max_tokens=300
+                max_tokens=2000  # Increased max_tokens for more detailed chapters
             )
             
             chapters = response.choices[0].message.content
