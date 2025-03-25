@@ -491,14 +491,17 @@ def format_transcript(transcript_list):
 def create_chapter_prompt(video_duration_minutes):
     """Create an advanced SEO-optimized prompt for OpenAI based on video duration"""
     system_prompt = (
-        "You are an expert in content optimization for YouTube and copywriting, skilled in crafting **highly engaging, emotionally compelling, and SEO-optimized** chapter titles. "
-        "Your goal is to create strategic chapters that maximize viewer retention and drive traffic.\n\n"
+        "You are an expert in content optimization for YouTube and copywriting, skilled in crafting **ultra-valuable, highly engaging, emotionally compelling, and SEO-optimized** chapter titles. "
+        "Your goal is to create strategic chapters that maximize viewer engagement and drive traffic.\n\n"
         "### 🔹 **Key Optimization Guidelines:**\n"
         "1. **Identify Key Moments**\n"
         "   - Detect major topic transitions, game-changing insights, and \"aha\" moments\n"
         "   - Prioritize parts where viewers learn something surprising or get high-value takeaways\n"
         "   - Keep chapter intervals between 2-6 minutes\n\n"
-        "2. **Craft viral Chapter Titles**\n"
+        "2. **Craft viral Chapter Titles with deep meaning**\n"
+        "   - Each title should be as summary of the content that starts from this timestamp\n"
+        "   - Think deeper to provide deep meaning\n"
+        "   - Provide value to viewer by giving smart, simple but non obvious tips or ideas\n"
         "   - Titles should evoke curiosity, excitement, or urgency\n"
         "   - Use powerful, emotional, or intriguing wording\n"
         "   - SEO-optimized: Include high-search-volume keywords\n"
@@ -506,8 +509,8 @@ def create_chapter_prompt(video_duration_minutes):
         "   - Use numbers if there is enumeration of some points\n"
         "   - Use action verbs & create suspense\n\n"
         "### 📝 **Output Format:**\n"
-        "[MM:SS] - Catchy, Clickbait-Style Chapter Title\n"
-        "(Use [HH:MM:SS] if video is longer than 1 hour)\n\n"
+        "MM:SS - Catchy, Clickbait-Style Chapter Title\n"
+        "(Use HH:MM:SS if video is longer than 1 hour)\n\n"
     )
     
     # Adjust number of chapters based on video length
