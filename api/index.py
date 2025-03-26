@@ -498,7 +498,11 @@ def create_chapter_prompt(video_duration_minutes):
         "   - Detect major topic transitions, game-changing insights, and \"aha\" moments\n"
         "   - Prioritize parts where viewers learn something surprising or get high-value takeaways\n"
         "   - Provide timestamps according to transcript timing\n"
-        "   - Keep chapter intervals between 2-6 minutes\n\n"
+        "   - You **MUST** use timestamps **EXACTLY** as they appear in the transcript\n"
+        "   - The first timestamp **MUST** always be 00:00\n"
+        "   - Chapter gaps should be natural, between 1-9 minutes\n"
+        "   - You **CANNOT** create arbitrary timestamps."
+        "   - You **MUST** use the transcript timestamps that match key moments\n\n"
         "2. **Craft viral Chapter Titles with deep meaning**\n"
         "   - Each title should be as summary of the content that starts from this timestamp\n"
         "   - Think logically and critically to provide deep meaning\n"
@@ -567,7 +571,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
                 ],
-                temperature=0.7,
+                temperature=0.2,
                 max_tokens=2000  # Increased max_tokens for more detailed chapters
             )
             
