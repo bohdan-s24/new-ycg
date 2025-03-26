@@ -34,6 +34,13 @@ class Config:
     # API configurations
     OPENAI_MODELS = ["o3-mini-2025-01-31", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
+
+    
+    # Token limits - using large context windows
+    max_completion_tokens = {
+        "o3-mini-2025-01-31": 120000,  # Conservative limit for GPT-4o (128k context)
+        "gpt-4o-mini": 120000  # Conservative limit for GPT-4o-mini (128k context)
+    }
     
     # Proxy configuration
     @classmethod
