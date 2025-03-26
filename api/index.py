@@ -529,10 +529,13 @@ def create_chapter_prompt(video_duration_minutes):
     return system_prompt
 
 def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript):
-    """Generate chapters using OpenAI"""
+    """Generate chapters using OpenAI with comprehensive error handling and logging"""
     if not openai_client:
-        print("OpenAI client not configured")
+        print("ERROR: OpenAI client not configured")
         return None
+    
+    print(f"Generating chapters for video: {video_id}")
+    print(f"Transcript length: {len(formatted_transcript)} characters")
     
     for model in Config.OPENAI_MODELS:
         try:
@@ -540,6 +543,22 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
             
             # Prepare message for the API
             user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
+            
+            # Validate prompt length
+            system_prompt_tokens = estimate_tokens(system_prompt)
+            user_content_tokens = estimate_tokens(user_content)
+            total_tokens = system_prompt_tokens + user_content_tokens
+            
+            print(f"Token estimation - System Prompt: {system_prompt_tokens}, User Content: {user_content_tokens}, Total: {total_tokens}")
+            
+            # Check against model's max token limit
+            max_tokens = Config.MAX_TOKENS.get(model, 120000)
+            if total_tokens > max_tokens:
+                print(f"WARNING: Token count {total_tokens} exceeds max tokens {max_tokens} for {model}")
+                # Truncate the transcript
+                truncated_transcript = formatted_transcript[:max_tokens * 4]
+                user_content = f"Generate chapters for this video transcript:\n\n{truncated_transcript}"
+                print("Truncated transcript to fit token limit")
             
             # Send request to OpenAI
             response = openai_client.chat.completions.create(
@@ -552,16 +571,39 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                 max_tokens=2000  # Increased max_tokens for more detailed chapters
             )
             
-            chapters = response.choices[0].message.content
+            # Log response details
+            print("--- OpenAI API Response Details ---")
+            print(f"Model Used: {response.model}")
+            print(f"Tokens Used: {response.usage.total_tokens}")
+            print(f"Finish Reason: {response.choices[0].finish_reason}")
+            
+            # Extract chapters
+            chapters = response.choices[0].message.content.strip()
+            
+            # Validate chapters
+            chapter_lines = chapters.split('\n')
+            print(f"Generated {len(chapter_lines)} chapters")
+            
+            # Additional validation of chapters
+            if not chapters or len(chapter_lines) < 3:
+                print("WARNING: Generated chapters seem too short or empty")
+                continue
+            
+            print("Chapters:")
+            print(chapters)
+            
             return chapters
+        
         except Exception as e:
-            print(f"Error generating chapters with {model}: {e}")
+            print(f"Error generating chapters with {model}: {type(e).__name__}")
+            print(f"Error details: {str(e)}")
+            import traceback
+            traceback.print_exc()
             continue
     
     # All models failed
     print("All OpenAI models failed to generate chapters")
     return None
-
 # Backup function to fetch transcript using requests directly
 def fetch_transcript_with_requests(video_id, proxy_dict=None, timeout=10):
     """Fetch YouTube transcript using requests library with proxy support"""
