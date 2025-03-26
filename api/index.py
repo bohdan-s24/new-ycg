@@ -580,7 +580,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
                 ],
-                top_p=0.1,
+                temperature=0.9,
                 max_tokens=2000  # Increased max_tokens for more detailed chapters
             )
             
