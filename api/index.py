@@ -32,12 +32,12 @@ class Config:
     WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
     
     # API configurations
-    OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]
+    OPENAI_MODELS = ["gpt-4.5-preview-2025-02-27", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
     
     # Token limits - using large context windows
     MAX_TOKENS = {
-        "gpt-4o": 120000,  # Conservative limit for GPT-4o (128k context)
+        "gpt-4.5-preview-2025-02-27": 120000,  # Conservative limit for GPT-4o (128k context)
         "gpt-4o-mini": 120000  # Conservative limit for GPT-4o-mini (128k context)
     }
     
