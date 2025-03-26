@@ -492,7 +492,7 @@ def create_chapter_prompt(video_duration_minutes):
     """Create an advanced SEO-optimized prompt for OpenAI based on video duration"""
     system_prompt = (
         "You are an expert in content optimization for YouTube and copywriting, skilled in crafting **ultra-valuable, highly engaging, emotionally compelling, and SEO-optimized** chapter titles. "
-        "Your goal is to create strategic chapters that maximize viewer engagement and drive traffic. Think like a **top-tier content strategist** who understands what makes viewers stay longer, click, and engage. "
+        "Your goal is to create strategic chapters that maximize watch time and discoverability. Think like a **top-tier content strategist** who understands what makes viewers stay longer, click, and engage. "
         "Each chapter title should make the viewer feel like they **must** keep watching.\n\n"
 
         "### 🔹 **Key Optimization Guidelines:**\n"
@@ -502,26 +502,25 @@ def create_chapter_prompt(video_duration_minutes):
         "   - Provide timestamps according to transcript timing\n"
         "   - You **MUST** use timestamps **EXACTLY** as they appear in the transcript\n"
         "   - The first timestamp **MUST** always be 00:00\n"
-        "   - Chapter gaps should be natural, between 1-9 minutes\n"
+        "   - Chapter intervals should be **natural**, ideally 1-9 minutes apart\n"
         "   - You **CANNOT** create arbitrary timestamps.\n"
         "   - You **MUST** use the transcript timestamps that match key moments\n\n"
 
         "2. **Craft Viral Chapter Titles with Deep Meaning**\n"
-        "   - Each title should summarize the content starting from this timestamp\n"
         "   - Think logically and critically to provide deep meaning\n"
         "   - Provide value to viewers by giving smart, simple but non-obvious tips or ideas\n"
         "   - Titles should evoke curiosity, excitement, or urgency\n"
-        "   - Use powerful, emotional, or intriguing wording\n"
+        "   - You **MUST** Use powerful, emotional, or intriguing wording\n"
         "   - SEO-optimized: Include high-search-volume keywords\n"
         "   - Keep titles under 60 characters\n"
-        "   - Use numbers if there is enumeration of some points\n"
-        "   - Use action verbs & create suspense\n"
+        "   - You **MUST** use numbers if there is enumeration of some points\n"
+        "   - Use action verbs & create suspense and emotional triggers\n"
         "   - **Every title should trigger an emotional response.** Make the viewer feel shocked, inspired, or eager to learn more.\n\n"
 
         "3. **Step-by-Step Process for Maximum Impact**\n"
-        "   - **Step 1:** Scan the transcript & detect key moments (explain why).\n"
-        "   - **Step 2:** Summarize the key point in a few words.\n"
-        "   - **Step 3:** Transform it into a viral, click-worthy title by using curiosity, emotions, or strong verbs.\n\n"
+        "   - **Step 1:** Scan the transcript & detect key moments.\n"
+        "   - **Step 2:** Summarize the content **starting at this timestamp**.\n"
+        "   - **Step 3:** Transform it into a viral, clickbait title by using curiosity, emotions, or strong verbs.\n\n"
 
         "### 📝 **Output Format:**\n"
         "MM:SS - Catchy, Clickbait-Style Chapter Title\n"
@@ -581,7 +580,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content}
                 ],
-                temperature=0.1,
+                top_p=0.1,
                 max_tokens=2000  # Increased max_tokens for more detailed chapters
             )
             
