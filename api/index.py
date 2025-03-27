@@ -543,7 +543,7 @@ def create_chapter_prompt(video_duration_minutes):
     
     return system_prompt
 
-def validate_chapters_prompt(chapters, transcript):
+def validate_chapters_prompt(chapters, formatted_transcript):
     """Create a prompt that asks the model to verify that the chapters meet the requirements."""
     check_prompt = (
         "Please review the following chapter titles and check if they meet all of the requirements by cross-checking with the transcript:\n\n"
