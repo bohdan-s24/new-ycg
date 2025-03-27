@@ -547,7 +547,7 @@ def validate_chapters_prompt(chapters):
     """Create a prompt that asks the model to verify that the chapters meet the requirements."""
     check_prompt = (
         "Please review the following chapter titles and check if they meet all of the requirements:\n"
-        "- Each chapter must use the exact transcript timestamp (no arbitrary timestamps).\n"
+        "- Each chapter must use the exact transcript timestamp when key moment starts (no arbitrary timestamps).\n"
         "- The first chapter must start at 00:00.\n"
         "- Chapters should be evenly distributed and cover the entire video.\n"
         "- Titles must be under 60 characters, use strong emotional, clickbait-style language, "
