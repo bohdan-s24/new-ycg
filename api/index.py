@@ -516,6 +516,8 @@ def create_chapter_prompt(video_duration_minutes):
         "   - Keep titles under 60 characters.\n"
         "   - You **MUST** use numbers if there is enumeration of some points.\n"
         "   - Use action verbs and create suspense and emotional triggers.\n"
+        "   - Use the same tone of voice and wordings as mentioned in transcript \n"
+        "   - Don't add any other text besides timestamp and chapter titles\n"
         "   - **Every title should trigger an emotional response.**\n\n"
 
         "3. **Step-by-Step Process for Maximum Impact**\n"
