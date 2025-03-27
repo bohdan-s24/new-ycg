@@ -616,7 +616,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                 continue
             
             # Step 2: Validate and refine chapters with a follow-up prompt (self-check)
-            validation_prompt = validate_chapters_prompt(initial_chapters)
+            validation_prompt = validate_chapters_prompt(initial_chapters, formatted_transcript)
             print("Validating chapters against requirements...")
             validation_response = openai_client.chat.completions.create(
                 model=model,
