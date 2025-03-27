@@ -522,35 +522,38 @@ def create_chapter_prompt(video_duration_minutes):
     if video_duration_minutes <= 10:
         system_prompt += "Create 3-5 chapters evenly distributed throughout the video."
     elif video_duration_minutes <= 20:
-        system_prompt += "Create 5-7 chapters evenly distributed throughout the video."
+        system_prompt += "Create 5-8 chapters evenly distributed throughout the video."
     elif video_duration_minutes <= 40:
-        system_prompt += "Create 7-10 chapters evenly distributed throughout the video."
+        system_prompt += "Create 7-11 chapters evenly distributed throughout the video."
     elif video_duration_minutes <= 60:
-        system_prompt += "Create 10-12 chapters evenly distributed throughout the video."
+        system_prompt += "Create 9-13 chapters evenly distributed throughout the video."
     else:
-        system_prompt += "Create 12-15 chapters evenly distributed throughout the video."
+        system_prompt += "Create 11-16 chapters evenly distributed throughout the video."
     
     return system_prompt
 
 def validate_chapters_prompt(chapters, formatted_transcript):
     """Create a prompt that asks the model to verify that the chapters meet the requirements."""
     check_prompt = (
-        "Please review the following chapter titles and check if they meet all of the requirements by cross-checking with the transcript:\n\n"
-        "- **Timestamps Accuracy:** Each chapter must start at the exact timestamp where the key moment begins, strictly following the transcript.\n"
-        "- **No Arbitrary Timestamps:** Timestamps must match the transcript's timing exactly — no arbitrary timestamps are allowed.\n"
-        "- **First Chapter Timing:** The first chapter must start at 00:00.\n"
-        "- **Even Distribution:** Chapters should be evenly distributed and cover the entire video.\n"
-        "- **Title Optimization:** Titles must be under 60 characters with no additional commentary or formatting.\n"
-        "- **Title style: title should include wording and tone of voice from transcript and use strong emotional, clickbait-style language,\n"
-        "- **Correction Requirement:** If any requirement is not met, please return an improved version of the chapter titles.\n\n"
+        "Please review the following chapter titles against the transcript and verify if they meet all requirements:\n\n"
         
-        "**Transcript for Reference:**\n"
+        "### **Verification Criteria:**\n"
+        "- **Timestamps Accuracy:** Each chapter must start at the exact timestamp where the key moment begins, following the transcript strictly.\n"
+        "- **No Arbitrary Timestamps:** Timestamps must exactly match the transcript's key moments—no manually created timestamps allowed.\n"
+        "- **First Chapter Timing:** The first chapter must always start at 00:00.\n"
+        "- **Natural Intervals:** Chapters should follow a logical flow with timestamps spaced naturally (typically 1-9 minutes apart).\n"
+        "- **Title Length & Format:** Titles must be under 60 characters, strictly formatted as 'MM:SS - Chapter Title' with no extra text or explanations.\n"
+        "- **Title Style:** Titles must reflect the transcript’s wording and tone while using strong, emotional, clickbait-style language.\n"
+        "- **Preserve Original Meaning:** If corrections are needed, keep the original intent while improving clarity, engagement, and adherence to the rules.\n"
+        "- **Correction Requirement:** If any requirement is not met, return an improved version. If all chapters meet the criteria, return them unchanged.\n\n"
+        
+        "### **Transcript for Reference:**\n"
         f"{formatted_transcript}\n\n"
         
-        "**Chapters to Review:**\n"
+        "### **Chapters to Review:**\n"
         f"{chapters}\n\n"
         
-        "Return only the corrected chapter titles in the required format."
+        "Return only the corrected chapter titles in the required format, with no explanations or additional comments."
     )
     return check_prompt
 
@@ -613,7 +616,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": validation_prompt}
                 ],
-                temperature=0.5,
+                temperature=0.9,
                 max_tokens=1500
             )
             
