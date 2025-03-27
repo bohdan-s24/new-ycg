@@ -543,18 +543,24 @@ def create_chapter_prompt(video_duration_minutes):
     
     return system_prompt
 
-def validate_chapters_prompt(chapters):
+def validate_chapters_prompt(chapters, transcript):
     """Create a prompt that asks the model to verify that the chapters meet the requirements."""
     check_prompt = (
-        "Please review the following chapter titles and check if they meet all of the requirements:\n"
-        "- Each chapter must use the exact transcript timestamp when key moment starts (no arbitrary timestamps).\n"
-        "- The first chapter must start at 00:00.\n"
-        "- Chapters should be evenly distributed and cover the entire video.\n"
-        "- Titles must be under 60 characters, use strong emotional, clickbait-style language, "
+        "Please review the following chapter titles and check if they meet all of the requirements by cross-checking with the transcript:\n\n"
+        "- **Timestamps Accuracy:** Each chapter must start at the exact timestamp where the key moment begins, strictly following the transcript.\n"
+        "- **No Arbitrary Timestamps:** Timestamps must match the transcript's timing exactly — no arbitrary timestamps are allowed.\n"
+        "- **First Chapter Timing:** The first chapter must start at 00:00.\n"
+        "- **Even Distribution:** Chapters should be evenly distributed and cover the entire video.\n"
+        "- **Title Optimization:** Titles must be under 60 characters, use strong emotional, clickbait-style language, "
         "and be SEO-optimized with high-search-volume keywords.\n"
-        "- If any requirement is not met, please return an improved version of the chapter titles.\n\n"
-        "Chapters to review:\n"
+        "- **Correction Requirement:** If any requirement is not met, please return an improved version of the chapter titles.\n\n"
+        
+        "**Transcript for Reference:**\n"
+        f"{transcript}\n\n"
+        
+        "**Chapters to Review:**\n"
         f"{chapters}\n\n"
+        
         "Return only the corrected chapter titles in the required format."
     )
     return check_prompt
