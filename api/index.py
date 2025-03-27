@@ -556,7 +556,7 @@ def validate_chapters_prompt(chapters, transcript):
         "- **Correction Requirement:** If any requirement is not met, please return an improved version of the chapter titles.\n\n"
         
         "**Transcript for Reference:**\n"
-        f"{transcript}\n\n"
+        f"{formatted_transcript}\n\n"
         
         "**Chapters to Review:**\n"
         f"{chapters}\n\n"
