@@ -37,7 +37,7 @@ class Config:
 
     
     # Token limits - using large context windows
-    max_tokens = {
+    MAX_TOKENS = {
         "gpt-4o": 120000,  # Conservative limit for GPT-4o (128k context)
         "gpt-4o-mini": 120000  # Conservative limit for GPT-4o-mini (128k context)
     }
