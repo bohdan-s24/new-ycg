@@ -32,13 +32,13 @@ class Config:
     WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
     
     # API configurations
-    OPENAI_MODELS = ["o3-mini-2025-01-31", "gpt-4o-mini"]
+    OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
 
     
     # Token limits - using large context windows
-    max_completion_tokens = {
-        "o3-mini-2025-01-31": 120000,  # Conservative limit for GPT-4o (128k context)
+    max_tokens = {
+        "gpt-4o": 120000,  # Conservative limit for GPT-4o (128k context)
         "gpt-4o-mini": 120000  # Conservative limit for GPT-4o-mini (128k context)
     }
     
@@ -490,7 +490,7 @@ def format_transcript(transcript_list):
     return format_transcript_for_model(transcript_list)
 
 def create_chapter_prompt(video_duration_minutes):
-    """Create an advanced SEO-optimized prompt for OpenAI based on video duration"""
+    """Create an advanced SEO-optimized prompt for OpenAI based on video duration."""
     system_prompt = (
         "You are an expert in content optimization for YouTube and copywriting, skilled in crafting **ultra-valuable, highly engaging, emotionally compelling, and SEO-optimized** chapter titles. "
         "Your goal is to create strategic chapters that maximize watch time and discoverability. Think like a **top-tier content strategist** who understands what makes viewers stay longer, click, and engage. "
@@ -498,30 +498,31 @@ def create_chapter_prompt(video_duration_minutes):
 
         "### 🔹 **Key Optimization Guidelines:**\n"
         "1. **Identify Key Moments**\n"
-        "   - Detect major topic transitions, game-changing insights, and \"aha\" moments\n"
-        "   - Prioritize parts where viewers learn something surprising or get high-value takeaways\n"
-        "   - Provide timestamps according to transcript timing\n"
-        "   - You **MUST** use timestamps **EXACTLY** as they appear in the transcript\n"
-        "   - The first timestamp **MUST** always be 00:00\n"
-        "   - Chapter intervals should be **natural**, ideally 1-9 minutes apart\n"
+        "   - Detect major topic transitions, game-changing insights, and \"aha\" moments.\n"
+        "   - Prioritize parts where viewers learn something surprising or get high-value takeaways.\n"
+        "   - Provide timestamps according to transcript timing.\n"
+        "   - You **MUST** use timestamps **EXACTLY** as they appear in the transcript.\n"
+        "   - The first timestamp **MUST** always be 00:00.\n"
+        "   - Chapter intervals should be **natural**, ideally 1-9 minutes apart.\n"
         "   - You **CANNOT** create arbitrary timestamps.\n"
-        "   - You **MUST** use the transcript timestamps that match key moments\n\n"
+        "   - You **MUST** use the transcript timestamps that match key moments.\n\n"
 
         "2. **Craft Viral Chapter Titles with Deep Meaning**\n"
-        "   - Think logically and critically to provide deep meaning\n"
-        "   - Provide value to viewers by giving smart, simple but non-obvious tips or ideas\n"
-        "   - Titles should evoke curiosity, excitement, or urgency\n"
-        "   - You **MUST** Use powerful, emotional, or intriguing wording\n"
-        "   - SEO-optimized: Include high-search-volume keywords\n"
-        "   - Keep titles under 60 characters\n"
-        "   - You **MUST** use numbers if there is enumeration of some points\n"
-        "   - Use action verbs & create suspense and emotional triggers\n"
-        "   - **Every title should trigger an emotional response.** Make the viewer feel shocked, inspired, or eager to learn more.\n\n"
+        "   - Think logically and critically to provide deep meaning.\n"
+        "   - Provide value to viewers by giving smart, simple but non-obvious tips or ideas.\n"
+        "   - Titles should evoke curiosity, excitement, or urgency.\n"
+        "   - You **MUST** use powerful, emotional, or intriguing wording.\n"
+        "   - SEO-optimized: Include high-search-volume keywords.\n"
+        "   - Keep titles under 60 characters.\n"
+        "   - You **MUST** use numbers if there is enumeration of some points.\n"
+        "   - Use action verbs and create suspense and emotional triggers.\n"
+        "   - **Every title should trigger an emotional response.**\n\n"
 
         "3. **Step-by-Step Process for Maximum Impact**\n"
         "   - **Step 1:** Scan the transcript & detect key moments.\n"
-        "   - **Step 2:** Summarize the content **starting at this timestamp**.\n"
-        "   - **Step 3:** Transform it into a viral, clickbait title by using curiosity, emotions, or strong verbs.\n\n"
+        "   - **Step 2:** Summarize the content\n"
+        "   - **Step 3:** Transform it into a viral, clickbait title by using curiosity, emotions, or strong verbs.\n"
+        "   - **Step 4:** Add timestampt when the key moment begins.\n\n"
 
         "### 📝 **Output Format:**\n"
         "MM:SS - Catchy, Clickbait-Style Chapter Title\n"
@@ -542,8 +543,24 @@ def create_chapter_prompt(video_duration_minutes):
     
     return system_prompt
 
+def validate_chapters_prompt(chapters):
+    """Create a prompt that asks the model to verify that the chapters meet the requirements."""
+    check_prompt = (
+        "Please review the following chapter titles and check if they meet all of the requirements:\n"
+        "- Each chapter must use the exact transcript timestamp (no arbitrary timestamps).\n"
+        "- The first chapter must start at 00:00.\n"
+        "- Chapters should be evenly distributed and cover the entire video.\n"
+        "- Titles must be under 60 characters, use strong emotional, clickbait-style language, "
+        "and be SEO-optimized with high-search-volume keywords.\n"
+        "- If any requirement is not met, please return an improved version of the chapter titles.\n\n"
+        "Chapters to review:\n"
+        f"{chapters}\n\n"
+        "Return only the corrected chapter titles in the required format."
+    )
+    return check_prompt
+
 def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript):
-    """Generate chapters using OpenAI with comprehensive error handling and logging"""
+    """Generate chapters using OpenAI with a multi-step prompt chain including validation."""
     if not openai_client:
         print("ERROR: OpenAI client not configured")
         return None
@@ -551,30 +568,27 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
     print(f"Generating chapters for video: {video_id}")
     print(f"Transcript length: {len(formatted_transcript)} characters")
     
+    # Prepare the initial user content prompt
+    user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
+    
+    # Validate prompt length (using your estimate_tokens function)
+    system_prompt_tokens = estimate_tokens(system_prompt)
+    user_content_tokens = estimate_tokens(user_content)
+    total_tokens = system_prompt_tokens + user_content_tokens
+    
+    print(f"Token estimation - System Prompt: {system_prompt_tokens}, User Content: {user_content_tokens}, Total: {total_tokens}")
+    
+    max_tokens = Config.MAX_TOKENS.get(Config.OPENAI_MODELS[0], 120000)
+    if total_tokens > max_tokens:
+        print(f"WARNING: Token count {total_tokens} exceeds max tokens {max_tokens}. Truncating transcript...")
+        truncated_transcript = formatted_transcript[:max_tokens * 4]
+        user_content = f"Generate chapters for this video transcript:\n\n{truncated_transcript}"
+    
+    # Step 1: Generate initial chapters
     for model in Config.OPENAI_MODELS:
         try:
             print(f"Attempting to generate chapters with {model}...")
             
-            # Prepare message for the API
-            user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
-            
-            # Validate prompt length
-            system_prompt_tokens = estimate_tokens(system_prompt)
-            user_content_tokens = estimate_tokens(user_content)
-            total_tokens = system_prompt_tokens + user_content_tokens
-            
-            print(f"Token estimation - System Prompt: {system_prompt_tokens}, User Content: {user_content_tokens}, Total: {total_tokens}")
-            
-            # Check against model's max token limit
-            max_tokens = Config.MAX_TOKENS.get(model, 120000)
-            if total_tokens > max_tokens:
-                print(f"WARNING: Token count {total_tokens} exceeds max tokens {max_tokens} for {model}")
-                # Truncate the transcript
-                truncated_transcript = formatted_transcript[:max_tokens * 4]
-                user_content = f"Generate chapters for this video transcript:\n\n{truncated_transcript}"
-                print("Truncated transcript to fit token limit")
-            
-            # Send request to OpenAI
             response = openai_client.chat.completions.create(
                 model=model,
                 messages=[
@@ -582,31 +596,38 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "user", "content": user_content}
                 ],
                 temperature=0.9,
-                max_tokens=2000  # Increased max_tokens for more detailed chapters
+                max_tokens=2000  # Increased tokens for detailed output
             )
             
-            # Log response details
-            print("--- OpenAI API Response Details ---")
-            print(f"Model Used: {response.model}")
-            print(f"Tokens Used: {response.usage.total_tokens}")
-            print(f"Finish Reason: {response.choices[0].finish_reason}")
+            initial_chapters = response.choices[0].message.content.strip()
+            print("--- Initial Chapters ---")
+            print(initial_chapters)
             
-            # Extract chapters
-            chapters = response.choices[0].message.content.strip()
-            
-            # Validate chapters
-            chapter_lines = chapters.split('\n')
-            print(f"Generated {len(chapter_lines)} chapters")
-            
-            # Additional validation of chapters
-            if not chapters or len(chapter_lines) < 3:
+            # Basic validation: Ensure we have a reasonable number of chapter lines
+            chapter_lines = initial_chapters.split('\n')
+            if not initial_chapters or len(chapter_lines) < 3:
                 print("WARNING: Generated chapters seem too short or empty")
                 continue
             
-            print("Chapters:")
-            print(chapters)
+            # Step 2: Validate and refine chapters with a follow-up prompt (self-check)
+            validation_prompt = validate_chapters_prompt(initial_chapters)
+            print("Validating chapters against requirements...")
+            validation_response = openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": validation_prompt}
+                ],
+                temperature=0.5,
+                max_tokens=1500
+            )
             
-            return chapters
+            final_chapters = validation_response.choices[0].message.content.strip()
+            print("--- Final Corrected Chapters ---")
+            print(final_chapters)
+            
+            # Return the final validated chapters
+            return final_chapters
         
         except Exception as e:
             print(f"Error generating chapters with {model}: {type(e).__name__}")
@@ -615,9 +636,9 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
             traceback.print_exc()
             continue
     
-    # All models failed
     print("All OpenAI models failed to generate chapters")
     return None
+    
 # Backup function to fetch transcript using requests directly
 def fetch_transcript_with_requests(video_id, proxy_dict=None, timeout=10):
     """Fetch YouTube transcript using requests library with proxy support"""
