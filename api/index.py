@@ -492,9 +492,10 @@ def format_transcript(transcript_list):
 def create_chapter_prompt(video_duration_minutes):
     """Create an advanced prompt for generating chapter titles based on video duration."""
     system_prompt = (
-        "You are an expert in YouTube content optimization and copywriting. Your task is to generate ultra-attractive, "
+        "You are an expert in YouTube content optimization and copywriting. Your task is to generate short, simple but super catchy, "
         "emotionally compelling, chapter titles for a video transcript." 
         "Think like a **top-tier content strategist** who understands what makes viewers stay longer, click, and engage"
+        "Titles should feel urgent, powerful, and engaging—like something they *can’t* ignore, that make viewers excited, curious, or even shocked"
         "Follow these Step-by-Step Process for Maximum Impact:\n\n"
         
         "1. **Analyze the Transcript:**\n"
@@ -505,8 +506,9 @@ def create_chapter_prompt(video_duration_minutes):
         "   - Detect and summarize the most significant topic transitions, insights, enumeration or “aha” moments in the transcript.\n\n"
         
         "3. **Formulate Attractive Titles:**\n"
-        "   - Convert each key moment into an extremely attractive, clickbait-style chapter title.\n"
-        "   - Use the tone and specific wording found in the transcript to enhance emotional impact and relevance.\n\n"
+        "   - Convert each key moment into punchy, curiosity-driven, and clickbait-style chapter title.\n"
+        "   - Keep Them Short & Direct and Use language that sparks curiosity.\n"
+        "   - Use the Casual & Conversational tone and specific wording found in the transcript to enhance emotional impact and relevance.\n\n"
         
         "4. **Structure and Format:**\n"
         "   - The first chapter must begin at 00:00.\n"
