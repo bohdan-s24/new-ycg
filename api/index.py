@@ -508,7 +508,7 @@ def create_chapter_prompt(video_duration_minutes):
         "5. Use the exact format 'MM:SS - Chapter Title' or 'HH:MM:SS - Chapter Title' for videos over 1 hour.\n"
         "6. Keep titles short, punchy, and under 60 characters.\n"
         "7. Do not add any commentary, explanations, or additional text.\n"
-        "8. Chapters should follow a logical flow with timestamps spaced naturally (typically 1-9 minutes apart).\n\n"
+        "8. Chapters must follow a logical flow with timestamps spaced naturally (typically 1-9 minutes apart).\n\n"
         
         "Follow these Step-by-Step Process for Maximum Impact:\n\n"
         
@@ -525,13 +525,10 @@ def create_chapter_prompt(video_duration_minutes):
         "   - Use the Casual & Conversational tone and specific wording found in the transcript to enhance emotional impact and relevance.\n\n"
         
         "4. **Structure and Format:**\n"
-        "   - The first chapter must begin at 00:00.\n"
-        "   - Use the exact timestamps from the transcript when each key moment.\n"
-        "   - Each chapter must start at the exact timestamp where the key moment begins. \n"
-        "   - Ensure chapters are evenly distributed with natural intervals (ideally 1-9 minutes apart).\n"
-        "   - Use numbers where applicable, for example enumaration (of steps, ideas, etc.), sugnificant fact etc.\n"
-        "   - **Output strictly in the format 'MM:SS - Chapter Title' for each line, with no additional commentary or formatting.**\n"
-        "   - Use HH:MM:SS if video is longer than 1 hour)\n\n"
+        "   - Use the exact timestamps from the transcript of each key moment.\n"
+        "   - Each chapter must start at the exact timestamp from the transcript where the key moment begins. \n"
+        "   - Ensure chapters are evenly distributed with natural intervals.\n"
+        "   - Use numbers where applicable, for example enumaration (of steps, ideas, etc.), sugnificant fact etc.\n\n"
     )
 
     # Adjust number of chapters and guidance based on video length
