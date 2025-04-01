@@ -534,33 +534,84 @@ def create_chapter_prompt(video_duration_minutes):
     
     return system_prompt
 
-def validate_chapters_prompt(chapters, formatted_transcript):
-    """Create a prompt that asks the model to verify that the chapters meet the requirements."""
-    check_prompt = (
-        "Please review the following chapter titles against the transcript and verify if they meet all requirements:\n\n"
+def create_chapter_prompt(video_duration_minutes):
+    """Create an enhanced prompt for generating chapter titles based on video duration."""
+    # Format the duration information in a more prominent way
+    duration_info = f"The video is {int(video_duration_minutes)} minutes long. YOUR CHAPTERS MUST COVER THE ENTIRE VIDEO LENGTH FROM 00:00 TO APPROXIMATELY {int(video_duration_minutes)}:00."
+    
+    system_prompt = (
+        f"You are an expert in YouTube content optimization and copywriting. {duration_info}\n\n"
+        "Your task is to generate short, simple but super catchy, emotionally compelling chapter titles for a video transcript. " 
+        "Think like a **top-tier content strategist** who understands what makes viewers stay longer, click, and engage. "
+        "Create titles that feel urgent, powerful, and engaging—like something viewers can't ignore.\n\n"
         
-        "### **Verification Criteria:**\n"
-        "- **Timestamps Accuracy:** Each chapter must start at the exact timestamp where the key moment begins, following the transcript strictly.\n"
-        "- **No Arbitrary Timestamps:** Timestamps must exactly match the transcript's key moments—no manually created timestamps allowed.\n"
-        "- **First Chapter Timing:** The first chapter must always start at 00:00.\n"
-        "- **Natural Intervals:** Chapters should follow a logical flow with timestamps spaced naturally (typically 1-9 minutes apart).\n"
-        "- **Title Length & Format:** Titles must be under 60 characters, strictly formatted as 'MM:SS - Chapter Title' with no extra text or explanations.\n"
-        "- **Title Style:** Titles must reflect the transcript’s wording and tone while using strong, emotional, clickbait-style language.\n"
-        "- **Preserve Original Meaning:** If corrections are needed, keep the original intent while improving clarity, engagement, and adherence to the rules.\n"
-        "- **Correction Requirement:** If any requirement is not met, return an improved version. If all chapters meet the criteria, return them unchanged.\n\n"
+        "**CRITICALLY IMPORTANT RULES:**\n"
+        f"1. CHAPTERS MUST SPAN THE ENTIRE VIDEO FROM 00:00 TO APPROXIMATELY {int(video_duration_minutes)}:00.\n"
+        "2. The first chapter MUST begin at 00:00 exactly.\n"
+        "3. DO NOT use arbitrary timestamps or simple one-minute intervals.\n"
+        "4. Use timestamps that reflect meaningful content transitions in the transcript.\n"
+        "5. Use the exact format 'MM:SS - Chapter Title' or 'HH:MM:SS - Chapter Title' for videos over 1 hour.\n"
+        "6. Keep titles short, punchy, and under 60 characters.\n"
+        "7. Do not add any commentary, explanations, or additional text.\n"
+        "8. Chapters should follow a logical flow with timestamps spaced naturally (typically 1-9 minutes apart).\n\n"
+        "Follow these Step-by-Step Process for Maximum Impact:\n\n"
         
-        "### **Transcript for Reference:**\n"
-        f"{formatted_transcript}\n\n"
+        "1. **Analyze the Transcript:**\n"
+        "   - Read the entire transcript to understand the overall narrative and tone of voice.\n"
+        "   - Identify any recurring phrases or specific wording that can be reused in the chapter titles.\n\n"
         
-        "### **Chapters to Review:**\n"
-        f"{chapters}\n\n"
+        "2. **Identify Key Moments:**\n"
+        "   - Detect and summarize the most significant topic transitions, insights, enumeration or “aha” moments  throughout the ENTIRE transcript.\n\n"
         
-        "Return only the corrected chapter titles in the required format, with no explanations or additional comments."
+        "3. **Formulate Attractive Titles:**\n"
+        "   - Convert each key moment into punchy and clickbait-style chapter title.\n"
+        "   - Focus on emotional triggers: curiosity, surprise, excitement, or controversy.\n"
+        "   - Use the Casual & Conversational tone and specific wording found in the transcript to enhance emotional impact and relevance.\n\n"
+        
+        "4. **Structure and Format:**\n"
+        "   - The first chapter must begin at 00:00.\n"
+        "   - Use the exact timestamps from the transcript for each key moment.\n"
+        "   - Each chapter must start at the exact timestamp where the key moment begins. \n"
+        "   - Ensure chapters are evenly distributed with natural intervals (ideally 1-9 minutes apart).\n"
+        "   - Use numbers where applicable, for example enumaration (of steps, ideas, etc.), sugnificant fact etc.\n"
+        "   - **Output strictly in the format 'MM:SS - Chapter Title' for each line, with no additional commentary or formatting.**\n"
+        "   - Use HH:MM:SS if video is longer than 1 hour)\n\n"
     )
-    return check_prompt
+
+    # Adjust number of chapters and guidance based on video length
+    if video_duration_minutes <= 10:
+        system_prompt += f"Create 3-5 chapters evenly distributed across all {int(video_duration_minutes)} minutes."
+    elif video_duration_minutes <= 20:
+        system_prompt += f"Create 5-8 chapters evenly distributed across all {int(video_duration_minutes)} minutes."
+    elif video_duration_minutes <= 40:
+        system_prompt += f"Create 7-11 chapters evenly distributed across all {int(video_duration_minutes)} minutes."
+    elif video_duration_minutes <= 60:
+        system_prompt += f"Create 8-12 chapters evenly distributed across all {int(video_duration_minutes)} minutes."
+    else:
+        # For longer videos, be very explicit about distribution
+        hours, minutes = divmod(int(video_duration_minutes), 60)
+        formatted_duration = f"{hours}:{minutes:02d}:00"
+        system_prompt += (
+            f"Create 10-16 chapters strategically distributed across the entire {hours}+ hour video.\n"
+            f"- First quarter (00:00 to {hours//4}:{minutes//4:02d}): 3-4 chapters\n"
+            f"- Second quarter: 2-3 chapters\n"
+            f"- Third quarter: 2-4 chapters\n"
+            f"- Final quarter (up to {formatted_duration}): 3-4 chapters\n"
+            f"Use HH:MM:SS format for all timestamps over 1 hour."
+        )
+    
+    # Final reminders
+    system_prompt += (
+        "\n\nREMEMBER: Your ONLY output should be the chapter titles with timestamps, each on a new line. "
+        "Format: 'MM:SS - Chapter Title' or 'HH:MM:SS - Chapter Title' for videos over 1 hour. "
+        "The first timestamp MUST be 00:00. Do not add any other text. "
+        f"CRITICALLY IMPORTANT: Chapters MUST cover the ENTIRE {int(video_duration_minutes)} minute video, not just the beginning."
+    )
+    
+    return system_prompt
 
 def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript):
-    """Generate chapters using OpenAI with a multi-step prompt chain including validation."""
+    """Generate chapters using OpenAI with a simplified, more reliable approach."""
     if not openai_client:
         print("ERROR: OpenAI client not configured")
         return None
@@ -571,7 +622,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
     # Prepare the initial user content prompt
     user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
     
-    # Validate prompt length (using your estimate_tokens function)
+    # Validate prompt length
     system_prompt_tokens = estimate_tokens(system_prompt)
     user_content_tokens = estimate_tokens(user_content)
     total_tokens = system_prompt_tokens + user_content_tokens
@@ -584,11 +635,12 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         truncated_transcript = formatted_transcript[:max_tokens * 4]
         user_content = f"Generate chapters for this video transcript:\n\n{truncated_transcript}"
     
-    # Step 1: Generate initial chapters
+    # Generate chapters with stronger initial prompt
     for model in Config.OPENAI_MODELS:
         try:
             print(f"Attempting to generate chapters with {model}...")
             
+            # Use slightly higher temperature for more creative titles
             response = openai_client.chat.completions.create(
                 model=model,
                 messages=[
@@ -596,39 +648,27 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "user", "content": user_content}
                 ],
                 temperature=0.9,
-                max_tokens=2000  # Increased tokens for detailed output
+                max_tokens=2000
             )
             
-            initial_chapters = response.choices[0].message.content.strip()
-            print("--- Initial Chapters ---")
-            print(initial_chapters)
+            chapters = response.choices[0].message.content.strip()
+            print("--- Generated Chapters ---")
+            print(chapters)
             
             # Basic validation: Ensure we have a reasonable number of chapter lines
-            chapter_lines = initial_chapters.split('\n')
-            if not initial_chapters or len(chapter_lines) < 3:
-                print("WARNING: Generated chapters seem too short or empty")
+            chapter_lines = chapters.split('\n')
+            if not chapters or len(chapter_lines) < 3:
+                print(f"WARNING: Generated chapters seem too short ({len(chapter_lines)} lines) or empty")
                 continue
+                
+            # Check first chapter starts at 00:00
+            if not chapter_lines[0].startswith("00:00"):
+                print("WARNING: First chapter doesn't start at 00:00, trying another model")
+                continue
+                
+            # All checks passed, return the chapters
+            return chapters
             
-            # Step 2: Validate and refine chapters with a follow-up prompt (self-check)
-            validation_prompt = validate_chapters_prompt(initial_chapters, formatted_transcript)
-            print("Validating chapters against requirements...")
-            validation_response = openai_client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": validation_prompt}
-                ],
-                temperature=0.9,
-                max_tokens=1500
-            )
-            
-            final_chapters = validation_response.choices[0].message.content.strip()
-            print("--- Final Corrected Chapters ---")
-            print(final_chapters)
-            
-            # Return the final validated chapters
-            return final_chapters
-        
         except Exception as e:
             print(f"Error generating chapters with {model}: {type(e).__name__}")
             print(f"Error details: {str(e)}")
