@@ -611,13 +611,36 @@ def create_chapter_prompt(video_duration_minutes):
     return system_prompt
 
 def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript):
-    """Generate chapters using OpenAI with a simplified, more reliable approach."""
+    """Generate chapters using OpenAI with better timestamp distribution."""
     if not openai_client:
         print("ERROR: OpenAI client not configured")
         return None
     
     print(f"Generating chapters for video: {video_id}")
     print(f"Transcript length: {len(formatted_transcript)} characters")
+    
+    # Extract video duration from the last transcript entry
+    transcript_lines = formatted_transcript.split('\n')
+    video_duration_minutes = None
+    
+    if transcript_lines:
+        try:
+            last_timestamp_str = transcript_lines[-1].split(':', 1)[0]
+            # Handle HH:MM:SS or MM:SS formats
+            if last_timestamp_str.count(':') == 2:  # HH:MM:SS
+                h, m, s = map(int, last_timestamp_str.split(':'))
+                last_timestamp_seconds = h * 3600 + m * 60 + s
+            else:  # MM:SS
+                m, s = map(int, last_timestamp_str.split(':'))
+                last_timestamp_seconds = m * 60 + s
+            
+            video_duration_minutes = last_timestamp_seconds / 60
+            print(f"Estimated video duration from transcript: {video_duration_minutes:.2f} minutes")
+            
+            # Update system prompt with the actual video duration
+            system_prompt = create_chapter_prompt(video_duration_minutes)
+        except Exception as e:
+            print(f"Could not extract duration from transcript: {e}")
     
     # Prepare the initial user content prompt
     user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
@@ -635,17 +658,26 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         truncated_transcript = formatted_transcript[:max_tokens * 4]
         user_content = f"Generate chapters for this video transcript:\n\n{truncated_transcript}"
     
-    # Generate chapters with stronger initial prompt
+    # Try generating with each model
     for model in Config.OPENAI_MODELS:
         try:
             print(f"Attempting to generate chapters with {model}...")
             
-            # Use slightly higher temperature for more creative titles
+            # Add explicit reminder about timestamp distribution to user content
+            if video_duration_minutes:
+                enhanced_user_content = (
+                    f"This video is {int(video_duration_minutes)} minutes long. "
+                    f"IMPORTANT: Distribute timestamps EVENLY across ALL {int(video_duration_minutes)} minutes, not just the beginning.\n\n" + 
+                    user_content
+                )
+            else:
+                enhanced_user_content = user_content
+                
             response = openai_client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content}
+                    {"role": "user", "content": enhanced_user_content}
                 ],
                 temperature=0.9,
                 max_tokens=2000
@@ -665,8 +697,8 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
             if not chapter_lines[0].startswith("00:00"):
                 print("WARNING: First chapter doesn't start at 00:00, trying another model")
                 continue
-                
-            # All checks passed, return the chapters
+            
+            # All basic checks passed
             return chapters
             
         except Exception as e:
