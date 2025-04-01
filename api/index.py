@@ -490,51 +490,6 @@ def format_transcript(transcript_list):
     return format_transcript_for_model(transcript_list)
 
 def create_chapter_prompt(video_duration_minutes):
-    """Create an advanced prompt for generating chapter titles based on video duration."""
-    system_prompt = (
-        "You are an expert in YouTube content optimization and copywriting. Your task is to generate short, simple but super catchy, "
-        "emotionally compelling, chapter titles for a video transcript." 
-        "Think like a **top-tier content strategist** who understands what makes viewers stay longer, click, and engage"
-        "Titles should feel urgent, powerful, and engaging—like something they *can’t* ignore, that make viewers excited, curious, or even shocked"
-        "Follow these Step-by-Step Process for Maximum Impact:\n\n"
-        
-        "1. **Analyze the Transcript:**\n"
-        "   - Read the entire transcript to understand the overall narrative and tone of voice.\n"
-        "   - Identify any recurring phrases or specific wording that can be reused in the chapter titles.\n\n"
-        
-        "2. **Identify Key Moments:**\n"
-        "   - Detect and summarize the most significant topic transitions, insights, enumeration or “aha” moments in the transcript.\n\n"
-        
-        "3. **Formulate Attractive Titles:**\n"
-        "   - Convert each key moment into punchy, curiosity-driven, and clickbait-style chapter title.\n"
-        "   - Keep Them Short & Direct and Use language that sparks curiosity.\n"
-        "   - Use the Casual & Conversational tone and specific wording found in the transcript to enhance emotional impact and relevance.\n\n"
-        
-        "4. **Structure and Format:**\n"
-        "   - The first chapter must begin at 00:00.\n"
-        "   - Use the exact timestamps from the transcript for each key moment.\n"
-        "   - Each chapter must start at the exact timestamp where the key moment begins. \n"
-        "   - Ensure chapters are evenly distributed with natural intervals (ideally 1-9 minutes apart).\n"
-        "   - Use numbers where applicable, for example enumaration, sugnificant fact etc.\n"
-        "   - **Output strictly in the format 'MM:SS - Chapter Title' for each line, with no additional commentary or formatting.**\n"
-        "   - Use HH:MM:SS if video is longer than 1 hour)\n\n"
-    )
-
-    # Adjust number of chapters based on video length
-    if video_duration_minutes <= 10:
-        system_prompt += "Create 3-5 chapters evenly distributed throughout the video."
-    elif video_duration_minutes <= 20:
-        system_prompt += "Create 5-8 chapters evenly distributed throughout the video."
-    elif video_duration_minutes <= 40:
-        system_prompt += "Create 7-11 chapters evenly distributed throughout the video."
-    elif video_duration_minutes <= 60:
-        system_prompt += "Create 9-13 chapters evenly distributed throughout the video."
-    else:
-        system_prompt += "Create 11-16 chapters evenly distributed throughout the video."
-    
-    return system_prompt
-
-def create_chapter_prompt(video_duration_minutes):
     """Create an enhanced prompt for generating chapter titles based on video duration."""
     # Format the duration information in a more prominent way
     duration_info = f"The video is {int(video_duration_minutes)} minutes long. YOUR CHAPTERS MUST COVER THE ENTIRE VIDEO LENGTH FROM 00:00 TO APPROXIMATELY {int(video_duration_minutes)}:00."
@@ -554,6 +509,7 @@ def create_chapter_prompt(video_duration_minutes):
         "6. Keep titles short, punchy, and under 60 characters.\n"
         "7. Do not add any commentary, explanations, or additional text.\n"
         "8. Chapters should follow a logical flow with timestamps spaced naturally (typically 1-9 minutes apart).\n\n"
+        
         "Follow these Step-by-Step Process for Maximum Impact:\n\n"
         
         "1. **Analyze the Transcript:**\n"
@@ -570,7 +526,7 @@ def create_chapter_prompt(video_duration_minutes):
         
         "4. **Structure and Format:**\n"
         "   - The first chapter must begin at 00:00.\n"
-        "   - Use the exact timestamps from the transcript for each key moment.\n"
+        "   - Use the exact timestamps from the transcript when each key moment.\n"
         "   - Each chapter must start at the exact timestamp where the key moment begins. \n"
         "   - Ensure chapters are evenly distributed with natural intervals (ideally 1-9 minutes apart).\n"
         "   - Use numbers where applicable, for example enumaration (of steps, ideas, etc.), sugnificant fact etc.\n"
