@@ -491,74 +491,68 @@ def format_transcript(transcript_list):
 
 def create_chapter_prompt(video_duration_minutes):
     """Create an enhanced prompt for generating chapter titles based on video duration."""
-    # Format the duration information in a more prominent way
-    duration_info = f"The video is {int(video_duration_minutes)} minutes long. YOUR CHAPTERS MUST COVER THE ENTIRE VIDEO LENGTH FROM 00:00 TO APPROXIMATELY {int(video_duration_minutes)}:00."
     
-    system_prompt = (
-        f"You are an expert in YouTube content optimization and copywriting. {duration_info}\n\n"
-        "Your task is to generate short, simple but super catchy, emotionally compelling chapter titles for a video transcript. " 
-        "Think like a **top-tier content strategist** who understands what makes viewers stay longer, click, and engage. "
-        "Create titles that feel urgent, powerful, and engaging—like something viewers can't ignore.\n\n"
-        
-        "**CRITICALLY IMPORTANT RULES:**\n"
-        f"1. CHAPTERS MUST SPAN THE ENTIRE VIDEO FROM 00:00 TO APPROXIMATELY {int(video_duration_minutes)}:00.\n"
-        "2. The first chapter MUST begin at 00:00 exactly.\n"
-        "3. DO NOT use arbitrary timestamps or simple one-minute intervals.\n"
-        "4. Use timestamps that reflect meaningful content transitions in the transcript.\n"
-        "5. Use the exact format 'MM:SS - Chapter Title' or 'HH:MM:SS - Chapter Title' for videos over 1 hour.\n"
-        "6. Keep titles short, punchy, and under 60 characters.\n"
-        "7. Do not add any commentary, explanations, or additional text.\n"
-        "8. Chapters must follow a logical flow with timestamps spaced naturally (typically 1-9 minutes apart).\n\n"
-        
-        "Follow these Step-by-Step Process for Maximum Impact:\n\n"
-        
-        "1. **Analyze the Transcript:**\n"
-        "   - Read the entire transcript to understand the overall narrative and tone of voice.\n"
-        "   - Identify any recurring phrases or specific wording that can be reused in the chapter titles.\n\n"
-        
-        "2. **Identify Key Moments:**\n"
-        "   - Detect and summarize the most significant topic transitions, insights, enumeration or “aha” moments  throughout the ENTIRE transcript.\n\n"
-        
-        "3. **Formulate Attractive Titles:**\n"
-        "   - Convert each key moment into punchy and clickbait-style chapter title.\n"
-        "   - Focus on emotional triggers: curiosity, surprise, excitement, or controversy.\n"
-        "   - Use the Casual & Conversational tone and specific wording found in the transcript to enhance emotional impact and relevance.\n\n"
-        
-        "4. **Structure and Format:**\n"
-        "   - Use the exact timestamps from the transcript of each key moment.\n"
-        "   - Each chapter must start at the exact timestamp from the transcript where the key moment begins. \n"
-        "   - Ensure chapters are evenly distributed with natural intervals.\n"
-        "   - Use numbers where applicable, for example enumaration (of steps, ideas, etc.), sugnificant fact etc.\n\n"
+    # Emphasize video duration and full coverage
+    duration_info = (
+        f"The video is {int(video_duration_minutes)} minutes long. "
+        f"Your chapters MUST span the entire video from 00:00 to approximately {int(video_duration_minutes)}:00."
     )
 
-    # Adjust number of chapters and guidance based on video length
+    system_prompt = (
+        f"You are an expert in YouTube content optimization and copywriting. {duration_info}\n\n"
+        
+        "Your task is to generate short, punchy, and emotionally compelling chapter titles that maximize watch time and engagement. "
+        "Think like a top-tier content strategist who knows how to make viewers stay longer, click, and engage. "
+        "Create titles that feel urgent, powerful, and engaging—like something viewers can't ignore.\n\n"
+        
+        "### **Critical Rules:**\n"
+        "1. **Full Video Coverage:** Chapters MUST span the entire video from 00:00 to approximately the video's end.\n"
+        "2. **Accurate Timestamps:** The first chapter MUST start at 00:00 and all timestamps must match exact key moments from the transcript. Do not use arbitrary or fixed one-minute intervals.\n"
+        "3. **Logical Flow:** Chapters should reflect meaningful content transitions and be spaced naturally (typically 1-9 minutes apart). Use numbers for enumerations or key facts when applicable.\n"
+        "4. **Title Requirements:** Each title must be under 60 characters, crafted in a casual & conversational yet clickbait-style tone, and must incorporate emotional triggers (curiosity, surprise, excitement, or controversy). No extra commentary is allowed.\n"
+        "5. **Strict Format:** Output must follow exactly 'MM:SS - Chapter Title' (or 'HH:MM:SS - Chapter Title' for videos over 1 hour) with no additional text.\n\n"
+        
+        "### **Step-by-Step Process:**\n"
+        "1. **Analyze the Transcript:**\n"
+        "   - Read the full transcript to understand the overall narrative, tone of voice, and recurring phrases that can be reused.\n\n"
+        
+        "2. **Identify Key Moments:**\n"
+        "   - Carefully analyze the full transcript to detect and summarize significant content transitions, insights, and 'aha' moments throughout the transcript.\n\n"
+        
+        "3. **Formulate Attractive Chapter Titles:**\n"
+        "   - Transform each key moment into a catchy, clickbait-style title using the transcript’s language and tone. Focus on emotional triggers.\n\n"
+        
+        "4. **Structure and Format:**\n"
+        "   - Use the exact transcript timestamps for each key moment. Ensure chapters are evenly distributed with natural intervals based on content transitions.\n"
+        "   - Strictly output in the format 'MM:SS - Chapter Title' (or 'HH:MM:SS - Chapter Title' for videos over 1 hour) with no additional commentary or formatting.\n\n"
+    )
+
+    # Adjust number of chapters based on video length
     if video_duration_minutes <= 10:
-        system_prompt += f"Create 3-5 chapters evenly distributed across all {int(video_duration_minutes)} minutes."
+        system_prompt += f"Generate 3-5 chapters evenly distributed across the {int(video_duration_minutes)} minute video."
     elif video_duration_minutes <= 20:
-        system_prompt += f"Create 5-8 chapters evenly distributed across all {int(video_duration_minutes)} minutes."
+        system_prompt += f"Generate 5-8 chapters evenly distributed across the {int(video_duration_minutes)} minute video."
     elif video_duration_minutes <= 40:
-        system_prompt += f"Create 7-11 chapters evenly distributed across all {int(video_duration_minutes)} minutes."
+        system_prompt += f"Generate 7-11 chapters evenly distributed across the {int(video_duration_minutes)} minute video."
     elif video_duration_minutes <= 60:
-        system_prompt += f"Create 8-12 chapters evenly distributed across all {int(video_duration_minutes)} minutes."
+        system_prompt += f"Generate 8-12 chapters evenly distributed across the {int(video_duration_minutes)} minute video."
     else:
-        # For longer videos, be very explicit about distribution
         hours, minutes = divmod(int(video_duration_minutes), 60)
         formatted_duration = f"{hours}:{minutes:02d}:00"
         system_prompt += (
-            f"Create 10-16 chapters strategically distributed across the entire {hours}+ hour video.\n"
-            f"- First quarter (00:00 to {hours//4}:{minutes//4:02d}): 3-4 chapters\n"
-            f"- Second quarter: 2-3 chapters\n"
-            f"- Third quarter: 2-4 chapters\n"
-            f"- Final quarter (up to {formatted_duration}): 3-4 chapters\n"
-            f"Use HH:MM:SS format for all timestamps over 1 hour."
+            f"Generate 10-16 chapters strategically distributed across the entire {hours}+ hour video:\n"
+            f"  - First quarter (00:00 to approx {hours//4}:{minutes//4:02d}): 3-4 chapters\n"
+            f"  - Second quarter: 2-3 chapters\n"
+            f"  - Third quarter: 2-4 chapters\n"
+            f"  - Final quarter (up to {formatted_duration}): 3-4 chapters\n"
+            "Use HH:MM:SS format for all timestamps over 1 hour."
         )
     
-    # Final reminders
+    # Final reminder emphasizing strict output
     system_prompt += (
         "\n\nREMEMBER: Your ONLY output should be the chapter titles with timestamps, each on a new line. "
-        "Format: 'MM:SS - Chapter Title' or 'HH:MM:SS - Chapter Title' for videos over 1 hour. "
-        "The first timestamp MUST be 00:00. Do not add any other text. "
-        f"CRITICALLY IMPORTANT: Chapters MUST cover the ENTIRE {int(video_duration_minutes)} minute video, not just the beginning."
+        "Follow the format exactly: 'MM:SS - Chapter Title' or 'HH:MM:SS - Chapter Title' (for videos over 1 hour). "
+        "Do not include any additional commentary or text."
     )
     
     return system_prompt
