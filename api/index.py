@@ -519,7 +519,8 @@ def create_chapter_prompt(video_duration_minutes):
         "5. **Title Requirements:** Each title should be aproximatly 30-50 characters, maximum limit is 80 characters, crafted in a clickbait-style tone with emotional triggers.\n"
         "6. **Chapter Length Guidance:** Typically aim for chapters of 2-6 minutes in length for optimal viewer experience, but adjust based on content. Brief intros/conclusions can be shorter, complex topics can be longer.\n"
         "7. **Balanced distribution:** Ensure the chapters are distributed evenly across the entire video duration, not just clustered at the beginning.\n"
-        f"8. **Output Format:** Strictly follow '{timestamp_format} Chapter Title' with each chapter on a new line.\n\n"
+        "8. **Exact Numeric Accuracy:** For every key moment, copy the timestamp **exactly as it appears in the transcript**. Do not alter, round, or approximate any digit.\n"
+        f"9. **Output Format:** Strictly follow '{timestamp_format} Chapter Title' with each chapter on a new line.\n\n"
         
         "### **Content Transition Indicators:**\n"
         "Pay special attention to these transition signals in the transcript:\n"
