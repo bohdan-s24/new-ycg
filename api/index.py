@@ -35,7 +35,6 @@ class Config:
     OPENAI_MODELS = ["o3-mini", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
 
-    
     # Token limits - using large context windows
     max_completion_tokens = {
         "o3-mini": 120000,  # Conservative limit for o3-mini (128k context)
@@ -645,7 +644,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "user", "content": enhanced_user_content}
                 ],
                 temperature=0.9,
-                max_completion_tokens=2000
+                max_completion_tokens=max_completion_tokens
             )
             
             chapters = response.choices[0].message.content.strip()
