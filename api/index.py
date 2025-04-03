@@ -6,10 +6,10 @@ import requests
 from flask import Flask, request, jsonify, make_response
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, VideoUnavailable, RequestBlocked, AgeRestricted, VideoUnplayable
 from youtube_transcript_api.proxies import WebshareProxyConfig
+from openai import OpenAI
 from flask_cors import CORS
 import time
 import re
-import google.generativeai as genai  # Import Google's Generative AI library
 
 # Simple in-memory cache
 CHAPTERS_CACHE = {}
@@ -27,17 +27,19 @@ print("Flask app created and CORS configured")
 # Centralized configuration management
 class Config:
     # Environment variables
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
     WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME", "")
     WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
     
     # API configurations
-    GEMINI_MODEL = "gemini-2.0-flash"
+    OPENAI_MODELS = ["o3-mini", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
+
     
-    # Token limits
-    MAX_TOKENS = {
-        "gemini-2.0-flash": 120000  # Conservative limit for Gemini 2.0 Flash
+    # Token limits - using large context windows
+    max_completion_tokens = {
+        "o3-mini": 120000,  # Conservative limit for o3-mini (128k context)
+        "gpt-4o-mini": 120000  # Conservative limit for GPT-4o-mini (128k context)
     }
     
     # Proxy configuration
@@ -67,21 +69,21 @@ class Config:
         return None
 
 # Print config information
-print(f"Environment variables loaded: GEMINI_API_KEY={'✓' if Config.GEMINI_API_KEY else '✗'}, "
+print(f"Environment variables loaded: OPENAI_API_KEY={'✓' if Config.OPENAI_API_KEY else '✗'}, "
       f"WEBSHARE_USERNAME={'✓' if Config.WEBSHARE_USERNAME else '✗'}, "
       f"WEBSHARE_PASSWORD={'✓' if Config.WEBSHARE_PASSWORD else '✗'}")
 
-# Configure Gemini client if API key is available
-gemini_client = None
-if Config.GEMINI_API_KEY:
+# Create OpenAI client if API key is available
+openai_client = None
+if Config.OPENAI_API_KEY:
     try:
-        genai.configure(api_key=Config.GEMINI_API_KEY)
-        print("Gemini client configured")
+        openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
+        print("OpenAI client configured")
     except Exception as e:
-        print(f"ERROR configuring Gemini client: {e}")
+        print(f"ERROR configuring OpenAI client: {e}")
         traceback.print_exc()
 else:
-    print("Warning: Gemini API key not found in environment variables")
+    print("Warning: OpenAI API key not found in environment variables")
 
 # Standardized error response helper
 def create_error_response(message, status_code=500, extra_data=None):
@@ -128,7 +130,7 @@ def hello():
         # Basic environment info for diagnostics
         env_info = {
             'python_version': sys.version,
-            'gemini_key_configured': bool(Config.GEMINI_API_KEY),
+            'openai_key_configured': bool(Config.OPENAI_API_KEY),
             'webshare_username_configured': bool(Config.WEBSHARE_USERNAME),
             'webshare_password_configured': bool(Config.WEBSHARE_PASSWORD)
         }
@@ -158,9 +160,9 @@ def generate_chapters():
         return response
     
     try:
-        # Validate Gemini API key
-        if not Config.GEMINI_API_KEY:
-            return create_error_response('Gemini API key is not configured on the server.', 400)
+        # Validate OpenAI API key
+        if not openai_client:
+            return create_error_response('OpenAI API key is not configured on the server.', 400)
         
         # Get data from request
         data = request.json
@@ -209,17 +211,17 @@ def generate_chapters():
         video_duration_seconds = last_entry['start'] + last_entry['duration']
         video_duration_minutes = video_duration_seconds / 60
         
-        # Format transcript for Gemini with intelligent handling of long transcripts
+        # Format transcript for OpenAI with intelligent handling of long transcripts
         formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
         print(f"Prepared transcript format with {transcript_length} lines")
         
         # Create prompt
         system_prompt = create_chapter_prompt(video_duration_minutes)
         
-        # Generate chapters with Gemini
-        chapters = generate_chapters_with_gemini(system_prompt, video_id, formatted_transcript, video_duration_minutes)
+        # Generate chapters with OpenAI
+        chapters = generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         if not chapters:
-            return create_error_response('Failed to generate chapters with Gemini', 500)
+            return create_error_response('Failed to generate chapters with OpenAI', 500)
         
         # Count chapters
         chapter_count = len(chapters.strip().split("\n"))
@@ -483,6 +485,10 @@ def format_transcript_for_model(transcript_list):
     
     return full_transcript, len(formatted_entries)
 
+def format_transcript(transcript_list):
+    """Legacy function for compatibility - use format_transcript_for_model instead"""
+    return format_transcript_for_model(transcript_list)
+
 def create_chapter_prompt(video_duration_minutes):
     """Create a flexible prompt for generating chapter titles based on natural content transitions."""
     
@@ -567,19 +573,42 @@ def create_chapter_prompt(video_duration_minutes):
     )
     
     return system_prompt
-
-def generate_chapters_with_gemini(system_prompt, video_id, formatted_transcript, video_duration_minutes):
-    """Generate chapters using Gemini 2.0 Flash with better timestamp distribution."""
+    
+    
+def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript):
+    """Generate chapters using OpenAI with better timestamp distribution."""
+    if not openai_client:
+        print("ERROR: OpenAI client not configured")
+        return None
     
     print(f"Generating chapters for video: {video_id}")
     print(f"Transcript length: {len(formatted_transcript)} characters")
     
-    # Prepare the enhanced user content prompt with explicit timestamp distribution guidance
-    user_content = (
-        f"This video is {int(video_duration_minutes)} minutes long. "
-        f"IMPORTANT: Distribute timestamps EVENLY across ALL {int(video_duration_minutes)} minutes, not just the beginning.\n\n"
-        f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
-    )
+    # Extract video duration from the last transcript entry
+    transcript_lines = formatted_transcript.split('\n')
+    video_duration_minutes = None
+    
+    if transcript_lines:
+        try:
+            last_timestamp_str = transcript_lines[-1].split(':', 1)[0]
+            # Handle HH:MM:SS or MM:SS formats
+            if last_timestamp_str.count(':') == 2:  # HH:MM:SS
+                h, m, s = map(int, last_timestamp_str.split(':'))
+                last_timestamp_seconds = h * 3600 + m * 60 + s
+            else:  # MM:SS
+                m, s = map(int, last_timestamp_str.split(':'))
+                last_timestamp_seconds = m * 60 + s
+            
+            video_duration_minutes = last_timestamp_seconds / 60
+            print(f"Estimated video duration from transcript: {video_duration_minutes:.2f} minutes")
+            
+            # Update system prompt with the actual video duration
+            system_prompt = create_chapter_prompt(video_duration_minutes)
+        except Exception as e:
+            print(f"Could not extract duration from transcript: {e}")
+    
+    # Prepare the initial user content prompt
+    user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
     
     # Validate prompt length
     system_prompt_tokens = estimate_tokens(system_prompt)
@@ -588,66 +617,64 @@ def generate_chapters_with_gemini(system_prompt, video_id, formatted_transcript,
     
     print(f"Token estimation - System Prompt: {system_prompt_tokens}, User Content: {user_content_tokens}, Total: {total_tokens}")
     
-    max_tokens = Config.MAX_TOKENS.get(Config.GEMINI_MODEL, 120000)
-    if total_tokens > max_tokens:
-        print(f"WARNING: Token count {total_tokens} exceeds max tokens {max_tokens}. Truncating transcript...")
-        # The typical token ratio is about 4 characters per token
-        max_chars = (max_tokens - system_prompt_tokens) * 4
-        truncated_transcript = formatted_transcript[:max_chars]
-        user_content = (
-            f"This video is {int(video_duration_minutes)} minutes long. "
-            f"IMPORTANT: Distribute timestamps EVENLY across ALL {int(video_duration_minutes)} minutes, not just the beginning.\n\n"
-            f"Generate chapters for this video transcript:\n\n{truncated_transcript}"
-        )
+    max_completion_tokens = Config.max_completion_tokens.get(Config.OPENAI_MODELS[0], 120000)
+    if total_tokens > max_completion_tokens:
+        print(f"WARNING: Token count {total_tokens} exceeds max tokens {max_completion_tokens}. Truncating transcript...")
+        truncated_transcript = formatted_transcript[:max_completion_tokens * 4]
+        user_content = f"Generate chapters for this video transcript:\n\n{truncated_transcript}"
     
-    try:
-        print(f"Attempting to generate chapters with {Config.GEMINI_MODEL}...")
-        
-        # Create a generative model
-        generation_config = {
-            "temperature": 0.9,
-            "max_output_tokens": 2000
-        }
-        
-        model = genai.GenerativeModel(
-            model_name=Config.GEMINI_MODEL,
-            generation_config=generation_config
-        )
-        
-        # Create the prompt parts
-        prompt_parts = [
-            system_prompt, 
-            user_content
-        ]
-        
-        # Generate content
-        response = model.generate_content(prompt_parts)
-        chapters = response.text.strip()
-        
-        print("--- Generated Chapters ---")
-        print(chapters)
-        
-        # Basic validation: Ensure we have a reasonable number of chapter lines
-        chapter_lines = chapters.split('\n')
-        if not chapters or len(chapter_lines) < 3:
-            print(f"WARNING: Generated chapters seem too short ({len(chapter_lines)} lines) or empty")
-            return None
+    # Try generating with each model
+    for model in Config.OPENAI_MODELS:
+        try:
+            print(f"Attempting to generate chapters with {model}...")
             
-        # Check first chapter starts at 00:00
-        first_line = chapter_lines[0].strip()
-        if not any(first_line.startswith(t) for t in ["00:00", "0:00"]):
-            print("WARNING: First chapter doesn't start at 00:00")
-            # Add a corrected first chapter
-            chapters = "00:00 Introduction\n" + chapters
-        
-        return chapters
-        
-    except Exception as e:
-        print(f"Error generating chapters with Gemini: {type(e).__name__}")
-        print(f"Error details: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
+            # Add explicit reminder about timestamp distribution to user content
+            if video_duration_minutes:
+                enhanced_user_content = (
+                    f"This video is {int(video_duration_minutes)} minutes long. "
+                    f"IMPORTANT: Distribute timestamps EVENLY across ALL {int(video_duration_minutes)} minutes, not just the beginning.\n\n" + 
+                    user_content
+                )
+            else:
+                enhanced_user_content = user_content
+                
+            response = openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": enhanced_user_content}
+                ],
+                temperature=0.9,
+                max_tokens=2000
+            )
+            
+            chapters = response.choices[0].message.content.strip()
+            print("--- Generated Chapters ---")
+            print(chapters)
+            
+            # Basic validation: Ensure we have a reasonable number of chapter lines
+            chapter_lines = chapters.split('\n')
+            if not chapters or len(chapter_lines) < 3:
+                print(f"WARNING: Generated chapters seem too short ({len(chapter_lines)} lines) or empty")
+                continue
+                
+            # Check first chapter starts at 00:00
+            if not chapter_lines[0].startswith("00:00"):
+                print("WARNING: First chapter doesn't start at 00:00, trying another model")
+                continue
+            
+            # All basic checks passed
+            return chapters
+            
+        except Exception as e:
+            print(f"Error generating chapters with {model}: {type(e).__name__}")
+            print(f"Error details: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    print("All OpenAI models failed to generate chapters")
+    return None
     
 # Backup function to fetch transcript using requests directly
 def fetch_transcript_with_requests(video_id, proxy_dict=None, timeout=10):
