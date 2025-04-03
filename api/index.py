@@ -32,13 +32,13 @@ class Config:
     WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
     
     # API configurations
-    OPENAI_MODELS = ["chatgpt-4o-latest", "gpt-4o-mini"]
+    OPENAI_MODELS = ["o3-mini", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
 
     
     # Token limits - using large context windows
-    MAX_TOKENS = {
-        "chatgpt-4o-latest": 120000,  # Conservative limit for GPT-4o (128k context)
+    max_completion_tokens = {
+        "o3-mini": 120000,  # Conservative limit for o3-mini (128k context)
         "gpt-4o-mini": 120000  # Conservative limit for GPT-4o-mini (128k context)
     }
     
@@ -617,10 +617,10 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
     
     print(f"Token estimation - System Prompt: {system_prompt_tokens}, User Content: {user_content_tokens}, Total: {total_tokens}")
     
-    max_tokens = Config.MAX_TOKENS.get(Config.OPENAI_MODELS[0], 120000)
-    if total_tokens > max_tokens:
-        print(f"WARNING: Token count {total_tokens} exceeds max tokens {max_tokens}. Truncating transcript...")
-        truncated_transcript = formatted_transcript[:max_tokens * 4]
+    max_completion_tokens = Config.max_completion_tokens.get(Config.OPENAI_MODELS[0], 120000)
+    if total_tokens > max_completion_tokens:
+        print(f"WARNING: Token count {total_tokens} exceeds max tokens {max_completion_tokens}. Truncating transcript...")
+        truncated_transcript = formatted_transcript[:max_completion_tokens * 4]
         user_content = f"Generate chapters for this video transcript:\n\n{truncated_transcript}"
     
     # Try generating with each model
@@ -645,7 +645,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "user", "content": enhanced_user_content}
                 ],
                 temperature=0.9,
-                max_tokens=2000
+                max_completion_tokens=2000
             )
             
             chapters = response.choices[0].message.content.strip()
