@@ -9,7 +9,7 @@ from youtube_transcript_api.proxies import WebshareProxyConfig
 from flask_cors import CORS
 import time
 import re
-import google.generativeai as genai  # Import Google's Generative AI library
+from google import genai  # Import Google's Generative AI library
 
 # Simple in-memory cache
 CHAPTERS_CACHE = {}
