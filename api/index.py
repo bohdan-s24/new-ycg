@@ -32,7 +32,7 @@ class Config:
     WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
     
     # API configurations
-    OPENAI_MODELS = ["o3-mini", "gpt-4o-mini"]
+    OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
 
     
