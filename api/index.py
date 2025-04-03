@@ -604,30 +604,34 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
     # Prepare the initial user content prompt
     user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
     
-    # Add explicit reminder about timestamp distribution to user content
-    if video_duration_minutes:
-        enhanced_user_content = (
-            f"This video is {int(video_duration_minutes)} minutes long. "
-            f"IMPORTANT: Distribute timestamps EVENLY across ALL {int(video_duration_minutes)} minutes, not just the beginning.\n\n" + 
-            user_content
-        )
-    else:
-        enhanced_user_content = user_content
-        
     # Try generating with each model
     for model in Config.OPENAI_MODELS:
         try:
             print(f"Attempting to generate chapters with {model}...")
             
-            # Create a parameters dictionary with common parameters
-            params = {
-                "model": model,
-                "messages": [
+            # Add explicit reminder about timestamp distribution to user content
+            if video_duration_minutes:
+                enhanced_user_content = (
+                    f"This video is {int(video_duration_minutes)} minutes long. "
+                    f"IMPORTANT: Distribute timestamps EVENLY across ALL {int(video_duration_minutes)} minutes, not just the beginning.\n\n" + 
+                    user_content
+                )
+            else:
+                enhanced_user_content = user_content
+                
+            response = openai_client.chat.completions.create(
+                model=model,
+                messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": enhanced_user_content}
                 ],
-                "temperature": 0.9
-            }
+                temperature=0.9,
+                max_output_tokens=2000
+            )
+            
+            chapters = response.choices[0].message.content.strip()
+            print("--- Generated Chapters ---")
+            print(chapters)
             
             
             # Basic validation: Ensure we have a reasonable number of chapter lines
