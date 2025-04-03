@@ -35,11 +35,6 @@ class Config:
     OPENAI_MODELS = ["o3-mini", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
 
-    # Token limits - using large context windows
-    max_completion_tokens = {
-        "o3-mini": 120000,  # Conservative limit for o3-mini (128k context)
-        "gpt-4o-mini": 120000  # Conservative limit for GPT-4o-mini (128k context)
-    }
     
     # Proxy configuration
     @classmethod
@@ -609,19 +604,6 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
     # Prepare the initial user content prompt
     user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
     
-    # Validate prompt length
-    system_prompt_tokens = estimate_tokens(system_prompt)
-    user_content_tokens = estimate_tokens(user_content)
-    total_tokens = system_prompt_tokens + user_content_tokens
-    
-    print(f"Token estimation - System Prompt: {system_prompt_tokens}, User Content: {user_content_tokens}, Total: {total_tokens}")
-    
-    max_completion_tokens = Config.max_completion_tokens.get(Config.OPENAI_MODELS[0], 120000)
-    if total_tokens > max_completion_tokens:
-        print(f"WARNING: Token count {total_tokens} exceeds max tokens {max_completion_tokens}. Truncating transcript...")
-        truncated_transcript = formatted_transcript[:max_completion_tokens * 4]
-        user_content = f"Generate chapters for this video transcript:\n\n{truncated_transcript}"
-    
     # Add explicit reminder about timestamp distribution to user content
     if video_duration_minutes:
         enhanced_user_content = (
@@ -647,19 +629,6 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                 "temperature": 0.9
             }
             
-            # Add the appropriate token parameter based on the model
-            if "o3" in model or "o1" in model:
-                # For o3 and o1 models (reasoning models), use max_output_tokens
-                params["max_output_tokens"] = max_completion_tokens
-            else:
-                # For other models, use max_tokens
-                params["max_tokens"] = max_completion_tokens
-                
-            response = openai_client.chat.completions.create(**params)
-            
-            chapters = response.choices[0].message.content.strip()
-            print("--- Generated Chapters ---")
-            print(chapters)
             
             # Basic validation: Ensure we have a reasonable number of chapter lines
             chapter_lines = chapters.split('\n')
