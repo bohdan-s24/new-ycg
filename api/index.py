@@ -645,7 +645,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "user", "content": enhanced_user_content}
                 ],
                 temperature=0.9,
-                max_tokens=2000
+                max_completion_tokens=2000
             )
             
             chapters = response.choices[0].message.content.strip()
