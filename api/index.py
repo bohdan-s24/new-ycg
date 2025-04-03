@@ -1,15 +1,15 @@
- import os
- import sys
- import traceback
- import json
- import requests
- from flask import Flask, request, jsonify, make_response
- from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, VideoUnavailable, RequestBlocked, AgeRestricted, VideoUnplayable
- from youtube_transcript_api.proxies import WebshareProxyConfig
- from openai import OpenAI
- from flask_cors import CORS
- import time
- import re
+import os
+import sys
+import traceback
+import json
+import requests
+from flask import Flask, request, jsonify, make_response
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, VideoUnavailable, RequestBlocked, AgeRestricted, VideoUnplayable
+from youtube_transcript_api.proxies import WebshareProxyConfig
+from openai import OpenAI
+from flask_cors import CORS
+import time
+import re
  
  # Simple in-memory cache
  CHAPTERS_CACHE = {}
