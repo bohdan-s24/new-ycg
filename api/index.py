@@ -622,30 +622,40 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         truncated_transcript = formatted_transcript[:max_completion_tokens * 4]
         user_content = f"Generate chapters for this video transcript:\n\n{truncated_transcript}"
     
+    # Add explicit reminder about timestamp distribution to user content
+    if video_duration_minutes:
+        enhanced_user_content = (
+            f"This video is {int(video_duration_minutes)} minutes long. "
+            f"IMPORTANT: Distribute timestamps EVENLY across ALL {int(video_duration_minutes)} minutes, not just the beginning.\n\n" + 
+            user_content
+        )
+    else:
+        enhanced_user_content = user_content
+        
     # Try generating with each model
     for model in Config.OPENAI_MODELS:
         try:
             print(f"Attempting to generate chapters with {model}...")
             
-            # Add explicit reminder about timestamp distribution to user content
-            if video_duration_minutes:
-                enhanced_user_content = (
-                    f"This video is {int(video_duration_minutes)} minutes long. "
-                    f"IMPORTANT: Distribute timestamps EVENLY across ALL {int(video_duration_minutes)} minutes, not just the beginning.\n\n" + 
-                    user_content
-                )
-            else:
-                enhanced_user_content = user_content
-                
-            response = openai_client.chat.completions.create(
-                model=model,
-                messages=[
+            # Create a parameters dictionary with common parameters
+            params = {
+                "model": model,
+                "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": enhanced_user_content}
                 ],
-                temperature=0.9,
-                max_completion_tokens=max_completion_tokens
-            )
+                "temperature": 0.9
+            }
+            
+            # Add the appropriate token parameter based on the model
+            if "o3" in model or "o1" in model:
+                # For o3 and o1 models (reasoning models), use max_output_tokens
+                params["max_output_tokens"] = max_completion_tokens
+            else:
+                # For other models, use max_tokens
+                params["max_tokens"] = max_completion_tokens
+                
+            response = openai_client.chat.completions.create(**params)
             
             chapters = response.choices[0].message.content.strip()
             print("--- Generated Chapters ---")
