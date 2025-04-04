@@ -514,16 +514,6 @@ def create_chapter_prompt(video_duration_minutes):
         "6. **Chapter Length Guidance:** Typically aim for chapters of 2-6 minutes in length for optimal viewer experience, but adjust based on content. Brief intros/conclusions can be shorter, complex topics can be longer.\n"
         "7. **Balanced distribution:** Ensure the chapters are distributed evenly across the entire video duration, not just clustered at the beginning.\n"
         f"8. **Output Format:** Strictly follow '{timestamp_format} Chapter Title' with each chapter on a new line.\n\n"
-        
-        "### **Content Transition Indicators:**\n"
-        "Pay special attention to these transition signals in the transcript:\n"
-        "- Numerical indicators: 'first', 'second', 'third', 'step 1', 'tip #2', etc.\n"
-        "- Transition phrases: 'now', 'next', 'let's talk about', 'moving on to', 'another thing'\n"
-        "- Topic shifts: 'speaking of', 'when it comes to', 'as for', 'regarding'\n"
-        "- Concluding phrases: 'in conclusion', 'to summarize', 'finally', 'wrapping up'\n"
-        "- Introduction markers: 'today we'll discuss', 'in this video', 'I want to share'\n"
-        "- Audio cues mentioned in transcript: [music], [pause], [transition]\n\n"
-
 
         "### **Step-by-Step Process:**\n"
         "1. **Comprehensive Transcript Analysis:**\n"
