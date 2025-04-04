@@ -6,49 +6,26 @@
   <title>YouTube Chapter Generator</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&family=Roboto+Mono&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/popup.css">
-  <style>
-    /* Debug section styles */
-    .debug-section {
-      margin-top: 16px;
-      border-top: 1px solid #ddd;
-      padding-top: 8px;
-    }
-    .debug-title {
-      font-size: 12px;
-      color: #666;
-      display: flex;
-      align-items: center;
-      cursor: pointer;
-    }
-    .debug-title:hover {
-      color: #1a73e8;
-    }
-    .debug-icon {
-      margin-right: 4px;
-    }
-    .debug-content {
-      display: none;
-      max-height: 200px;
-      overflow-y: auto;
-      background-color: #f5f5f5;
-      border-radius: 4px;
-      padding: 8px;
-      margin-top: 8px;
-      font-family: 'Roboto Mono', monospace;
-      font-size: 11px;
-      white-space: pre-wrap;
-      word-break: break-all;
-    }
-    .debug-content.visible {
-      display: block;
-    }
-  </style>
 </head>
 <body>
   <header>
-    <div style="display: flex; align-items: center;">
-      <img src="icons/icon48.png" alt="Logo" class="logo">
-      <h1>YouTube Chapter Generator</h1>
+    <div class="header-content">
+      <div class="header-left">
+        <img src="icons/icon48.png" alt="Logo" class="logo">
+        <h1>YouTube Chapter Generator</h1>
+      </div>
+      <div class="header-right">
+        <div class="credits-badge" id="credits-badge">
+          <span class="credits-icon">⭐</span>
+          <span id="credits-count">10</span>
+        </div>
+        <button id="settings-btn" class="icon-btn" title="Settings">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
     </div>
   </header>
   
@@ -59,7 +36,6 @@
     <!-- Video Information -->
     <div id="video-info" class="video-info hidden">
       <div class="video-title" id="video-title">Video Title</div>
-      <div class="video-id" id="video-id">Video ID: xxxxx</div>
     </div>
     
     <!-- Error Message -->
@@ -68,7 +44,7 @@
     </div>
     
     <!-- Generate Button -->
-    <div style="text-align: center; margin: 16px 0;">
+    <div class="generate-button-container">
       <button id="generate-btn" class="btn" disabled>
         <span class="btn-icon">✨</span> Generate Chapters
       </button>
@@ -78,36 +54,37 @@
     <div id="loading" class="loading hidden">
       <div class="spinner"></div>
       <p>Generating AI chapters for your video...</p>
-      <p style="font-size: 12px; color: #666;">This may take up to a minute depending on video length.</p>
+      <p class="loading-subtitle">This may take up to a minute depending on video length.</p>
     </div>
     
     <!-- Chapters Output -->
     <div id="chapters-container" class="chapters-container hidden">
-      <div class="chapters-title">
-        <span>Generated Chapters</span>
+      <div class="chapters-header">
+        <div class="chapters-title">
+          <span>Generated Chapters</span>
+          <span id="version-indicator" class="version-indicator">Version 1/1</span>
+        </div>
+        <div class="version-navigation">
+          <button id="prev-version-btn" class="nav-btn" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+          <button id="next-version-btn" class="nav-btn" disabled>
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
       </div>
       <div id="chapters-content" class="chapters-content"></div>
       <div class="chapters-actions">
         <button id="copy-btn" class="btn">
           <span class="btn-icon">📋</span> Copy
         </button>
-        <div class="tooltip">
-          <button id="regenerate-btn" class="btn">
-            <span class="btn-icon">🔄</span> Regenerate
-          </button>
-          <span class="tooltip-text">Generate new chapters</span>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Debug Information Section -->
-    <div class="debug-section">
-      <div class="debug-title" id="debug-title">
-        <span class="debug-icon">🔍</span>
-        <span>Debug Information</span>
-      </div>
-      <div class="debug-content" id="debug-content">
-        <div id="debug-info">Waiting for debug information...</div>
+        <button id="regenerate-btn" class="btn">
+          <span class="btn-icon">🔄</span> Regenerate
+        </button>
       </div>
     </div>
     
@@ -118,4 +95,4 @@
   
   <script src="js/popup.js"></script>
 </body>
-</html> 
+</html>
