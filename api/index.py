@@ -516,7 +516,7 @@ def create_chapter_prompt(video_duration_minutes):
         
         "2. **Identify Key moments:**\n"
         "   - Aim to find **10–15** the most important transitions, insights, and 'aha' moments throughout the transcript.\n"
-        "   - For list-based content (ideas, tools, methods, tips, etc), identify each list item as a potential chapter, it’s okay to go **beyond 15 chapters** — consider making a chapter for **each item**\n"
+        "   - For list-based content (ideas, tools, methods, tips, etc), identify each list item as a potential chapter, it’s okay to go **beyond 15 chapters** — consider making a chapter only for **each list item**\n"
         "   - Always mark the introduction and conclusion, regardless of length.\n\n"
 
         "3. **Create Compelling Titles:**\n"
