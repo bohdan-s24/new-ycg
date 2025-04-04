@@ -448,13 +448,6 @@ def fetch_transcript(video_id, timeout_limit=30):
     print(f"All transcript fetch methods failed: {combined_errors}")
     return None
 
-def estimate_tokens(text):
-    """
-    Estimate the number of tokens in a text.
-    This is a simple estimation method - roughly 4 characters per token.
-    """
-    return len(text) // 4
-
 def format_transcript_for_model(transcript_list):
     """
     Format transcript for processing - using full transcript since we have large context windows
@@ -550,7 +543,7 @@ def create_chapter_prompt(video_duration_minutes):
         "### **QUALITY CHECK:**\n"
         "- ✓ Introduction chapter starts at 00:00\n"
         "- ✓ Conclusion chapter near the end of the video\n"
-        "- ✓ ALL major content transitions identified\n"
+        "- ✓ Major content transitions identified\n"
         "- ✓ Timestamps correspond to actual topic changes in transcript\n"
         "- ✓ NO arbitrary or pattern-based timestamps\n"
         "- ✓ ALL chapters have engaging titles under 80 characters\n"
