@@ -608,7 +608,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": enhanced_user_content}
                 ],
-                temperature=0.3,
+                temperature=0.1,
             )
             
             chapters = response.choices[0].message.content.strip()
