@@ -531,11 +531,11 @@ def create_chapter_prompt(video_duration_minutes):
         "   - Identify if it's a tutorial, list-based content, story, interview, or other format.\n"
         "   - Recognize the natural segments that make up the content.\n\n"
         
-        "2. **Identify ALL Key moments:**\n"
-        "   - Find EVERY significant content transitions, insights, and 'aha' moments throughout the transcript.\n"
-        "   - For list-based content (ideas, tools, methods, tips, etc), identify each list item as a potential chapter.\n"
+        "2. **Identify Key moments:**\n"
+        "   - Aim to find **10–15** the most important transitions, insights, and 'aha' moments throughout the transcript.\n"
+        "   - For list-based content (ideas, tools, methods, tips, etc), identify each list item as a potential chapter, it’s okay to go **beyond 15 chapters** — consider making a chapter for **each item**\n"
         "   - Always mark the introduction and conclusion, regardless of length.\n\n"
-        
+
         "3. **Create Compelling Titles:**\n"
         "   - Craft  catchy, clickbait-style titles that accurately represent each section.\n"
         "   - Use casual tone of voice and emotional triggers such as curiosity, surprise, excitement, or controversy.\n"           
@@ -625,7 +625,7 @@ def generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": enhanced_user_content}
                 ],
-                temperature=0.9,
+                temperature=0.3,
             )
             
             chapters = response.choices[0].message.content.strip()
