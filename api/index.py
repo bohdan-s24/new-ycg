@@ -553,7 +553,7 @@ def create_chapter_prompt(video_duration_minutes):
     # Final reminder
     system_prompt += (
         "### **FINAL OUTPUT FORMAT:**\n"
-        "- Include ALL identified content transitions as chapters\n"
+        "- Include ONLY the most significant content transitions (aim for 10–15 total unless list-based)\n"
         f"- Each on a new line in the format: '{timestamp_format} Chapter Title'\n"
         "- NO additional commentary or explanation\n\n"
         
