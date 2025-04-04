@@ -32,9 +32,9 @@ def register_chapter_routes(app: Flask) -> None:
         
         # Extract video ID from request
         data = request.get_json()
-        video_id = data.get('videoId')
+        video_id = data.get('video_id')  
         if not video_id:
-            return create_error_response('Missing videoId parameter', 400)
+            return create_error_response('Missing video_id parameter', 400)
         
         # Check cache first
         cached_chapters = get_from_cache(video_id)
