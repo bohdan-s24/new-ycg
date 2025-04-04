@@ -2,7 +2,7 @@
 body {
   width: 400px;
   min-height: 300px;
-  font-family: 'Roboto', Arial, sans-serif;
+  font-family: "Roboto", Arial, sans-serif;
   margin: 0;
   padding: 0;
   color: #333;
@@ -18,9 +18,23 @@ header {
   color: white;
   padding: 12px 16px;
   margin-bottom: 16px;
+}
+
+.header-content {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 header h1 {
@@ -35,23 +49,53 @@ header h1 {
   margin-right: 8px;
 }
 
+.icon-btn {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.icon-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.credits-badge {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 4px 8px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.credits-icon {
+  font-size: 12px;
+}
+
 .video-info {
   margin-bottom: 16px;
   background-color: #fff;
   border-radius: 8px;
   padding: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .video-title {
   font-weight: 500;
   word-break: break-word;
-  margin-bottom: 8px;
 }
 
-.video-id {
-  font-size: 12px;
-  color: #666;
+.generate-button-container {
+  text-align: center;
+  margin: 16px 0;
 }
 
 .btn {
@@ -90,6 +134,11 @@ header h1 {
   text-align: center;
 }
 
+.loading-subtitle {
+  font-size: 12px;
+  color: #666;
+}
+
 .spinner {
   border: 3px solid #f3f3f3;
   border-top: 3px solid #ff0000;
@@ -101,8 +150,12 @@ header h1 {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .chapters-container {
@@ -110,20 +163,59 @@ header h1 {
   background-color: #fff;
   border-radius: 8px;
   padding: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.chapters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .chapters-title {
   font-weight: 500;
-  margin-bottom: 12px;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+}
+
+.version-indicator {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.version-navigation {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-btn {
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
   align-items: center;
+  justify-content: center;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.nav-btn:hover:not(:disabled) {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.nav-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .chapters-content {
   white-space: pre-wrap;
-  font-family: 'Roboto Mono', monospace;
+  font-family: "Roboto Mono", monospace;
   border: 1px solid #eee;
   padding: 12px;
   border-radius: 4px;
@@ -159,34 +251,6 @@ header h1 {
   display: none;
 }
 
-.tooltip {
-  position: relative;
-  display: inline-block;
-}
-
-.tooltip .tooltip-text {
-  visibility: hidden;
-  width: 120px;
-  background-color: #555;
-  color: #fff;
-  text-align: center;
-  padding: 5px;
-  border-radius: 6px;
-  position: absolute;
-  z-index: 1;
-  bottom: 125%;
-  left: 50%;
-  margin-left: -60px;
-  opacity: 0;
-  transition: opacity 0.3s;
-  font-size: 12px;
-}
-
-.tooltip:hover .tooltip-text {
-  visibility: visible;
-  opacity: 1;
-}
-
 footer {
   margin-top: 24px;
   text-align: center;
@@ -202,4 +266,4 @@ footer a {
 
 footer a:hover {
   text-decoration: underline;
-} 
+}
