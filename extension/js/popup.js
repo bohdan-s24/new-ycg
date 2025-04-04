@@ -1,339 +1,390 @@
 // YouTube Chapter Generator Popup Script
 
 // API endpoints
-const API_BASE_URL = 'https://new-ycg.vercel.app/api';
-const GENERATE_CHAPTERS_ENDPOINT = `${API_BASE_URL}/generate-chapters`;
-const PING_ENDPOINT = `${API_BASE_URL}`;
+const API_BASE_URL = "https://new-ycg.vercel.app/api"
+const GENERATE_CHAPTERS_ENDPOINT = `${API_BASE_URL}/generate-chapters`
+const PING_ENDPOINT = `${API_BASE_URL}`
 
 // Elements
-const statusElement = document.getElementById('status');
-const videoInfoElement = document.getElementById('video-info');
-const videoTitleElement = document.getElementById('video-title');
-const videoIdElement = document.getElementById('video-id');
-const errorMessageElement = document.getElementById('error-message');
-const generateButton = document.getElementById('generate-btn');
-const loadingElement = document.getElementById('loading');
-const chaptersContainerElement = document.getElementById('chapters-container');
-const chaptersContentElement = document.getElementById('chapters-content');
-const copyButton = document.getElementById('copy-btn');
-const regenerateButton = document.getElementById('regenerate-btn');
-const debugInfoElement = document.getElementById('debug-info');
-const debugTitleElement = document.getElementById('debug-title');
-const debugContentElement = document.getElementById('debug-content');
+const statusElement = document.getElementById("status")
+const videoInfoElement = document.getElementById("video-info")
+const videoTitleElement = document.getElementById("video-title")
+const errorMessageElement = document.getElementById("error-message")
+const generateButton = document.getElementById("generate-btn")
+const loadingElement = document.getElementById("loading")
+const chaptersContainerElement = document.getElementById("chapters-container")
+const chaptersContentElement = document.getElementById("chapters-content")
+const copyButton = document.getElementById("copy-btn")
+const regenerateButton = document.getElementById("regenerate-btn")
+const settingsButton = document.getElementById("settings-btn")
+const prevVersionButton = document.getElementById("prev-version-btn")
+const nextVersionButton = document.getElementById("next-version-btn")
+const versionIndicatorElement = document.getElementById("version-indicator")
+const creditsCountElement = document.getElementById("credits-count")
 
 // State variables
-let currentVideoId = null;
-let currentVideoTitle = null;
-let isGenerating = false;
-let debugInfo = [];
+let currentVideoId = null
+let currentVideoTitle = null
+let isGenerating = false
+const chapterVersions = []
+let currentVersionIndex = 0
+let userCredits = 10 // Default value, should be fetched from server or storage
 
 // Initialize
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener("DOMContentLoaded", init)
 
 function init() {
   // Set up event listeners
-  generateButton.addEventListener('click', handleGenerateClick);
-  copyButton.addEventListener('click', handleCopyClick);
-  regenerateButton.addEventListener('click', handleRegenerateClick);
-  
-  // Set up debug section toggle
-  if (debugTitleElement) {
-    debugTitleElement.addEventListener('click', function() {
-      if (debugContentElement) {
-        debugContentElement.classList.toggle('visible');
-      }
-    });
-  }
-  
-  // Make debug panel visible by default to help diagnose issues
-  if (debugContentElement) {
-    debugContentElement.classList.add('visible');
-  }
-  
+  generateButton.addEventListener("click", handleGenerateClick)
+  copyButton.addEventListener("click", handleCopyClick)
+  regenerateButton.addEventListener("click", handleRegenerateClick)
+  settingsButton.addEventListener("click", handleSettingsClick)
+  prevVersionButton.addEventListener("click", handlePrevVersionClick)
+  nextVersionButton.addEventListener("click", handleNextVersionClick)
+
+  // Load user credits
+  loadUserCredits()
+
   // Check API server status first
   checkApiStatus()
     .then(() => {
       // Check if we're on a YouTube video page
-      getCurrentTabInfo();
+      getCurrentTabInfo()
     })
-    .catch(error => {
-      addDebugInfo(`API status check failed with error: ${error.message}`);
+    .catch((error) => {
+      console.error(`API status check failed with error: ${error.message}`)
       // Continue anyway to allow diagnostics
-      getCurrentTabInfo();
-      showError(`API server may have issues: ${error.message}. You can still try to generate chapters.`);
-    });
+      getCurrentTabInfo()
+      showError(`API server may have issues: ${error.message}. You can still try to generate chapters.`)
+    })
+}
+
+// Load user credits from storage
+function loadUserCredits() {
+  chrome.storage.sync.get(["userCredits"], (result) => {
+    if (result.userCredits !== undefined) {
+      userCredits = result.userCredits
+      updateCreditsDisplay()
+    } else {
+      // If not found in storage, fetch from server
+      fetchUserCredits()
+    }
+  })
+}
+
+// Fetch user credits from server
+function fetchUserCredits() {
+  // This is a placeholder - implement actual API call to get user credits
+  // For now, we'll use the default value set in state variables
+  updateCreditsDisplay()
+}
+
+// Update credits display
+function updateCreditsDisplay() {
+  creditsCountElement.textContent = userCredits
 }
 
 // Check API server status
 async function checkApiStatus() {
   try {
-    addDebugInfo('Checking API status...');
-    
+    console.log("Checking API status...")
+
     // Add cache buster to prevent caching
-    const cacheBuster = Date.now();
+    const cacheBuster = Date.now()
     const response = await fetch(`${PING_ENDPOINT}?_=${cacheBuster}`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Accept': 'application/json'
-      }
-    });
-    
-    let responseData;
+        Accept: "application/json",
+      },
+    })
+
+    let responseData
     try {
-      responseData = await response.json();
+      responseData = await response.json()
     } catch (jsonError) {
-      addDebugInfo(`Failed to parse API response as JSON: ${jsonError.message}`);
-      throw new Error(`API returned invalid JSON. Response status: ${response.status}`);
+      console.error(`Failed to parse API response as JSON: ${jsonError.message}`)
+      throw new Error(`API returned invalid JSON. Response status: ${response.status}`)
     }
-    
+
     // Even if status code is not OK, check if we got a valid response with error info
     if (responseData) {
-      if (responseData.status === 'error') {
-        addDebugInfo(`API returned error status: ${JSON.stringify(responseData)}`);
-        throw new Error(`API error: ${responseData.error || responseData.message || 'Unknown error'}`);
+      if (responseData.status === "error") {
+        console.error(`API returned error status: ${JSON.stringify(responseData)}`)
+        throw new Error(`API error: ${responseData.error || responseData.message || "Unknown error"}`)
       }
-      
+
       if (!response.ok) {
-        addDebugInfo(`API server returned status ${response.status} but with parseable data: ${JSON.stringify(responseData)}`);
-        throw new Error(`API server returned status ${response.status}: ${JSON.stringify(responseData.error || {})}`);
+        console.error(
+          `API server returned status ${response.status} but with parseable data: ${JSON.stringify(responseData)}`,
+        )
+        throw new Error(`API server returned status ${response.status}: ${JSON.stringify(responseData.error || {})}`)
       }
-      
+
       // Success case
-      addDebugInfo(`API server is online. Status: ${responseData.status}`);
-      if (responseData.cors_headers) {
-        addDebugInfo(`CORS headers configured: ${JSON.stringify(responseData.cors_headers || {})}`);
-      }
-      if (responseData.proxy_status) {
-        addDebugInfo(`Webshare proxy status: ${JSON.stringify(responseData.proxy_status || {})}`);
-      }
-      if (responseData.env_info) {
-        addDebugInfo(`Environment info: ${JSON.stringify(responseData.env_info || {})}`);
-      }
-      
-      return responseData;
+      console.log(`API server is online. Status: ${responseData.status}`)
+      return responseData
     } else {
-      throw new Error(`API server returned status ${response.status} with no valid data`);
+      throw new Error(`API server returned status ${response.status} with no valid data`)
     }
   } catch (error) {
-    addDebugInfo(`API status check failed: ${error.message}`);
-    throw error;
+    console.error(`API status check failed: ${error.message}`)
+    throw error
   }
 }
 
 // Get information about the current tab
 function getCurrentTabInfo() {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const currentTab = tabs[0];
-    
-    if (!currentTab || !currentTab.url || !currentTab.url.includes('youtube.com/watch')) {
-      showError('Please open a YouTube video page to use this extension.');
-      return;
+    const currentTab = tabs[0]
+
+    if (!currentTab || !currentTab.url || !currentTab.url.includes("youtube.com/watch")) {
+      showError("Please open a YouTube video page to use this extension.")
+      return
     }
-    
+
     // Send message to content script to get video info
     try {
-      addDebugInfo(`Requesting video info from tab ${currentTab.id}`);
-      chrome.tabs.sendMessage(currentTab.id, { action: 'getVideoInfo' }, (response) => {
+      console.log(`Requesting video info from tab ${currentTab.id}`)
+      chrome.tabs.sendMessage(currentTab.id, { action: "getVideoInfo" }, (response) => {
         if (chrome.runtime.lastError) {
-          console.error('Error sending message:', chrome.runtime.lastError.message);
-          addDebugInfo(`Communication error: ${chrome.runtime.lastError.message}`);
-          showError('Could not communicate with YouTube page. Please refresh the page and try again.');
-          return;
+          console.error("Error sending message:", chrome.runtime.lastError.message)
+          showError("Could not communicate with YouTube page. Please refresh the page and try again.")
+          return
         }
-        
+
         if (response && response.success) {
-          addDebugInfo(`Received video info: ID=${response.videoId}, title="${response.videoTitle?.substring(0, 30)}..."`);
-          handleVideoInfo(response.videoId, response.videoTitle);
+          console.log(
+            `Received video info: ID=${response.videoId}, title="${response.videoTitle?.substring(0, 30)}..."`,
+          )
+          handleVideoInfo(response.videoId, response.videoTitle)
         } else {
-          addDebugInfo(`Failed to get video info: ${response?.error || 'Unknown error'}`);
-          showError('Could not extract video information. Please make sure you are on a YouTube video page.');
+          console.error(`Failed to get video info: ${response?.error || "Unknown error"}`)
+          showError("Could not extract video information. Please make sure you are on a YouTube video page.")
         }
-      });
+      })
     } catch (error) {
-      console.error('Error in getCurrentTabInfo:', error);
-      addDebugInfo(`Unexpected error: ${error.message}`);
-      showError('An unexpected error occurred. Please refresh the page and try again.');
+      console.error("Error in getCurrentTabInfo:", error)
+      showError("An unexpected error occurred. Please refresh the page and try again.")
     }
-  });
+  })
 }
 
 // Handle the video information received from content script
 function handleVideoInfo(videoId, videoTitle) {
   if (!videoId) {
-    showError('Could not determine the video ID. Please make sure you are on a YouTube video page.');
-    return;
+    showError("Could not determine the video ID. Please make sure you are on a YouTube video page.")
+    return
   }
-  
-  currentVideoId = videoId;
-  currentVideoTitle = videoTitle || 'Unknown Title';
-  
+
+  currentVideoId = videoId
+  currentVideoTitle = videoTitle || "Unknown Title"
+
   // Update UI
-  statusElement.classList.add('hidden');
-  videoInfoElement.classList.remove('hidden');
-  videoTitleElement.textContent = currentVideoTitle;
-  videoIdElement.textContent = `Video ID: ${currentVideoId}`;
-  generateButton.disabled = false;
+  statusElement.classList.add("hidden")
+  videoInfoElement.classList.remove("hidden")
+  videoTitleElement.textContent = currentVideoTitle
+  generateButton.disabled = false
 }
 
 // Generate chapters
 async function generateChapters(forceRefresh = false) {
   if (!currentVideoId) {
-    showError('No YouTube video ID found.');
-    return;
+    showError("No YouTube video ID found.")
+    return
   }
-  
+
   if (isGenerating) {
-    addDebugInfo('Already generating chapters, please wait...');
-    return;
+    console.log("Already generating chapters, please wait...")
+    return
   }
-  
-  hideError();
-  showLoading(true);
-  isGenerating = true;
-  
+
+  // Check if user has enough credits
+  if (userCredits <= 0) {
+    showError("You have no credits left. Please purchase more credits to continue using this service.")
+    return
+  }
+
+  hideError()
+  showLoading(true)
+  isGenerating = true
+
   try {
-    addDebugInfo(`Sending request to generate chapters for video ID: ${currentVideoId}`);
-    addDebugInfo(`Fetch request to ${GENERATE_CHAPTERS_ENDPOINT} with video_id=${currentVideoId}${forceRefresh ? ' (force refresh)' : ''}`);
-    
+    console.log(`Sending request to generate chapters for video ID: ${currentVideoId}`)
+    console.log(
+      `Fetch request to ${GENERATE_CHAPTERS_ENDPOINT} with video_id=${currentVideoId}${forceRefresh ? " (force refresh)" : ""}`,
+    )
+
     const response = await fetch(GENERATE_CHAPTERS_ENDPOINT, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify({
         video_id: currentVideoId,
-        force_refresh: forceRefresh
-      })
-    });
-    
+        force_refresh: forceRefresh,
+      }),
+    })
+
     // Log response status and headers for debugging
-    addDebugInfo(`Response status: ${response.status} `);
-    addDebugInfo(`Response headers: ${JSON.stringify(Object.fromEntries([...response.headers]))}`);
-    
-    let jsonResponse;
+    console.log(`Response status: ${response.status} `)
+
+    let jsonResponse
     try {
-      const responseText = await response.text();
-      addDebugInfo(`Got JSON response: ${responseText.substring(0, 150)}...`);
-      jsonResponse = JSON.parse(responseText);
+      const responseText = await response.text()
+      console.log(`Got JSON response: ${responseText.substring(0, 150)}...`)
+      jsonResponse = JSON.parse(responseText)
     } catch (jsonError) {
-      addDebugInfo(`Failed to parse response as JSON: ${jsonError.message}`);
-      throw new Error(`Failed to parse response as JSON: ${jsonError.message}`);
+      console.error(`Failed to parse response as JSON: ${jsonError.message}`)
+      throw new Error(`Failed to parse response as JSON: ${jsonError.message}`)
     }
-    
+
     if (!response.ok) {
       if (jsonResponse && jsonResponse.error) {
-        addDebugInfo(`Error response: ${JSON.stringify(jsonResponse)}`);
-        throw new Error(`Server error: ${JSON.stringify(jsonResponse.error)}`);
+        console.error(`Error response: ${JSON.stringify(jsonResponse)}`)
+        throw new Error(`Server error: ${JSON.stringify(jsonResponse.error)}`)
       } else {
-        throw new Error(`Server returned status ${response.status}`);
+        throw new Error(`Server returned status ${response.status}`)
       }
     }
-    
+
     if (!jsonResponse.success) {
-      const errorMessage = jsonResponse.error || 'Unknown error occurred';
-      addDebugInfo(`API reported error: ${errorMessage}`);
-      throw new Error(errorMessage);
+      const errorMessage = jsonResponse.error || "Unknown error occurred"
+      console.error(`API reported error: ${errorMessage}`)
+      throw new Error(errorMessage)
     }
-    
+
     // Success!
-    const chapters = jsonResponse.chapters;
-    const fromCache = jsonResponse.from_cache || false;
-    
-    addDebugInfo(`Chapters generated ${fromCache ? 'from cache' : 'successfully'}. Video duration: ${jsonResponse.video_duration_minutes}, used proxy: ${jsonResponse.used_proxy}`);
-    
-    displayChapters(chapters);
-    regenerateButton.disabled = false;
-    return chapters;
-    
+    const chapters = jsonResponse.chapters
+    const fromCache = jsonResponse.from_cache || false
+
+    console.log(
+      `Chapters generated ${fromCache ? "from cache" : "successfully"}. Video duration: ${jsonResponse.video_duration_minutes}, used proxy: ${jsonResponse.used_proxy}`,
+    )
+
+    // If not from cache, deduct a credit
+    if (!fromCache) {
+      decrementCredits()
+    }
+
+    // Add to versions if it's a new generation
+    if (forceRefresh || chapterVersions.length === 0) {
+      chapterVersions.push(chapters)
+      currentVersionIndex = chapterVersions.length - 1
+    }
+
+    displayChapters(chapters)
+    updateVersionNavigation()
+    regenerateButton.disabled = false
+    return chapters
   } catch (error) {
-    addDebugInfo(`Final error: ${error.message}`);
-    showError(`Failed to generate chapters: ${error.message}`);
-    throw error;
+    console.error(`Final error: ${error.message}`)
+    showError(`Failed to generate chapters: ${error.message}`)
+    throw error
   } finally {
-    showLoading(false);
-    isGenerating = false;
+    showLoading(false)
+    isGenerating = false
   }
+}
+
+// Decrement user credits
+function decrementCredits() {
+  userCredits = Math.max(0, userCredits - 1)
+  updateCreditsDisplay()
+
+  // Save to storage
+  chrome.storage.sync.set({ userCredits: userCredits })
 }
 
 // Display the generated chapters
 function displayChapters(chapters) {
-  chaptersContentElement.textContent = chapters;
-  chaptersContainerElement.classList.remove('hidden');
+  chaptersContentElement.textContent = chapters
+  chaptersContainerElement.classList.remove("hidden")
+}
+
+// Update version navigation
+function updateVersionNavigation() {
+  versionIndicatorElement.textContent = `Version ${currentVersionIndex + 1}/${chapterVersions.length}`
+
+  prevVersionButton.disabled = currentVersionIndex <= 0
+  nextVersionButton.disabled = currentVersionIndex >= chapterVersions.length - 1
 }
 
 // Copy chapters to clipboard
 function copyToClipboard(text) {
-  navigator.clipboard.writeText(text)
+  navigator.clipboard
+    .writeText(text)
     .then(() => {
       // Show temporary "Copied!" feedback
-      const originalText = copyButton.textContent;
-      copyButton.innerHTML = '<span class="btn-icon">✓</span> Copied!';
-      
-      setTimeout(() => {
-        copyButton.innerHTML = originalText;
-      }, 2000);
-    })
-    .catch(err => {
-      console.error('Failed to copy:', err);
-      addDebugInfo(`Copy error: ${err.message}`);
-      showError('Failed to copy to clipboard. Please try again.');
-    });
-}
+      const originalText = copyButton.innerHTML
+      copyButton.innerHTML = '<span class="btn-icon">✓</span> Copied!'
 
-// Add debug information
-function addDebugInfo(info) {
-  const timestamp = new Date().toLocaleTimeString();
-  const logEntry = `[${timestamp}] ${info}`;
-  
-  console.log(logEntry);
-  debugInfo.push(logEntry);
-  
-  // Limit debug info to prevent excessive memory usage
-  if (debugInfo.length > 50) {
-    debugInfo.shift();
-  }
-  
-  // Update debug info element if it exists
-  if (debugInfoElement) {
-    debugInfoElement.textContent = debugInfo.join('\n');
-  }
+      setTimeout(() => {
+        copyButton.innerHTML = originalText
+      }, 2000)
+    })
+    .catch((err) => {
+      console.error("Failed to copy:", err)
+      showError("Failed to copy to clipboard. Please try again.")
+    })
 }
 
 // Show/hide loading state
 function showLoading(show) {
   if (show) {
-    loadingElement.classList.remove('hidden');
-    generateButton.disabled = true;
+    loadingElement.classList.remove("hidden")
+    generateButton.disabled = true
   } else {
-    loadingElement.classList.add('hidden');
-    generateButton.disabled = false;
+    loadingElement.classList.add("hidden")
+    generateButton.disabled = false
   }
 }
 
 // Show error message
 function showError(message) {
-  errorMessageElement.textContent = message;
-  errorMessageElement.classList.remove('hidden');
-  statusElement.classList.add('hidden');
-  addDebugInfo(`Error displayed: ${message}`);
+  errorMessageElement.textContent = message
+  errorMessageElement.classList.remove("hidden")
+  statusElement.classList.add("hidden")
+  console.error(`Error displayed: ${message}`)
 }
 
 // Hide error message
 function hideError() {
-  errorMessageElement.classList.add('hidden');
+  errorMessageElement.classList.add("hidden")
 }
 
 // Event Handlers
 function handleGenerateClick() {
-  chaptersContainerElement.classList.add('hidden');
-  generateChapters();
+  chaptersContainerElement.classList.add("hidden")
+  generateChapters()
 }
 
 function handleCopyClick() {
-  copyToClipboard(chaptersContentElement.textContent);
+  copyToClipboard(chaptersContentElement.textContent)
 }
 
 function handleRegenerateClick() {
-  generateChapters(true); // Pass true to force a refresh from the server
-} 
+  generateChapters(true) // Pass true to force a refresh from the server
+}
+
+function handleSettingsClick() {
+  // Open settings page or show settings modal
+  chrome.runtime.openOptionsPage()
+}
+
+function handlePrevVersionClick() {
+  if (currentVersionIndex > 0) {
+    currentVersionIndex--
+    displayChapters(chapterVersions[currentVersionIndex])
+    updateVersionNavigation()
+  }
+}
+
+function handleNextVersionClick() {
+  if (currentVersionIndex < chapterVersions.length - 1) {
+    currentVersionIndex++
+    displayChapters(chapterVersions[currentVersionIndex])
+    updateVersionNavigation()
+  }
+}
+
