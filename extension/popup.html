@@ -6,6 +6,7 @@
   <title>YouTube Chapter Generator</title>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&family=Roboto+Mono&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/popup.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <header>
@@ -17,7 +18,25 @@
       <div class="header-right">
         <div class="credits-badge" id="credits-badge">
           <span class="credits-icon">⭐</span>
-          <span id="credits-count">10</span>
+          <span id="credits-count">-</span>
+        </div>
+        <div id="user-profile" class="user-profile hidden">
+          <img id="user-avatar" class="user-avatar" src="icons/user.png" alt="User">
+        </div>
+        <button id="login-btn" class="btn btn-sm">Sign In</button>
+        <div id="user-menu" class="user-menu hidden">
+          <div id="user-menu-header" class="user-menu-header">
+            <img id="menu-user-avatar" class="menu-user-avatar" src="icons/user.png" alt="User">
+            <div class="user-details">
+              <div id="user-name" class="user-name">User Name</div>
+              <div id="user-email" class="user-email">user@example.com</div>
+            </div>
+          </div>
+          <div class="user-menu-items">
+            <a href="#" id="my-account-link" class="menu-item">My Account</a>
+            <a href="#" id="buy-credits-link" class="menu-item">Buy Credits</a>
+            <a href="#" id="logout-link" class="menu-item">Sign Out</a>
+          </div>
         </div>
         <button id="settings-btn" class="icon-btn" title="Settings">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -30,6 +49,33 @@
   </header>
   
   <div class="container">
+    <!-- Auth UI -->
+    <div id="auth-container" class="auth-container hidden">
+      <div class="auth-section">
+        <h2>Sign in to YCG</h2>
+        <p class="auth-description">Sign in to track your credits and access premium features</p>
+        <div id="google-signin-button" class="google-signin-button">
+          <div id="g_id_onload"
+            data-client_id="YOUR_GOOGLE_CLIENT_ID"
+            data-context="signin"
+            data-callback="handleGoogleSignIn"
+            data-auto_prompt="false">
+          </div>
+          <div class="g_id_signin"
+            data-type="standard"
+            data-size="large"
+            data-theme="outline"
+            data-text="signin_with"
+            data-shape="rectangular"
+            data-logo_alignment="left">
+          </div>
+        </div>
+        <div class="auth-footer">
+          <p>By signing in, you agree to our <a href="#" id="terms-link">Terms of Service</a> and <a href="#" id="privacy-link">Privacy Policy</a></p>
+        </div>
+      </div>
+    </div>
+
     <!-- Initial Status -->
     <div id="status" class="status">Loading video information...</div>
     
@@ -93,6 +139,7 @@
     </footer>
   </div>
   
+  <script src="js/auth.js"></script>
   <script src="js/popup.js"></script>
 </body>
 </html>
