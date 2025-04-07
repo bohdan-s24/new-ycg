@@ -5,10 +5,14 @@ from typing import Optional, Dict, Any
 class Config:
     """Centralized configuration management"""
     # Environment variables
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-    WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME", "")
-    WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD", "")
-    
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+    WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME")
+    WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD")
+    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY") # Loaded from Vercel env
+    REDIS_URL = os.environ.get("REDIS_URL") # Loaded from Vercel env (Upstash)
+    # Google OAuth Client ID (for verifying ID tokens from frontend)
+    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID") # Loaded from Vercel env
+
     # API configurations
     OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
