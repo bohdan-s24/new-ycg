@@ -5,14 +5,13 @@ A Chrome extension that automatically generates YouTube video chapters using AI,
 ## Features
 
 - Extracts transcripts directly from YouTube videos
-- Uses OpenAI GPT-4 to generate meaningful chapters based on content
+- Uses OpenAI GPT-4o to generate meaningful chapters based on content
 - Creates properly formatted YouTube chapters ready to copy
 - Simple, user-friendly interface
 - Works with any YouTube video that has captions/subtitles
 - Supports Webshare proxies to avoid IP blocks
 - **NEW**: Credit-based system with multiple pricing plans
 - **NEW**: User accounts with Google sign-in
-- **NEW**: Web interface for account management and chapter generation
 
 ## Pricing Plans
 
@@ -61,7 +60,6 @@ WEBSHARE_PASSWORD=your_webshare_password
 # Authentication
 JWT_SECRET_KEY=your_jwt_secret
 GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
 
 # Database
 REDIS_URL=your_redis_url
@@ -95,10 +93,9 @@ To ensure proper functionality, set these environment variables in your Vercel p
 3. `WEBSHARE_PASSWORD` - Your Webshare proxy password (if using Webshare)
 4. `JWT_SECRET_KEY` - Secret key for JWT token generation
 5. `GOOGLE_CLIENT_ID` - Google OAuth client ID
-6. `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
-7. `REDIS_URL` - Upstash Redis connection URL
-8. `STRIPE_SECRET_KEY` - Stripe API secret key
-9. `STRIPE_WEBHOOK_SECRET` - Stripe webhook secret for verifying events
+6. `REDIS_URL` - Upstash Redis connection URL
+7. `STRIPE_SECRET_KEY` - Stripe API secret key
+8. `STRIPE_WEBHOOK_SECRET` - Stripe webhook secret for verifying events
 
 ## Using Webshare Proxies
 
@@ -126,7 +123,7 @@ To set up Google OAuth authentication:
 2. Configure the OAuth consent screen
 3. Create OAuth 2.0 credentials (Web application type)
 4. Add your authorized JavaScript origins and redirect URIs
-5. Copy the Client ID and Client Secret to your environment variables
+5. Copy the Client ID to your environment variables
 
 ## Stripe Integration
 
@@ -166,4 +163,4 @@ If authentication is not working:
 This project is licensed under the MIT License.
 
 ## Latest Update
-Updated on April 7, 2025 with new monetization features, user authentication, and web interface.
+Updated on April 7, 2025 with new monetization features, user authentication.
