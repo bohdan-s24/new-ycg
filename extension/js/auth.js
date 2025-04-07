@@ -1,8 +1,10 @@
 // YouTube Chapter Generator Authentication Module
 
 // API endpoints
-const AUTH_BASE_URL = "https://new-ycg.vercel.app/api/auth";
+const AUTH_BASE_URL = "https://new-ycg.vercel.app/auth"; // Updated to match backend routes
 const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login`;
+const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login/google`; // New endpoint for Google login
+const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`; // New endpoint to get Google Client ID
 const VERIFY_TOKEN_ENDPOINT = `${AUTH_BASE_URL}/verify`;
 const USER_INFO_ENDPOINT = `${AUTH_BASE_URL}/user`;
 
@@ -29,7 +31,7 @@ let isAuthInitialized = false;
 // Initialize auth
 document.addEventListener("DOMContentLoaded", initAuth);
 
-function initAuth() {
+async function initAuth() {
   // Set up event listeners
   loginButton.addEventListener("click", showAuthUI);
   userProfileElement.addEventListener("click", toggleUserMenu);
@@ -46,8 +48,45 @@ function initAuth() {
     }
   });
 
+  // Fetch Google Client ID and initialize Google Sign-In
+  try {
+    await initGoogleSignIn();
+  } catch (error) {
+    console.error("Failed to initialize Google Sign-In:", error);
+  }
+
   // Check if user is already logged in
   checkAuthStatus();
+}
+
+// Initialize Google Sign-In by fetching the Client ID from the backend
+async function initGoogleSignIn() {
+  try {
+    const response = await fetch(CONFIG_ENDPOINT);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch auth config: ${response.status}`);
+    }
+    
+    const config = await response.json();
+    if (!config.data || !config.data.googleClientId) {
+      throw new Error("Google Client ID not found in config response");
+    }
+    
+    const googleClientId = config.data.googleClientId;
+    console.log("Fetched Google Client ID from server");
+    
+    // Update the Google Sign-In button with the fetched Client ID
+    const gIdOnload = document.getElementById("g_id_onload");
+    if (gIdOnload) {
+      gIdOnload.setAttribute("data-client_id", googleClientId);
+      console.log("Updated Google Sign-In button with Client ID");
+    } else {
+      console.error("Google Sign-In container not found in the DOM");
+    }
+  } catch (error) {
+    console.error("Error fetching Google Client ID:", error);
+    throw error;
+  }
 }
 
 // Check if the user is authenticated
@@ -188,8 +227,8 @@ window.handleGoogleSignIn = async (response) => {
   try {
     console.log("Google Sign-In successful");
     
-    // Send the ID token to your server
-    const loginResponse = await fetch(LOGIN_ENDPOINT, {
+    // Send the ID token to your server using the Google-specific endpoint
+    const loginResponse = await fetch(GOOGLE_LOGIN_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -205,8 +244,19 @@ window.handleGoogleSignIn = async (response) => {
     
     const loginData = await loginResponse.json();
     
+    // Check for success and extract token from the response
+    if (!loginData.success) {
+      throw new Error(`Login failed: ${loginData.error || "Unknown error"}`);
+    }
+    
+    // Our backend returns data in a format like {"success": true, "data": {...}}
+    // Extract the token from the data object
+    if (!loginData.data || !loginData.data.access_token) {
+      throw new Error("Invalid response format: access_token not found");
+    }
+    
     // Save the auth token
-    authToken = loginData.token;
+    authToken = loginData.data.access_token;
     chrome.storage.sync.set({ authToken });
     
     // Get user info
