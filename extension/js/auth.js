@@ -1,10 +1,10 @@
 // YouTube Chapter Generator Authentication Module
 
-// API endpoints
-const AUTH_BASE_URL = "https://new-ycg.vercel.app/auth"; // Updated to match backend routes
+// Use configuration from config.js
+const AUTH_BASE_URL = window.YCG_CONFIG.AUTH_BASE_URL;
 const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login`;
-const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login/google`; // New endpoint for Google login
-const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`; // New endpoint to get Google Client ID
+const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login/google`;
+const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`;
 const VERIFY_TOKEN_ENDPOINT = `${AUTH_BASE_URL}/verify`;
 const USER_INFO_ENDPOINT = `${AUTH_BASE_URL}/user`;
 
@@ -31,7 +31,9 @@ let isAuthInitialized = false;
 // Initialize auth
 document.addEventListener("DOMContentLoaded", initAuth);
 
-async function initAuth() {
+function initAuth() {
+  console.log("Initializing auth module...");
+  
   // Set up event listeners
   loginButton.addEventListener("click", showAuthUI);
   userProfileElement.addEventListener("click", toggleUserMenu);
@@ -48,44 +50,68 @@ async function initAuth() {
     }
   });
 
-  // Fetch Google Client ID and initialize Google Sign-In
-  try {
-    await initGoogleSignIn();
-  } catch (error) {
-    console.error("Failed to initialize Google Sign-In:", error);
-  }
-
+  // Initialize Google Sign-In
+  initGoogleSignIn();
+  
   // Check if user is already logged in
   checkAuthStatus();
 }
 
-// Initialize Google Sign-In by fetching the Client ID from the backend
-async function initGoogleSignIn() {
-  try {
-    const response = await fetch(CONFIG_ENDPOINT);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch auth config: ${response.status}`);
-    }
+// Initialize Google Sign-In
+function initGoogleSignIn() {
+  console.log("Setting up Google Sign-In...");
+  
+  // First try to fetch the client ID from the backend
+  fetch(CONFIG_ENDPOINT)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Failed to fetch auth config: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(config => {
+      if (config.success && config.data && config.data.googleClientId) {
+        // Use the client ID from the backend
+        setupGoogleSignIn(config.data.googleClientId);
+      } else {
+        // Fallback to the client ID from config.js
+        setupGoogleSignIn(window.YCG_CONFIG.GOOGLE_CLIENT_ID);
+      }
+    })
+    .catch(error => {
+      console.error("Error fetching Google Client ID from backend:", error);
+      // Fallback to the client ID from config.js
+      setupGoogleSignIn(window.YCG_CONFIG.GOOGLE_CLIENT_ID);
+    });
+}
+
+// Set up Google Sign-In with the provided client ID
+function setupGoogleSignIn(clientId) {
+  if (!clientId || clientId === "PLACEHOLDER_GOOGLE_CLIENT_ID") {
+    console.error("No valid Google Client ID available");
+    return;
+  }
+  
+  console.log("Setting up Google Sign-In with client ID:", clientId);
+  
+  // Update the Google Sign-In button with the client ID
+  const gIdOnload = document.getElementById("g_id_onload");
+  if (gIdOnload) {
+    gIdOnload.setAttribute("data-client_id", clientId);
+    console.log("Updated Google Sign-In button with Client ID");
     
-    const config = await response.json();
-    if (!config.data || !config.data.googleClientId) {
-      throw new Error("Google Client ID not found in config response");
-    }
-    
-    const googleClientId = config.data.googleClientId;
-    console.log("Fetched Google Client ID from server");
-    
-    // Update the Google Sign-In button with the fetched Client ID
-    const gIdOnload = document.getElementById("g_id_onload");
-    if (gIdOnload) {
-      gIdOnload.setAttribute("data-client_id", googleClientId);
-      console.log("Updated Google Sign-In button with Client ID");
+    // Force re-initialization of Google Sign-In
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: handleGoogleSignIn
+      });
+      console.log("Re-initialized Google Sign-In");
     } else {
-      console.error("Google Sign-In container not found in the DOM");
+      console.warn("Google Sign-In library not loaded yet");
     }
-  } catch (error) {
-    console.error("Error fetching Google Client ID:", error);
-    throw error;
+  } else {
+    console.error("Google Sign-In container not found in the DOM");
   }
 }
 
