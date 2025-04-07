@@ -1,12 +1,14 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from werkzeug.exceptions import BadRequest, Unauthorized, InternalServerError, Conflict
 from datetime import timedelta
 import logging
 
 # Assuming services and models are structured to be imported like this
+from ..config import Config # Import Config for access to environment variables
 from ..services import auth_service, credits_service # Import credits_service
 from ..models.user import UserCreate, UserLogin, User # Use Pydantic models for validation if desired
 from ..utils.responses import success_response, error_response # Assuming you have response helpers
+from ..utils.decorators import token_required # Import the token_required decorator
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
@@ -16,7 +18,7 @@ async def register_user():
     Registers a new user with email and password.
     """
     if not request.is_json:
-        return error_response("Request must be JSON", status.HTTP_400_BAD_REQUEST)
+        return error_response("Request must be JSON", 400)
 
     data = request.get_json()
     
@@ -127,31 +129,88 @@ async def login_via_google():
     return success_response({"access_token": access_token, "token_type": "bearer"})
 
 
-# --- Placeholder for Google OAuth Login (Full Flow - Not Used Here) ---
-# @auth_bp.route('/login/google_oauth', methods=['GET'])
-# async def login_google_oauth():
-#     """Redirects user to Google for authentication."""
-#     # Construct Google OAuth URL and redirect using Flask's redirect
-#     pass
+# --- Token Verification Endpoint ---
+@auth_bp.route('/verify', methods=['POST'])
+async def verify_token():
+    """
+    Verifies if a token is valid.
+    Expects JSON payload: {"token": "jwt_token_here"}
+    Returns: {"valid": true/false}
+    """
+    if not request.is_json:
+        return error_response("Request must be JSON", 400)
 
-# @auth_bp.route('/callback/google', methods=['GET'])
-# async def callback_google():
-#     """Handles the callback from Google after authentication."""
-#     code = request.args.get('code')
-#     if not code:
-#         return error_response("Missing authorization code from Google", 400)
-#     # 1. Exchange code for Google tokens
-#     # 2. Get user profile info from Google
-#     # 3. Use auth_service.get_or_create_google_user
-#     # 4. Create access token for the user
-#     # 5. Return token (or redirect to frontend with token)
-#     pass
+    data = request.get_json()
+    token = data.get('token')
 
-# --- Placeholder for getting current user (requires token verification decorator/middleware) ---
-# from ..utils.decorators import token_required # Need to create this decorator
-# @auth_bp.route('/users/me', methods=['GET'])
-# @token_required
-# async def read_users_me(current_user: User): # Decorator would inject the user
-#     """Gets the current logged-in user's details."""
-#     user_dict = current_user.dict(exclude={'password_hash', 'google_id'})
-#     return success_response(user_dict)
+    if not token:
+        return error_response("Missing token in request", 400)
+
+    # Verify the token
+    payload = auth_service.decode_access_token(token)
+    if not payload:
+        return success_response({"valid": False})
+
+    # Check if the user exists
+    user_email = payload.get('sub')
+    if not user_email:
+        return success_response({"valid": False})
+
+    user = await auth_service.get_user_by_email(user_email)
+    if not user:
+        return success_response({"valid": False})
+
+    # Token is valid and user exists
+    return success_response({"valid": True})
+
+
+# --- User Info Endpoint ---
+@auth_bp.route('/user', methods=['GET'])
+@token_required
+async def get_user_info():
+    """
+    Returns information about the authenticated user.
+    Requires a valid JWT token in the Authorization header.
+    """
+    user_id = getattr(g, 'current_user_id', None)
+    user_email = getattr(g, 'current_user_email', None)
+    
+    if not user_id or not user_email:
+        return error_response("Authentication error", 401)
+    
+    # Get user from database
+    user = await auth_service.get_user_by_email(user_email)
+    if not user:
+        return error_response("User not found", 404)
+    
+    # Get user's credit balance
+    try:
+        credits = await credits_service.get_credit_balance(user_id)
+    except Exception as e:
+        logging.error(f"Error fetching credit balance for user {user_id}: {e}")
+        credits = 0  # Default to 0 if there's an error
+    
+    # Create user info response
+    user_info = {
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "email_verified": user.email_verified,
+        "credits": credits,
+        "picture": None,  # We don't store profile pictures yet
+        "created_at": user.created_at.isoformat() if user.created_at else None
+    }
+    
+    return success_response(user_info)
+
+
+# --- Endpoint to provide Google Client ID to frontend/extension ---
+@auth_bp.route('/config', methods=['GET'])
+async def get_auth_config():
+    """
+    Provides necessary configuration for authentication to the frontend/extension.
+    Currently returns the Google Client ID.
+    """
+    return success_response({
+        "googleClientId": Config.GOOGLE_CLIENT_ID
+    })
