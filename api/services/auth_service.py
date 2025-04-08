@@ -6,9 +6,12 @@ import uuid
 from typing import Optional, Dict, Any
 import logging
 
-# Google Auth libraries for ID token verification
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
+import httpx # Use httpx for async requests
+import logging
+
+# Google Auth libraries (we might not need id_token verification anymore if using OAuth token)
+# from google.oauth2 import id_token 
+# from google.auth.transport import requests as google_requests
 
 from ..config import Config # Use Config class directly
 from ..models.user import User, UserCreate
@@ -88,34 +91,38 @@ async def create_user(user_data: UserCreate) -> Optional[User]:
     
     return new_user
 
-# --- Google ID Token Verification ---
+# --- Google OAuth Token Verification (using userinfo endpoint) ---
 
-async def verify_google_id_token(token: str) -> Optional[Dict[str, Any]]:
-    """Verifies a Google ID token and returns the payload if valid."""
+async def verify_google_oauth_token(token: str) -> Optional[Dict[str, Any]]:
+    """Verifies a Google OAuth token by fetching user info and returns it if valid."""
+    # Google's userinfo endpoint
+    userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
+    headers = {"Authorization": f"Bearer {token}"}
+
     try:
-        if not Config.GOOGLE_CLIENT_ID:
-            logging.error("GOOGLE_CLIENT_ID is not configured.")
+        async with httpx.AsyncClient() as client:
+            response = await client.get(userinfo_url, headers=headers)
+        
+        if response.status_code == 200:
+            userinfo = response.json()
+            # Basic validation: check for 'sub' (Google ID) and 'email'
+            if 'sub' in userinfo and 'email' in userinfo:
+                 # Add email_verified if present, default to False otherwise
+                userinfo['email_verified'] = userinfo.get('email_verified', False)
+                logging.info(f"Successfully verified Google OAuth token for email: {userinfo.get('email')}")
+                return userinfo
+            else:
+                logging.error(f"Google userinfo response missing 'sub' or 'email': {userinfo}")
+                return None
+        else:
+            logging.error(f"Failed to verify Google OAuth token. Status: {response.status_code}, Response: {response.text}")
             return None
             
-        # Specify the CLIENT_ID of the app that accesses the backend:
-        idinfo = id_token.verify_oauth2_token(
-            token, 
-            google_requests.Request(), 
-            Config.GOOGLE_CLIENT_ID
-        )
-        
-        # ID token is valid. Get the user's Google Account ID from the decoded token.
-        # Other fields available: name, email, picture, etc.
-        # See: https://developers.google.com/identity/sign-in/web/backend-auth#verify-the-integrity-of-the-id-token
-        return idinfo
-
-    except ValueError as e:
-        # Invalid token
-        logging.error(f"Google ID token verification failed: {e}")
+    except httpx.RequestError as e:
+        logging.error(f"HTTP error during Google OAuth token verification: {e}")
         return None
     except Exception as e:
-        # Other potential errors
-        logging.error(f"An unexpected error occurred during Google token verification: {e}")
+        logging.error(f"An unexpected error occurred during Google OAuth token verification: {e}")
         return None
 
 
@@ -129,19 +136,19 @@ async def get_user_by_google_id(google_id: str) -> Optional[User]:
     return None # Placeholder - implement if needed with proper indexing
 
 
-async def get_or_create_google_user(idinfo: Dict[str, Any]) -> Optional[User]:
+async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Optional[User]:
     """
-    Retrieves an existing user based on Google ID info (email or google_id) 
+    Retrieves an existing user based on Google userinfo (email or google_id) 
     or creates a new user if one doesn't exist.
     """
     r = await get_redis_connection()
-    user_email = idinfo.get('email')
-    google_user_id = idinfo.get('sub') # 'sub' is the Google User ID
-    user_name = idinfo.get('name')
-    # picture = idinfo.get('picture') # Can store this too if needed
+    user_email = userinfo.get('email')
+    google_user_id = userinfo.get('sub') # 'sub' is the Google User ID
+    user_name = userinfo.get('name')
+    picture = userinfo.get('picture') # Can store this too if needed
 
     if not user_email or not google_user_id:
-        logging.error("Google ID token payload missing email or sub (google_id).")
+        logging.error("Google userinfo missing email or sub (google_id).")
         return None
 
     # 1. Check if user exists by email
@@ -171,9 +178,10 @@ async def get_or_create_google_user(idinfo: Dict[str, Any]) -> Optional[User]:
             email=user_email,
             name=user_name,
             google_id=google_user_id,
-            email_verified=idinfo.get('email_verified', False), # Use verification status from Google
+            email_verified=userinfo.get('email_verified', False), # Use verification status from Google
             created_at=datetime.utcnow()
             # No password_hash needed for Google-only users
+            # Add picture field to User model if you want to store it
         )
 
         await r.set(f"user:{new_user.email}", new_user.json())

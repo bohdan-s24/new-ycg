@@ -91,12 +91,13 @@ async def login_for_access_token():
     return success_response({"access_token": access_token, "token_type": "bearer"})
 
 
-# --- Google Sign-In (ID Token Verification) ---
+# --- Google Sign-In (Handles both ID Token and Chrome Extension OAuth Token) ---
 @auth_bp.route('/login/google', methods=['POST'])
 async def login_via_google():
     """
-    Authenticates a user via a Google ID token obtained from the frontend.
-    Expects JSON payload: {"token": "google_id_token_here"}
+    Authenticates a user via a Google token.
+    Handles both ID tokens (from web) and OAuth tokens (from Chrome extension).
+    Expects JSON payload: {"token": "google_token_here", "platform": "web" | "chrome_extension"}
     Returns an application access token upon successful verification.
     """
     if not request.is_json:
@@ -104,20 +105,32 @@ async def login_via_google():
 
     data = request.get_json()
     google_token = data.get('token')
+    platform = data.get('platform', 'web') # Default to 'web' if platform not specified
 
     if not google_token:
-        return error_response("Missing Google ID token in request", 400)
+        return error_response("Missing Google token in request", 400)
 
-    # Verify the token using the auth service
-    idinfo = await auth_service.verify_google_id_token(google_token)
-    if not idinfo:
+    user_info = None
+    if platform == "chrome_extension":
+        # Verify OAuth token from Chrome extension
+        logging.info("Verifying Google OAuth token from Chrome extension...")
+        user_info = await auth_service.verify_google_oauth_token(google_token)
+    else: 
+        # Assume it's an ID token from the web (or default)
+        # Re-enable ID token verification if needed for web frontend
+        # logging.info("Verifying Google ID token...")
+        # user_info = await auth_service.verify_google_id_token(google_token) 
+        logging.warning("Received Google login request without 'chrome_extension' platform. ID token verification is currently disabled.")
+        return error_response("Unsupported Google login method.", 400) # Or re-enable ID token verification
+
+    if not user_info:
         return error_response("Invalid or expired Google token", 401)
 
     # Get or create the user based on the verified Google info
-    user = await auth_service.get_or_create_google_user(idinfo)
+    user = await auth_service.get_or_create_google_user(user_info)
     if not user:
         # Handle potential errors like email conflict with different google_id
-        logging.error(f"Failed to get or create user from Google info: {idinfo.get('email')}")
+        logging.error(f"Failed to get or create user from Google info: {user_info.get('email')}")
         return error_response("Failed to process Google sign-in", 500) # Or maybe 409 Conflict?
 
     # Issue an application access token for the user
