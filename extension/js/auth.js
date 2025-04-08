@@ -25,6 +25,7 @@ async function initAuth() {
   
   // Get element references
   const loginButton = document.getElementById("login-btn");
+  const googleSignInButton = document.getElementById("google-signin-btn");
   const userProfileElement = document.getElementById("user-profile");
   const userAvatarElement = document.getElementById("user-avatar");
   const menuUserAvatarElement = document.getElementById("menu-user-avatar");
@@ -40,6 +41,7 @@ async function initAuth() {
   
   // Set up event listeners
   if (loginButton) loginButton.addEventListener("click", showAuthUI);
+  if (googleSignInButton) googleSignInButton.addEventListener("click", initiateGoogleSignIn);
   if (userProfileElement) userProfileElement.addEventListener("click", toggleUserMenu);
   if (logoutLink) logoutLink.addEventListener("click", handleLogout);
   if (myAccountLink) myAccountLink.addEventListener("click", openMyAccount);
@@ -56,14 +58,6 @@ async function initAuth() {
     }
   });
 
-  // Fetch Google Client ID and initialize Google Sign-In
-  try {
-    await initGoogleSignIn();
-  } catch (error) {
-    console.error("Failed to initialize Google Sign-In:", error);
-    showError("Failed to initialize Google Sign-In. Please try reloading the extension.");
-  }
-
   // Check if user is already logged in
   await checkAuthStatus();
   
@@ -71,52 +65,69 @@ async function initAuth() {
   console.log("Auth initialization complete");
 }
 
-// Initialize Google Sign-In by fetching the Client ID from the backend
-async function initGoogleSignIn() {
-  console.log("Initializing Google Sign-In...");
-  try {
-    // Add cache buster to prevent caching
-    const cacheBuster = Date.now();
-    const response = await fetch(`${CONFIG_ENDPOINT}?_=${cacheBuster}`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch auth config: ${response.status}`);
+// Initiate Google Sign-In using Chrome's identity API
+function initiateGoogleSignIn() {
+  console.log("Initiating Google Sign-In with Chrome identity API");
+  
+  chrome.identity.getAuthToken({ interactive: true }, async function(token) {
+    if (chrome.runtime.lastError) {
+      console.error("Error getting auth token:", chrome.runtime.lastError);
+      showError("Failed to sign in with Google. Please try again.");
+      return;
     }
     
-    const config = await response.json();
-    console.log("Received config:", config);
-    
-    if (!config.data || !config.data.googleClientId) {
-      throw new Error("Google Client ID not found in config response");
-    }
-    
-    const googleClientId = config.data.googleClientId;
-    console.log("Fetched Google Client ID from server:", googleClientId);
-    
-    // Update the Google Sign-In button with the fetched Client ID
-    const gIdOnload = document.getElementById("g_id_onload");
-    if (gIdOnload) {
-      gIdOnload.setAttribute("data-client_id", googleClientId);
-      console.log("Updated Google Sign-In button with Client ID");
+    try {
+      console.log("Got token from Chrome identity API");
+      // Exchange the Google token for your API token
+      const response = await fetch(GOOGLE_LOGIN_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          token: token,
+          // Add a flag to indicate this is coming from Chrome extension identity API
+          platform: "chrome_extension"
+        })
+      });
       
-      // Force Google Sign-In library to reinitialize
-      if (window.google && window.google.accounts) {
-        console.log("Reinitializing Google Sign-In...");
-        window.google.accounts.id.initialize({
-          client_id: googleClientId,
-          callback: handleGoogleSignIn
-        });
-      } else {
-        console.log("Google accounts library not loaded yet, will be initialized when script loads");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Login failed with status ${response.status}: ${errorText}`);
+        throw new Error(`Login failed: ${response.status}`);
       }
-    } else {
-      console.error("Google Sign-In container (g_id_onload) not found in the DOM");
-      throw new Error("Google Sign-In container not found");
+      
+      const loginData = await response.json();
+      console.log("Received login response:", loginData);
+      
+      // Check for success and extract token from the response
+      if (!loginData.success) {
+        throw new Error(`Login failed: ${loginData.error || "Unknown error"}`);
+      }
+      
+      if (!loginData.data || !loginData.data.access_token) {
+        throw new Error("Invalid response format: access_token not found");
+      }
+      
+      // Save the auth token
+      authToken = loginData.data.access_token;
+      chrome.storage.sync.set({ authToken });
+      console.log("Auth token saved");
+      
+      // Get user info
+      await fetchUserInfo();
+      
+      // Hide auth UI
+      hideAuthUI();
+      console.log("Login successful!");
+      
+    } catch (error) {
+      console.error("Error during Google Sign-In:", error);
+      showError("Failed to sign in with Google. Please try again.");
+      // Revoke the token if there was an error
+      chrome.identity.removeCachedAuthToken({ token });
     }
-  } catch (error) {
-    console.error("Error fetching Google Client ID:", error);
-    throw error;
-  }
+  });
 }
 
 // Check if the user is authenticated
@@ -168,66 +179,6 @@ async function checkAuthStatus() {
     throw error;
   }
 }
-
-// Global callback function for Google Sign-In
-window.handleGoogleSignIn = async (response) => {
-  try {
-    console.log("Google Sign-In callback triggered");
-    
-    if (!response || !response.credential) {
-      throw new Error("Invalid response from Google Sign-In");
-    }
-    
-    console.log("Google Sign-In successful, received credential");
-    
-    // Send the ID token to your server using the Google-specific endpoint
-    const loginResponse = await fetch(GOOGLE_LOGIN_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        token: response.credential
-      })
-    });
-    
-    if (!loginResponse.ok) {
-      const errorText = await loginResponse.text();
-      console.error(`Login failed with status ${loginResponse.status}: ${errorText}`);
-      throw new Error(`Login failed: ${loginResponse.status}`);
-    }
-    
-    const loginData = await loginResponse.json();
-    console.log("Received login response:", loginData);
-    
-    // Check for success and extract token from the response
-    if (!loginData.success) {
-      throw new Error(`Login failed: ${loginData.error || "Unknown error"}`);
-    }
-    
-    // Our backend returns data in a format like {"success": true, "data": {...}}
-    // Extract the token from the data object
-    if (!loginData.data || !loginData.data.access_token) {
-      throw new Error("Invalid response format: access_token not found");
-    }
-    
-    // Save the auth token
-    authToken = loginData.data.access_token;
-    chrome.storage.sync.set({ authToken });
-    console.log("Auth token saved");
-    
-    // Get user info
-    await fetchUserInfo();
-    
-    // Hide auth UI
-    hideAuthUI();
-    console.log("Login successful!");
-    
-  } catch (error) {
-    console.error("Error during Google Sign-In:", error);
-    showError("Failed to sign in with Google. Please try again.");
-  }
-};
 
 // Show the auth UI
 function showAuthUI() {
@@ -426,6 +377,13 @@ function handleLogout() {
   authToken = null;
   currentUser = null;
   chrome.storage.sync.remove(["authToken", "userInfo"]);
+  
+  // Also revoke any Google tokens
+  chrome.identity.getAuthToken({ interactive: false }, function(token) {
+    if (token) {
+      chrome.identity.removeCachedAuthToken({ token });
+    }
+  });
   
   // Update UI
   updateUIForLoggedOutUser();
