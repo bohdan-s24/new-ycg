@@ -7,7 +7,24 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&family=Roboto+Mono&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/popup.css">
   <script src="js/config.js"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- We'll load the Google Sign-In script dynamically after DOM content is loaded -->
+  <script>
+    // Add event listener to load Google Sign-In script after DOM content is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log("DOM fully loaded, adding Google Sign-In script");
+      const googleScript = document.createElement('script');
+      googleScript.src = "https://accounts.google.com/gsi/client";
+      googleScript.async = true;
+      googleScript.defer = true;
+      googleScript.onload = function() {
+        console.log("Google Sign-In script loaded successfully");
+      };
+      googleScript.onerror = function() {
+        console.error("Failed to load Google Sign-In script");
+      };
+      document.body.appendChild(googleScript);
+    });
+  </script>
 </head>
 <body>
   <header>
