@@ -13,6 +13,31 @@ let currentUser = null;
 let authToken = null;
 let isAuthInitialized = false;
 
+// Global variables
+let googleClientId = null;
+let user = null;
+
+// Constants
+const USER_KEY = 'ycg_user';
+const CLIENT_ID_CACHE_KEY = 'ycg_google_client_id';
+const CLIENT_ID_CACHE_EXPIRY = 3600000; // 1 hour in milliseconds
+
+// DOM Elements
+let loginBtn = null;
+let settingsBtn = null;
+let userProfile = null;
+let userMenu = null;
+let userAvatar = null;
+let menuUserAvatar = null;
+let userName = null;
+let userEmail = null;
+let creditsCount = null;
+let creditsContainer = null;
+let logoutLink = null;
+let welcomeContainer = null;
+let authContainer = null;
+let mainContent = null;
+
 // Initialize auth
 document.addEventListener("DOMContentLoaded", async function() {
   // Initialize auth only after DOM is fully loaded
@@ -23,479 +48,540 @@ document.addEventListener("DOMContentLoaded", async function() {
 async function initAuth() {
   console.log("Initializing auth...");
   
-  // Get element references
-  const loginButton = document.getElementById("login-btn");
-  const googleSignInButton = document.getElementById("google-signin-btn");
-  const userProfileElement = document.getElementById("user-profile");
-  const userAvatarElement = document.getElementById("user-avatar");
-  const menuUserAvatarElement = document.getElementById("menu-user-avatar");
-  const userMenuElement = document.getElementById("user-menu");
-  const userNameElement = document.getElementById("user-name");
-  const userEmailElement = document.getElementById("user-email");
-  const logoutLink = document.getElementById("logout-link");
-  const myAccountLink = document.getElementById("my-account-link");
-  const buyCreditsLink = document.getElementById("buy-credits-link");
-  const termsLink = document.getElementById("terms-link");
-  const privacyLink = document.getElementById("privacy-link");
-  const authContainerElement = document.getElementById("auth-container");
+  // Initialize DOM elements
+  initDomElements();
   
-  // Set up event listeners
-  if (loginButton) loginButton.addEventListener("click", showAuthUI);
-  if (googleSignInButton) googleSignInButton.addEventListener("click", initiateGoogleSignIn);
-  if (userProfileElement) userProfileElement.addEventListener("click", toggleUserMenu);
-  if (logoutLink) logoutLink.addEventListener("click", handleLogout);
-  if (myAccountLink) myAccountLink.addEventListener("click", openMyAccount);
-  if (buyCreditsLink) buyCreditsLink.addEventListener("click", openBuyCredits);
-  if (termsLink) termsLink.addEventListener("click", openTerms);
-  if (privacyLink) privacyLink.addEventListener("click", openPrivacy);
+  // Setup event listeners
+  setupEventListeners();
   
-  // Close menu when clicking outside
-  document.addEventListener("click", (e) => {
-    if (userProfileElement && userMenuElement && 
-        !userProfileElement.contains(e.target) && 
-        !userMenuElement.contains(e.target)) {
-      userMenuElement.classList.add("hidden");
-    }
-  });
-
-  // Check if user is already logged in
-  // Log existence of Google button after DOM load
-  const googleBtnOnInit = document.getElementById("google-signin-btn");
-  console.log("[Auth Init] Google Sign-In button element found:", googleBtnOnInit ? 'Yes' : 'No', googleBtnOnInit);
-
-  await checkAuthStatus();
+  // Try to get user from localStorage
+  await loadUserFromStorage();
   
-  isAuthInitialized = true;
+  // Initialize Google Sign-In
+  await initGoogleSignIn();
+  
+  // Update UI based on auth state
+  updateAuthUI();
+  
   console.log("Auth initialization complete");
 }
 
-// Initiate Google Sign-In using Chrome's identity API
-function initiateGoogleSignIn() {
-  console.log("[Auth] Initiating Google Sign-In with Chrome identity API...");
-  showLoadingAuth(true); // Show loading indicator
+// Initialize all DOM element references
+function initDomElements() {
+  console.log("[Auth] Initializing DOM elements");
   
-  chrome.identity.getAuthToken({ interactive: true }, async function(token) {
-    if (chrome.runtime.lastError || !token) {
-      console.error("[Auth] Error getting auth token:", chrome.runtime.lastError?.message || "No token received");
-      showError(`Google Sign-In failed: ${chrome.runtime.lastError?.message || "Could not retrieve token."}`);
-      showLoadingAuth(false);
+  loginBtn = document.getElementById('login-btn');
+  settingsBtn = document.getElementById('settings-btn');
+  userProfile = document.getElementById('user-profile');
+  userMenu = document.getElementById('user-menu');
+  userAvatar = document.getElementById('user-avatar');
+  menuUserAvatar = document.getElementById('menu-user-avatar');
+  userName = document.getElementById('user-name');
+  userEmail = document.getElementById('user-email');
+  creditsCount = document.getElementById('credits-count');
+  creditsContainer = document.getElementById('credits-badge');
+  logoutLink = document.getElementById('logout-link');
+  welcomeContainer = document.getElementById('welcome-container');
+  authContainer = document.getElementById('auth-container');
+  mainContent = document.getElementById('main-content');
+  
+  console.log("[Auth] DOM elements initialized");
+}
+
+// Setup event listeners
+function setupEventListeners() {
+  console.log("[Auth] Setting up event listeners");
+  
+  if (loginBtn) {
+    loginBtn.addEventListener('click', () => {
+      console.log("[Auth] Login button clicked");
+      toggleAuthContainer();
+    });
+  } else {
+    console.warn("[Auth] Login button element not found");
+  }
+  
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => {
+      console.log("[Auth] Settings button clicked");
+      toggleUserMenu();
+    });
+  } else {
+    console.warn("[Auth] Settings button element not found");
+  }
+  
+  if (userProfile) {
+    userProfile.addEventListener('click', () => {
+      console.log("[Auth] User profile clicked");
+      toggleUserMenu();
+    });
+  } else {
+    console.warn("[Auth] User profile element not found");
+  }
+  
+  if (logoutLink) {
+    logoutLink.addEventListener('click', (e) => {
+      console.log("[Auth] Logout link clicked");
+      e.preventDefault();
+      logout();
+    });
+  } else {
+    console.warn("[Auth] Logout link element not found");
+  }
+  
+  // Close user menu when clicking outside
+  document.addEventListener('click', (e) => {
+    if (userMenu && !userMenu.contains(e.target) && 
+        settingsBtn && !settingsBtn.contains(e.target) && 
+        userProfile && !userProfile.contains(e.target)) {
+      userMenu.classList.add('hidden');
+    }
+  });
+  
+  console.log("[Auth] Event listeners setup complete");
+}
+
+// Toggle the auth container visibility
+function toggleAuthContainer() {
+  console.log("[Auth] Toggling auth container");
+  
+  if (authContainer) {
+    authContainer.classList.toggle('hidden');
+  } else {
+    console.warn("[Auth] Auth container element not found");
+  }
+}
+
+// Toggle the user menu
+function toggleUserMenu() {
+  console.log("[Auth] Toggling user menu");
+  
+  if (userMenu) {
+    userMenu.classList.toggle('hidden');
+  } else {
+    console.warn("[Auth] User menu element not found");
+  }
+}
+
+// Initialize Google Sign-In
+async function initGoogleSignIn() {
+  console.log("[Auth] Initializing Google Sign-In");
+  
+  // Get Google Client ID
+  googleClientId = await getGoogleClientId();
+  
+  if (!googleClientId) {
+    console.error("[Auth] Failed to get Google Client ID");
+    return;
+  }
+  
+  console.log("[Auth] Google Client ID acquired, initializing sign-in button");
+  
+  // Find the Google Sign-In button container
+  const googleButtonContainer = document.getElementById('google-signin-button');
+  
+  if (!googleButtonContainer) {
+    console.warn("[Auth] Google Sign-In button container not found");
+    return;
+  }
+  
+  // Load the Google Identity Services JavaScript library
+  const script = document.createElement('script');
+  script.src = "https://accounts.google.com/gsi/client";
+  script.async = true;
+  script.defer = true;
+  document.head.appendChild(script);
+  
+  // Wait for the script to load
+  script.onload = () => {
+    console.log("[Auth] Google Identity Services library loaded");
+    
+    // Make handleGoogleSignIn available globally
+    window.handleGoogleSignIn = handleGoogleSignIn;
+    
+    // Initialize the button
+    google.accounts.id.initialize({
+      client_id: googleClientId,
+      callback: window.handleGoogleSignIn,
+      auto_select: false,
+      cancel_on_tap_outside: true,
+    });
+    
+    // Render the button
+    google.accounts.id.renderButton(
+      googleButtonContainer, 
+      { 
+        theme: "outline",
+        size: "large",
+        type: "standard",
+        text: "continue_with",
+        shape: "rectangular",
+        logo_alignment: "left",
+        width: 220
+      }
+    );
+    
+    console.log("[Auth] Google Sign-In button rendered");
+  };
+  
+  script.onerror = () => {
+    console.error("[Auth] Failed to load Google Identity Services library");
+    googleButtonContainer.innerHTML = "Google Sign-In Failed to Load";
+  };
+}
+
+// Get the Google Client ID from the backend
+async function getGoogleClientId() {
+  console.log("[Auth] Getting Google Client ID");
+  
+  // Check cache first
+  const cachedData = localStorage.getItem(CLIENT_ID_CACHE_KEY);
+  if (cachedData) {
+    try {
+      const { clientId, timestamp } = JSON.parse(cachedData);
+      const now = new Date().getTime();
+      
+      if (now - timestamp < CLIENT_ID_CACHE_EXPIRY) {
+        console.log("[Auth] Using cached Google Client ID");
+        googleClientId = clientId;
+        return clientId;
+      } else {
+        console.log("[Auth] Cached Google Client ID expired");
+      }
+    } catch (error) {
+      console.warn("[Auth] Error parsing cached client ID:", error);
+    }
+  }
+  
+  try {
+    // Add cache buster to prevent caching issues
+    const cacheBuster = `?t=${new Date().getTime()}`;
+    const response = await fetch(`${CONFIG_ENDPOINT}${cacheBuster}`);
+    
+    if (!response.ok) {
+      console.error(`[Auth] Failed to fetch Google Client ID: ${response.status} ${response.statusText}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    const clientId = data.googleClientId;
+    
+    if (!clientId) {
+      console.error("[Auth] No Google Client ID returned from backend");
+      return null;
+    }
+    
+    // Cache the client ID
+    localStorage.setItem(CLIENT_ID_CACHE_KEY, JSON.stringify({
+      clientId,
+      timestamp: new Date().getTime()
+    }));
+    
+    googleClientId = clientId;
+    console.log("[Auth] Successfully fetched Google Client ID from backend");
+    return clientId;
+  } catch (error) {
+    console.error("[Auth] Error fetching Google Client ID:", error);
+    return null;
+  }
+}
+
+// Handler for Google Sign-In
+// This function will be called by the Google Sign-In button
+async function handleGoogleSignIn(response) {
+  console.log("[Auth] Google Sign-In response received");
+  
+  try {
+    const token = response.credential;
+    
+    if (!token) {
+      console.error("[Auth] No credential token received from Google");
+      displayError("Google Sign-In failed. Please try again.");
       return;
     }
     
-    console.log("[Auth] Successfully received OAuth token from Chrome identity API.");
+    console.log("[Auth] Google token received, calling backend for authentication");
+    
+    // Show loading indicator
+    const googleButton = document.getElementById('google-signin-button');
+    if (googleButton) {
+      googleButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Signing in...';
+      googleButton.disabled = true;
+    }
     
     try {
-      const requestBody = {
-        token: token,
-        platform: "chrome_extension"
-      };
-      console.log("[Auth] Sending token to backend:", GOOGLE_LOGIN_ENDPOINT, JSON.stringify(requestBody));
-      
-      // Exchange the Google token for your API token
+      // Send token to backend for verification and user creation/retrieval
       const response = await fetch(GOOGLE_LOGIN_ENDPOINT, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json"
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           token: token,
-          // Add a flag to indicate this is coming from Chrome extension identity API
-          platform: "chrome_extension"
+          platform: 'chrome_extension'
         })
       });
       
-      const responseText = await response.text(); // Read response text first for better debugging
-      console.log(`[Auth] Backend response status: ${response.status}, Body: ${responseText}`);
-
-      if (!response.ok) {
-        let errorDetail = responseText;
-        try {
-          // Try parsing as JSON to get a more specific error message
-          const errorJson = JSON.parse(responseText);
-          errorDetail = errorJson.error || errorJson.message || responseText;
-        } catch (e) { /* Ignore parsing error, use raw text */ }
-        console.error(`[Auth] Backend login failed with status ${response.status}: ${errorDetail}`);
-        throw new Error(`Backend login failed: ${errorDetail} (Status: ${response.status})`);
-      }
-      
-      let loginData;
+      // Parse response JSON
+      let data;
       try {
-        loginData = JSON.parse(responseText);
-      } catch (e) {
-         console.error("[Auth] Failed to parse successful backend response as JSON:", e);
-         throw new Error("Received invalid response from backend.");
+        data = await response.json();
+      } catch (jsonError) {
+        console.error("[Auth] Failed to parse authentication response:", jsonError);
+        throw new Error("Server returned invalid response. Please try again later.");
       }
       
-      console.log("[Auth] Received successful login response:", loginData);
-      
-      // Check for success flag and extract token from the response data
-      if (!loginData.success || !loginData.data || !loginData.data.access_token) {
-         console.error("[Auth] Invalid response format from backend:", loginData);
-         throw new Error("Invalid response format from backend: access_token not found");
+      // Check if response is successful
+      if (!response.ok) {
+        console.error(`[Auth] Backend authentication failed: ${response.status}`, data);
+        const errorMessage = data?.error || `Server error (${response.status}). Please try again later.`;
+        throw new Error(errorMessage);
       }
       
-      // Save the auth token
-      authToken = loginData.data.access_token;
-      chrome.storage.sync.set({ authToken }, () => {
-         if (chrome.runtime.lastError) {
-            console.error("[Auth] Error saving auth token to storage:", chrome.runtime.lastError);
-            // Proceed anyway, but log the error
-         } else {
-            console.log("[Auth] Auth token saved successfully.");
-         }
-      });
-      
-      // Get user info (important to do this *after* saving token)
-      await fetchUserInfo();
-      
-      // Hide auth UI
-      hideAuthUI();
-      console.log("[Auth] Google Sign-In successful!");
-      
-    } catch (error) {
-      console.error("[Auth] Error during Google Sign-In processing:", error);
-      showError(`Google Sign-In failed: ${error.message}`);
-      // Revoke the token if there was an error during backend communication
-      if (token) {
-         console.log("[Auth] Revoking potentially invalid Google token...");
-         chrome.identity.removeCachedAuthToken({ token: token }, () => {
-            console.log("[Auth] Token revoked (if cached).");
-         });
+      if (!data.data || !data.data.access_token) {
+        console.error("[Auth] Invalid response format, missing access token:", data);
+        throw new Error("Invalid server response. Please try again later.");
       }
-    } finally {
-       showLoadingAuth(false); // Hide loading indicator
-    }
-  });
-}
-
-// Helper function to show/hide loading state for auth
-function showLoadingAuth(isLoading) {
-   const googleSignInButton = document.getElementById("google-signin-btn");
-   if (googleSignInButton) {
-      googleSignInButton.disabled = isLoading;
-      googleSignInButton.textContent = isLoading ? "Signing in..." : "Sign in with Google";
-      // You might want to add a spinner icon here too
-   }
-}
-
-// Check if the user is authenticated
-async function checkAuthStatus() {
-  try {
-    console.log("Checking auth status...");
-    
-    // Try to get token from storage
-    return new Promise((resolve) => {
-      chrome.storage.sync.get(["authToken", "userInfo"], async (result) => {
-        if (result.authToken) {
-          authToken = result.authToken;
-          console.log("Found auth token in storage");
-          
-          // If we have stored user info, use it immediately
-          if (result.userInfo) {
-            currentUser = result.userInfo;
-            updateUIForLoggedInUser();
-            console.log("User already logged in from stored info");
-          }
-          
-          // Verify token with server and get fresh user data
-          try {
-            const response = await verifyToken(authToken);
-            if (response.valid) {
-              await fetchUserInfo();
-              console.log("Token verified and user info refreshed");
-            } else {
-              // Token invalid or expired
-              console.log("Token invalid or expired, logging out");
-              handleLogout();
-            }
-          } catch (error) {
-            console.error("Error verifying token:", error);
-            // Don't log the user out immediately in case of server errors
-          }
-        } else {
-          // No token found, user is logged out
-          console.log("No auth token found, user is logged out");
-          updateUIForLoggedOutUser();
+      
+      // Save auth token
+      const authToken = data.data.access_token;
+      const isNewUser = data.data.new_user || false;
+      
+      // Fetch user info with the new token
+      console.log("[Auth] Authentication successful, fetching user info");
+      const userInfoResponse = await fetch(USER_INFO_ENDPOINT, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
         }
-        
-        resolve();
       });
-    });
-  } catch (error) {
-    console.error("Error checking auth status:", error);
-    updateUIForLoggedOutUser();
-    throw error;
-  }
-}
-
-// Show the auth UI
-function showAuthUI() {
-  console.log("[Auth] showAuthUI function called."); // Log function entry
-  const authContainerElement = document.getElementById("auth-container");
-  
-  if (!authContainerElement) {
-    console.error("[Auth] Auth container element (#auth-container) not found in the DOM!");
-    return;
-  }
-  
-  console.log("[Auth] Found #auth-container. Current classes:", authContainerElement.className);
-  console.log("[Auth] Removing 'hidden' class...");
-  authContainerElement.classList.remove("hidden");
-  console.log("[Auth] #auth-container classes after removal attempt:", authContainerElement.className);
-  // Force display style just in case CSS is interfering
-  authContainerElement.style.setProperty('display', 'block', 'important'); // Keep forcing container display
-  console.log("[Auth] #auth-container computed display:", getComputedStyle(authContainerElement).display);
-
-  // Also ensure the Google button is visible
-  const googleBtn = document.getElementById("google-signin-btn");
-  if (googleBtn) {
-    googleBtn.classList.remove("hidden"); // Ensure hidden class is removed if accidentally added
-    googleBtn.style.setProperty('display', 'inline-flex', 'important'); // Force display style for the button
-    console.log("[Auth] Set display: inline-flex !important on #google-signin-btn.");
-    // Use setTimeout to allow browser to apply styles before logging computed style
-    setTimeout(() => {
-       console.log("[Auth] #google-signin-btn computed display:", googleBtn ? getComputedStyle(googleBtn).display : 'Not Found');
-    }, 0);
-  } else {
-    console.error("[Auth] Google button element (#google-signin-btn) not found inside showAuthUI!");
-  }
-  
-  // Hide other UI elements (excluding the main generate button container now)
-  const otherElements = [
-    document.getElementById("status"),
-    document.getElementById("video-info"),
-    document.getElementById("error-message"),
-    // document.querySelector(".generate-button-container"), // Don't hide this anymore
-    document.getElementById("loading"),
-    document.getElementById("chapters-container")
-  ];
-  
-  otherElements.forEach(el => {
-    if (el && !el.classList.contains("hidden")) {
-      el.dataset.wasVisible = "true";
-      el.classList.add("hidden");
-    }
-  });
-}
-
-// Hide the auth UI and restore previous state
-function hideAuthUI() {
-  const authContainerElement = document.getElementById("auth-container");
-  if (!authContainerElement) {
-    console.error("Auth container not found");
-    return;
-  }
-  
-  console.log("Hiding auth UI");
-  authContainerElement.classList.add("hidden");
-  
-  // Restore previously visible elements (excluding the main generate button container)
-  const otherElements = [
-    document.getElementById("status"),
-    document.getElementById("video-info"),
-    document.getElementById("error-message"),
-    // document.querySelector(".generate-button-container"), // No need to restore this
-    document.getElementById("loading"),
-    document.getElementById("chapters-container")
-  ];
-  
-  otherElements.forEach(el => {
-    if (el && el.dataset.wasVisible === "true") {
-      el.classList.remove("hidden");
-      delete el.dataset.wasVisible;
-    }
-  });
-}
-
-// Toggle user menu visibility
-function toggleUserMenu() {
-  const userMenuElement = document.getElementById("user-menu");
-  if (!userMenuElement) {
-    console.error("User menu not found");
-    return;
-  }
-  
-  userMenuElement.classList.toggle("hidden");
-}
-
-// Update UI for logged in user
-function updateUIForLoggedInUser() {
-  if (!currentUser) return;
-  
-  const userAvatarElement = document.getElementById("user-avatar");
-  const menuUserAvatarElement = document.getElementById("menu-user-avatar");
-  const userNameElement = document.getElementById("user-name");
-  const userEmailElement = document.getElementById("user-email");
-  const loginButton = document.getElementById("login-btn");
-  const userProfileElement = document.getElementById("user-profile");
-  
-  if (!userAvatarElement || !menuUserAvatarElement || !userNameElement || 
-      !userEmailElement || !loginButton || !userProfileElement) {
-    console.error("One or more user UI elements not found");
-    return;
-  }
-  
-  // Update user profile
-  userAvatarElement.src = currentUser.picture || "icons/user.png";
-  menuUserAvatarElement.src = currentUser.picture || "icons/user.png";
-  userNameElement.textContent = currentUser.name || "User";
-  userEmailElement.textContent = currentUser.email || "";
-  
-  // Update visibility
-  loginButton.classList.add("hidden");
-  userProfileElement.classList.remove("hidden");
-  
-  // Update credits display
-  if (currentUser.credits !== undefined) {
-    const creditsCountElement = document.getElementById("credits-count");
-    if (creditsCountElement) {
-      creditsCountElement.textContent = currentUser.credits;
       
-      // Also update in popup.js state if it exists
-      if (window.userCredits !== undefined) {
-        window.userCredits = currentUser.credits;
+      if (!userInfoResponse.ok) {
+        console.error(`[Auth] User info fetch failed: ${userInfoResponse.status}`);
+        throw new Error("Failed to get user information. Please try again.");
+      }
+      
+      const userInfoData = await userInfoResponse.json();
+      
+      if (!userInfoData.data) {
+        console.error("[Auth] Invalid user info response:", userInfoData);
+        throw new Error("Invalid user data received. Please try again.");
+      }
+      
+      // Check if user received their free credits (backend should handle this automatically)
+      console.log("[Auth] User info received:", userInfoData.data);
+      
+      // Save user data to local storage
+      user = {
+        ...userInfoData.data,
+        token: authToken,
+        isNewUser: isNewUser
+      };
+      
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      
+      // Update UI
+      updateAuthUI();
+      
+      console.log("[Auth] Google Sign-In completed successfully");
+      
+      // If this is a new user, show a welcome message
+      if (isNewUser) {
+        setTimeout(() => {
+          alert(`Welcome to YouTube Chapter Generator! You've received ${user.credits} free credits to get started.`);
+        }, 500); // Small delay to ensure UI is updated
+      }
+    } catch (error) {
+      console.error("[Auth] Google Sign-In processing error:", error);
+      displayError(error.message || "Authentication failed. Please try again.");
+    } finally {
+      // Reset button state
+      if (googleButton) {
+        googleButton.innerHTML = '<span class="google-icon"></span> Continue with Google';
+        googleButton.disabled = false;
       }
     }
+  } catch (error) {
+    console.error("[Auth] Google Sign-In error:", error);
+    displayError("Google Sign-In failed. Please try again.");
   }
 }
 
-// Update UI for logged out user
-function updateUIForLoggedOutUser() {
-  const loginButton = document.getElementById("login-btn");
-  const userProfileElement = document.getElementById("user-profile");
-  const userMenuElement = document.getElementById("user-menu");
+// Load user from localStorage
+async function loadUserFromStorage() {
+  console.log("[Auth] Loading user from storage");
   
-  if (!loginButton || !userProfileElement || !userMenuElement) {
-    console.error("One or more user UI elements not found");
+  const storedUser = localStorage.getItem(USER_KEY);
+  
+  if (!storedUser) {
+    console.log("[Auth] No user found in storage");
     return;
   }
   
-  // Update visibility
-  loginButton.classList.remove("hidden");
-  userProfileElement.classList.add("hidden");
-  userMenuElement.classList.add("hidden");
-  
-  // Reset credits to default
-  const creditsCountElement = document.getElementById("credits-count");
-  if (creditsCountElement) {
-    creditsCountElement.textContent = "-";
-  }
-}
-
-// Verify the token with the server
-async function verifyToken(token) {
   try {
-    const response = await fetch(VERIFY_TOKEN_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ token })
-    });
+    user = JSON.parse(storedUser);
+    console.log("[Auth] User loaded from storage");
     
-    if (!response.ok) {
-      console.error(`Token verification failed with status ${response.status}`);
-      return { valid: false };
-    }
-    
-    return await response.json();
+    // Validate and refresh user data
+    await refreshUserData();
   } catch (error) {
-    console.error("Error verifying token:", error);
-    return { valid: false };
+    console.error("[Auth] Error loading user from storage:", error);
+    localStorage.removeItem(USER_KEY);
+    user = null;
   }
 }
 
-// Fetch user info from the server
-async function fetchUserInfo() {
+// Refresh user data from backend
+async function refreshUserData() {
+  console.log("[Auth] Refreshing user data from backend");
+  
+  if (!user || !user.userId || !user.token) {
+    console.warn("[Auth] No valid user data to refresh");
+    return false;
+  }
+  
   try {
-    if (!authToken) {
-      throw new Error("No auth token available");
-    }
-    
-    const response = await fetch(USER_INFO_ENDPOINT, {
+    const response = await fetch(`${USER_INFO_ENDPOINT}`, {
       headers: {
-        "Authorization": `Bearer ${authToken}`
+        'Authorization': `Bearer ${user.token}`
       }
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to fetch user info: ${response.status}`);
+      console.error(`[Auth] Failed to refresh user data: ${response.status} ${response.statusText}`);
+      
+      // If unauthorized, logout
+      if (response.status === 401) {
+        console.log("[Auth] User unauthorized, logging out");
+        logout();
+      }
+      
+      return false;
     }
     
     const userData = await response.json();
-    currentUser = userData;
     
-    // Save user info to storage
-    chrome.storage.sync.set({ userInfo: currentUser });
+    if (!userData || !userData.data) {
+      console.error("[Auth] Invalid response when refreshing user data");
+      return false;
+    }
     
-    // Update UI
-    updateUIForLoggedInUser();
+    // Update user data
+    user = { ...user, ...userData.data };
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    console.log("[Auth] User data refreshed successfully");
     
-    return currentUser;
+    return true;
   } catch (error) {
-    console.error("Error fetching user info:", error);
-    throw error;
+    console.error("[Auth] Error refreshing user data:", error);
+    return false;
   }
 }
 
-// Handle logout
-function handleLogout() {
-  console.log("Logging out...");
+// Logout the user
+function logout() {
+  console.log("[Auth] Logging out user");
   
-  // Clear auth data
-  authToken = null;
-  currentUser = null;
-  chrome.storage.sync.remove(["authToken", "userInfo"]);
-  
-  // Also revoke any Google tokens
-  chrome.identity.getAuthToken({ interactive: false }, function(token) {
-    if (token) {
-      chrome.identity.removeCachedAuthToken({ token });
-    }
-  });
+  // Clear user data
+  user = null;
+  localStorage.removeItem(USER_KEY);
   
   // Update UI
-  updateUIForLoggedOutUser();
+  updateAuthUI();
+  
+  console.log("[Auth] User logged out successfully");
 }
 
-// Open My Account page in a new tab
-function openMyAccount() {
-  chrome.tabs.create({ url: "https://new-ycg.vercel.app/account" });
-}
-
-// Open Buy Credits page in a new tab
-function openBuyCredits() {
-  chrome.tabs.create({ url: "https://new-ycg.vercel.app/credits" });
-}
-
-// Open Terms of Service in a new tab
-function openTerms() {
-  chrome.tabs.create({ url: "https://new-ycg.vercel.app/terms" });
-}
-
-// Open Privacy Policy in a new tab
-function openPrivacy() {
-  chrome.tabs.create({ url: "https://new-ycg.vercel.app/privacy" });
-}
-
-// Show error message
-function showError(message) {
-  const errorMessageElement = document.getElementById("error-message");
-  if (errorMessageElement) {
-    errorMessageElement.textContent = message;
-    errorMessageElement.classList.remove("hidden");
-    const statusElement = document.getElementById("status");
-    if (statusElement) {
-      statusElement.classList.add("hidden");
+// Update the UI based on auth state
+function updateAuthUI() {
+  console.log("[Auth] Updating auth UI");
+  
+  if (user) {
+    console.log("[Auth] User is logged in, updating UI for authenticated state");
+    
+    // Show authenticated UI elements
+    if (loginBtn) loginBtn.classList.add('hidden');
+    if (settingsBtn) settingsBtn.classList.remove('hidden');
+    if (userProfile) userProfile.classList.remove('hidden');
+    if (creditsContainer) creditsContainer.classList.remove('hidden');
+    
+    // Hide welcome and auth container
+    if (welcomeContainer) welcomeContainer.classList.add('hidden');
+    if (authContainer) authContainer.classList.add('hidden');
+    
+    // Show main content
+    if (mainContent) mainContent.classList.remove('hidden');
+    
+    // Update user info
+    if (userAvatar && user.picture) userAvatar.src = user.picture;
+    if (menuUserAvatar && user.picture) menuUserAvatar.src = user.picture;
+    if (userName) userName.textContent = user.name || 'User';
+    if (userEmail) userEmail.textContent = user.email || '';
+    
+    // Update credits
+    if (creditsCount) {
+      creditsCount.textContent = user.credits !== undefined ? user.credits : '-';
     }
-    console.error(`Error displayed: ${message}`);
+    
+    // Give new users 3 free credits
+    if (user.credits === undefined) {
+      user.credits = 3;
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+      creditsCount.textContent = user.credits;
+    }
+  } else {
+    console.log("[Auth] No user logged in, updating UI for unauthenticated state");
+    
+    // Show unauthenticated UI elements
+    if (loginBtn) loginBtn.classList.remove('hidden');
+    if (settingsBtn) settingsBtn.classList.add('hidden');
+    if (userProfile) userProfile.classList.add('hidden');
+    if (creditsContainer) creditsContainer.classList.add('hidden');
+    
+    // Show welcome screen, hide auth container
+    if (welcomeContainer) welcomeContainer.classList.remove('hidden');
+    if (authContainer) authContainer.classList.add('hidden');
+    
+    // Hide main content
+    if (mainContent) mainContent.classList.add('hidden');
+  }
+  
+  console.log("[Auth] Auth UI update complete");
+}
+
+// Display an error message
+function displayError(message) {
+  console.error(`[Auth] Error: ${message}`);
+  
+  // Find the error element
+  const errorElement = document.getElementById('error-message');
+  
+  if (errorElement) {
+    errorElement.textContent = message;
+    errorElement.classList.remove('hidden');
+    
+    // Hide after 5 seconds
+    setTimeout(() => {
+      errorElement.classList.add('hidden');
+    }, 5000);
+  } else {
+    // Fallback to alert if error element doesn't exist
+    alert(`Authentication Error: ${message}`);
   }
 }
 
-// Export functions and state for use in popup.js
+// Get the current user
+function getCurrentUser() {
+  return user;
+}
+
+// Check if user is logged in
+function isLoggedIn() {
+  return !!user;
+}
+
+// Export functions for external use
 window.auth = {
-  isAuthenticated: () => !!authToken,
-  getCurrentUser: () => currentUser,
-  getAuthToken: () => authToken,
-  isAuthInitialized: () => isAuthInitialized
+  getCurrentUser,
+  isLoggedIn,
+  logout
 };

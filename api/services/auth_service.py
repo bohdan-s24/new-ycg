@@ -3,7 +3,7 @@ from passlib.context import CryptContext
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 import uuid
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 import logging
 
 import httpx # Use httpx for async requests
@@ -158,10 +158,15 @@ async def get_user_by_google_id(google_id: str) -> Optional[User]:
         return None
 
 
-async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Optional[User]:
+async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Tuple[Optional[User], bool]:
     """
     Retrieves an existing user based on Google userinfo (email or google_id) 
     or creates a new user if one doesn't exist.
+    
+    Returns:
+        A tuple (user, is_new_user) where:
+        - user: The User object or None if an error occurred
+        - is_new_user: Boolean indicating whether this was a new user registration
     """
     r = await get_redis_connection()
     user_email = userinfo.get('email')
@@ -171,7 +176,7 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Optional[User]:
 
     if not user_email or not google_user_id:
         logging.error("Google userinfo missing email or sub (google_id).")
-        return None
+        return None, False
 
     # 1. Check if user exists by email
     user = await get_user_by_email(user_email)
@@ -190,8 +195,8 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Optional[User]:
             # This case is problematic: same email, different Google ID. Log an error.
             logging.error(f"User email {user_email} exists but with a different Google ID ({user.google_id}) than the one provided ({google_user_id}).")
             # Decide how to handle this - maybe return None or raise an exception?
-            return None 
-        return user
+            return None, False 
+        return user, False
     else:
         # 2. User not found by email, create a new user
         logging.info(f"Creating new user from Google login: {user_email}")
@@ -227,7 +232,7 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Optional[User]:
             logging.error(f"Failed to initialize credits for new Google user {new_user.id}: {e}")
             # Continue user creation even if credit init fails
 
-        return new_user
+        return new_user, True
 
 # --- Placeholder for Email Verification ---
 # async def generate_verification_token(user_email: str) -> str:

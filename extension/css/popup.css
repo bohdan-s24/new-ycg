@@ -390,3 +390,51 @@ footer a {
 footer a:hover {
   text-decoration: underline;
 }
+
+/* Welcome Container */
+.welcome-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+}
+
+.welcome-content {
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.welcome-content h2 {
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.welcome-message {
+  margin-bottom: 20px;
+  color: #666;
+}
+
+.google-signin-button {
+  margin: 24px auto;
+  width: 100%;
+  max-width: 240px;
+  display: flex;
+  justify-content: center;
+}
+
+.auth-footer {
+  margin-top: 20px;
+  font-size: 12px;
+  color: #777;
+}
+
+.auth-footer a {
+  color: #4285F4;
+  text-decoration: none;
+}
+
+.auth-footer a:hover {
+  text-decoration: underline;
+}

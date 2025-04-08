@@ -127,7 +127,15 @@ async def login_via_google():
         return error_response("Invalid or expired Google token", 401)
 
     # Get or create the user based on the verified Google info
-    user = await auth_service.get_or_create_google_user(user_info)
+    user_result = await auth_service.get_or_create_google_user(user_info)
+    
+    # Check if we got a tuple (user, is_new_user) or just a user object
+    if isinstance(user_result, tuple) and len(user_result) == 2:
+        user, is_new_user = user_result
+    else:
+        user = user_result
+        is_new_user = False
+        
     if not user:
         # Handle potential errors like email conflict with different google_id
         logging.error(f"Failed to get or create user from Google info: {user_info.get('email')}")
@@ -139,7 +147,11 @@ async def login_via_google():
         data={"sub": user.email, "user_id": user.id}, expires_delta=access_token_expires
     )
 
-    return success_response({"access_token": access_token, "token_type": "bearer"})
+    return success_response({
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "new_user": is_new_user  # Include flag indicating if this is a new user
+    })
 
 
 # --- Token Verification Endpoint ---
