@@ -10,6 +10,11 @@ class Config:
     WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY") # Loaded from Vercel env
     REDIS_URL = os.environ.get("REDIS_URL") # Loaded from Vercel env (Upstash)
+
+    # Payment processing
+    STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY")
+    STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
+
     # Google OAuth Client ID (Hardcoded as requested)
     GOOGLE_CLIENT_ID = "373897257675-i561f2gcpv310b61bptj0ge2bmvdm03m.apps.googleusercontent.com"
 
@@ -17,7 +22,14 @@ class Config:
     OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
 
-    
+    # Credit plans
+    FREE_CREDITS = 3
+    BASIC_PLAN_CREDITS = 10
+    BASIC_PLAN_PRICE = 9
+    PREMIUM_PLAN_CREDITS = 50
+    PREMIUM_PLAN_PRICE = 29
+
+
     # Proxy configuration
     @classmethod
     def get_proxy_url(cls) -> Optional[str]:
@@ -25,7 +37,7 @@ class Config:
         if cls.WEBSHARE_USERNAME and cls.WEBSHARE_PASSWORD:
             return f"http://{cls.WEBSHARE_USERNAME}:{cls.WEBSHARE_PASSWORD}@p.webshare.io:80"
         return None
-    
+
     @classmethod
     def get_proxy_dict(cls) -> Optional[Dict[str, str]]:
         """Get proxy dictionary for requests"""
@@ -36,12 +48,12 @@ class Config:
                 'https': proxy_url
             }
         return None
-    
+
     @classmethod
     def get_webshare_proxy_config(cls) -> Any:
         """Get WebshareProxyConfig for youtube_transcript_api"""
         from youtube_transcript_api.proxies import WebshareProxyConfig
-        
+
         if cls.WEBSHARE_USERNAME and cls.WEBSHARE_PASSWORD:
             return WebshareProxyConfig(
                 proxy_username=cls.WEBSHARE_USERNAME,

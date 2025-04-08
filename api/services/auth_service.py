@@ -10,7 +10,7 @@ import httpx # Use httpx for async requests
 import logging
 
 # Google Auth libraries (we might not need id_token verification anymore if using OAuth token)
-# from google.oauth2 import id_token 
+# from google.oauth2 import id_token
 # from google.auth.transport import requests as google_requests
 
 from ..config import Config # Use Config class directly
@@ -50,7 +50,7 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
     """Decodes a JWT access token."""
     if not Config.JWT_SECRET_KEY:
         # Log this error, as it shouldn't happen in a configured environment
-        print("ERROR: JWT_SECRET_KEY not configured for decoding.") 
+        print("ERROR: JWT_SECRET_KEY not configured for decoding.")
         return None
     try:
         payload = jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=[ALGORITHM])
@@ -76,7 +76,7 @@ async def create_user(user_data: UserCreate) -> Optional[User]:
 
     hashed_password = get_password_hash(user_data.password)
     user_id = str(uuid.uuid4())
-    
+
     new_user = User(
         id=user_id,
         email=user_data.email,
@@ -88,7 +88,7 @@ async def create_user(user_data: UserCreate) -> Optional[User]:
 
     await r.set(f"user:{new_user.email}", new_user.json())
     # Consider setting an index for user ID if needed: await r.set(f"userid:{user_id}", new_user.email)
-    
+
     return new_user
 
 # --- Google OAuth Token Verification (using userinfo endpoint) ---
@@ -99,12 +99,19 @@ async def verify_google_oauth_token(token: str) -> Optional[Dict[str, Any]]:
     userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
     headers = {"Authorization": f"Bearer {token}"}
 
+    logging.info(f"Verifying Google OAuth token using userinfo endpoint")
+
     try:
         async with httpx.AsyncClient() as client:
+            logging.info(f"Sending request to {userinfo_url}")
             response = await client.get(userinfo_url, headers=headers)
-        
+
+        logging.info(f"Google userinfo response status: {response.status_code}")
+
         if response.status_code == 200:
             userinfo = response.json()
+            logging.info(f"Google userinfo response: {userinfo}")
+
             # Basic validation: check for 'sub' (Google ID) and 'email'
             if 'sub' in userinfo and 'email' in userinfo:
                  # Add email_verified if present, default to False otherwise
@@ -115,9 +122,10 @@ async def verify_google_oauth_token(token: str) -> Optional[Dict[str, Any]]:
                 logging.error(f"Google userinfo response missing 'sub' or 'email': {userinfo}")
                 return None
         else:
-            logging.error(f"Failed to verify Google OAuth token. Status: {response.status_code}, Response: {response.text}")
+            response_text = await response.text()
+            logging.error(f"Failed to verify Google OAuth token. Status: {response.status_code}, Response: {response_text}")
             return None
-            
+
     except httpx.RequestError as e:
         logging.error(f"HTTP error during Google OAuth token verification: {e}")
         return None
@@ -135,11 +143,11 @@ async def get_user_by_google_id(google_id: str) -> Optional[User]:
     r = await get_redis_connection()
     google_id_key = f"googleid:{google_id}"
     user_key = await r.get(google_id_key) # Get the primary user key (e.g., user:email@example.com)
-    
+
     if not user_key:
         logging.info(f"No user found for Google ID index: {google_id_key}")
         return None
-        
+
     # Now retrieve the actual user data using the primary key
     user_data_json = await r.get(user_key)
     if user_data_json:
@@ -160,9 +168,9 @@ async def get_user_by_google_id(google_id: str) -> Optional[User]:
 
 async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Tuple[Optional[User], bool]:
     """
-    Retrieves an existing user based on Google userinfo (email or google_id) 
+    Retrieves an existing user based on Google userinfo (email or google_id)
     or creates a new user if one doesn't exist.
-    
+
     Returns:
         A tuple (user, is_new_user) where:
         - user: The User object or None if an error occurred
@@ -195,13 +203,13 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Tuple[Optional[
             # This case is problematic: same email, different Google ID. Log an error.
             logging.error(f"User email {user_email} exists but with a different Google ID ({user.google_id}) than the one provided ({google_user_id}).")
             # Decide how to handle this - maybe return None or raise an exception?
-            return None, False 
+            return None, False
         return user, False
     else:
         # 2. User not found by email, create a new user
         logging.info(f"Creating new user from Google login: {user_email}")
         new_user_id = str(uuid.uuid4()) # Generate our own internal ID
-        
+
         new_user = User(
             id=new_user_id,
             email=user_email,
@@ -222,7 +230,7 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Tuple[Optional[
             pipe.set(google_id_key, user_key) # Map googleid to primary user key
             # Consider setting userid index too: pipe.set(f"userid:{new_user_id}", user_key)
             await pipe.execute()
-        
+
         logging.info(f"Stored new user {user_key} and index {google_id_key}")
 
         # Initialize credits for the new user

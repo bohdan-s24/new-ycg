@@ -21,7 +21,7 @@ async def register_user():
         return error_response("Request must be JSON", 400)
 
     data = request.get_json()
-    
+
     try:
         # Validate input using Pydantic if preferred
         user_data = UserCreate(**data)
@@ -64,7 +64,7 @@ async def login_for_access_token():
         return error_response("Request must be JSON", 400)
 
     data = request.get_json()
-    
+
     try:
         # Validate input using Pydantic if preferred
         login_data = UserLogin(**data)
@@ -73,7 +73,7 @@ async def login_for_access_token():
         return error_response(f"Invalid login data: {e}", 400)
 
     user = await auth_service.get_user_by_email(login_data.email)
-    
+
     # Use secure comparison for password check
     if not user or not user.password_hash or not auth_service.verify_password(login_data.password, user.password_hash):
         return error_response("Incorrect email or password", 401) # Unauthorized
@@ -100,55 +100,69 @@ async def login_via_google():
     Expects JSON payload: {"token": "google_token_here", "platform": "web" | "chrome_extension"}
     Returns an application access token upon successful verification.
     """
+    logging.info("Google login request received")
+
     if not request.is_json:
+        logging.error("Request is not JSON")
         return error_response("Request must be JSON", 400)
 
     data = request.get_json()
+    logging.info(f"Request data: {data}")
+
     google_token = data.get('token')
     platform = data.get('platform', 'web') # Default to 'web' if platform not specified
 
     if not google_token:
+        logging.error("Missing Google token in request")
         return error_response("Missing Google token in request", 400)
+
+    logging.info(f"Processing Google login with platform: {platform}")
 
     user_info = None
     if platform == "chrome_extension":
         # Verify OAuth token from Chrome extension
         logging.info("Verifying Google OAuth token from Chrome extension...")
         user_info = await auth_service.verify_google_oauth_token(google_token)
-    else: 
+    else:
         # Assume it's an ID token from the web (or default)
         # Re-enable ID token verification if needed for web frontend
         # logging.info("Verifying Google ID token...")
-        # user_info = await auth_service.verify_google_id_token(google_token) 
+        # user_info = await auth_service.verify_google_id_token(google_token)
         logging.warning("Received Google login request without 'chrome_extension' platform. ID token verification is currently disabled.")
         return error_response("Unsupported Google login method.", 400) # Or re-enable ID token verification
 
     if not user_info:
+        logging.error("Failed to verify Google token")
         return error_response("Invalid or expired Google token", 401)
 
     # Get or create the user based on the verified Google info
+    logging.info(f"Getting or creating user for Google ID: {user_info.get('sub')}")
     user_result = await auth_service.get_or_create_google_user(user_info)
-    
+
     # Check if we got a tuple (user, is_new_user) or just a user object
     if isinstance(user_result, tuple) and len(user_result) == 2:
         user, is_new_user = user_result
+        logging.info(f"User result: user={user.email}, is_new_user={is_new_user}")
     else:
         user = user_result
         is_new_user = False
-        
+        logging.info(f"User result: user={user.email if user else None}, is_new_user=False")
+
     if not user:
         # Handle potential errors like email conflict with different google_id
         logging.error(f"Failed to get or create user from Google info: {user_info.get('email')}")
         return error_response("Failed to process Google sign-in", 500) # Or maybe 409 Conflict?
 
     # Issue an application access token for the user
+    logging.info(f"Creating access token for user: {user.email}")
     access_token_expires = timedelta(minutes=auth_service.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = auth_service.create_access_token(
         data={"sub": user.email, "user_id": user.id}, expires_delta=access_token_expires
     )
 
+    logging.info(f"Google login successful for user: {user.email}")
     return success_response({
-        "access_token": access_token, 
+        "access_token": access_token,
         "token_type": "bearer",
         "new_user": is_new_user  # Include flag indicating if this is a new user
     })
@@ -199,22 +213,22 @@ async def get_user_info():
     """
     user_id = getattr(g, 'current_user_id', None)
     user_email = getattr(g, 'current_user_email', None)
-    
+
     if not user_id or not user_email:
         return error_response("Authentication error", 401)
-    
+
     # Get user from database
     user = await auth_service.get_user_by_email(user_email)
     if not user:
         return error_response("User not found", 404)
-    
+
     # Get user's credit balance
     try:
         credits = await credits_service.get_credit_balance(user_id)
     except Exception as e:
         logging.error(f"Error fetching credit balance for user {user_id}: {e}")
         credits = 0  # Default to 0 if there's an error
-    
+
     # Create user info response
     user_info = {
         "id": user.id,
@@ -225,7 +239,7 @@ async def get_user_info():
         "picture": None,  # We don't store profile pictures yet
         "created_at": user.created_at.isoformat() if user.created_at else None
     }
-    
+
     return success_response(user_info)
 
 

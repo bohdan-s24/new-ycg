@@ -15,7 +15,7 @@ from api.routes import register_all_routes
 def create_app() -> Flask:
     """
     Create and configure the Flask application
-    
+
     Returns:
         Configured Flask application instance
     """
@@ -23,18 +23,22 @@ def create_app() -> Flask:
     print(f"Python version: {sys.version}")
     print(f"Current working directory: {os.getcwd()}")
     print(f"Files in current directory: {os.listdir()}")
-    
+
     # Create Flask app
     app = Flask(__name__)
     CORS(app, resources={r"/*": {"origins": "*"}})
     print("Flask app created and CORS configured")
-    
+
     # Print config information
     print(f"Environment variables loaded: OPENAI_API_KEY={'✓' if Config.OPENAI_API_KEY else '✗'}, "
           f"WEBSHARE_USERNAME={'✓' if Config.WEBSHARE_USERNAME else '✗'}, "
-          f"WEBSHARE_PASSWORD={'✓' if Config.WEBSHARE_PASSWORD else '✗'}")
-    
+          f"WEBSHARE_PASSWORD={'✓' if Config.WEBSHARE_PASSWORD else '✗'}, "
+          f"JWT_SECRET_KEY={'✓' if Config.JWT_SECRET_KEY else '✗'}, "
+          f"REDIS_URL={'✓' if Config.REDIS_URL else '✗'}, "
+          f"STRIPE_API_KEY={'✓' if Config.STRIPE_API_KEY else '✗'}, "
+          f"STRIPE_WEBHOOK_SECRET={'✓' if Config.STRIPE_WEBHOOK_SECRET else '✗'}")
+
     # Register routes
     register_all_routes(app)
-    
+
     return app
