@@ -6,7 +6,9 @@
   "permissions": ["activeTab", "storage"],
   "host_permissions": [
     "https://www.youtube.com/*",
-    "https://new-ycg.vercel.app/*"
+    "https://new-ycg.vercel.app/*",
+    "https://accounts.google.com/*",
+    "https://apis.google.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -28,6 +30,6 @@
     "128": "icons/icon128.png"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "script-src 'self' https://accounts.google.com https://apis.google.com; object-src 'self'; connect-src 'self' https://new-ycg.vercel.app https://accounts.google.com https://apis.google.com"
   }
-} 
+}
