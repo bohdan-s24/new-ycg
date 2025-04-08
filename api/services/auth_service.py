@@ -131,9 +131,31 @@ async def get_user_by_google_id(google_id: str) -> Optional[User]:
     # This requires an index like 'googleid:<google_id>' -> 'user_email' or storing google_id directly in user data
     # For simplicity, let's assume we store google_id in the user object and search by email first
     # A more robust solution might involve a secondary index.
-    # This function might not be strictly necessary if get_or_create handles it.
-    logging.warning("get_user_by_google_id is not fully implemented - relies on email lookup primarily.")
-    return None # Placeholder - implement if needed with proper indexing
+    """Retrieves a user from Redis by their Google ID using the secondary index."""
+    r = await get_redis_connection()
+    google_id_key = f"googleid:{google_id}"
+    user_key = await r.get(google_id_key) # Get the primary user key (e.g., user:email@example.com)
+    
+    if not user_key:
+        logging.info(f"No user found for Google ID index: {google_id_key}")
+        return None
+        
+    # Now retrieve the actual user data using the primary key
+    user_data_json = await r.get(user_key)
+    if user_data_json:
+        try:
+            user_data = User.parse_raw(user_data_json)
+            logging.info(f"Retrieved user {user_key} using Google ID {google_id}")
+            return user_data
+        except Exception as e:
+            logging.error(f"Failed to parse user data for key {user_key} retrieved via Google ID {google_id}: {e}")
+            return None
+    else:
+        # This indicates an inconsistency, the index exists but the user data doesn't
+        logging.error(f"Inconsistency: Google ID index {google_id_key} points to non-existent user key {user_key}")
+        # Optionally, clean up the stale index
+        # await r.delete(google_id_key)
+        return None
 
 
 async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Optional[User]:
@@ -161,7 +183,9 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Optional[User]:
             user.google_id = google_user_id
             # Update user data in Redis
             await r.set(f"user:{user.email}", user.json())
-            # Consider adding/updating the google_id index if you implement one
+            # Set the secondary index googleid:<google_id> -> user:<email>
+            await r.set(f"googleid:{google_user_id}", f"user:{user.email}")
+            logging.info(f"Set Google ID index for {google_user_id} to {f'user:{user.email}'}")
         elif user.google_id != google_user_id:
             # This case is problematic: same email, different Google ID. Log an error.
             logging.error(f"User email {user_email} exists but with a different Google ID ({user.google_id}) than the one provided ({google_user_id}).")
@@ -184,9 +208,17 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Optional[User]:
             # Add picture field to User model if you want to store it
         )
 
-        await r.set(f"user:{new_user.email}", new_user.json())
-        # Consider setting indexes: await r.set(f"userid:{new_user_id}", new_user.email)
-        # await r.set(f"googleid:{google_user_id}", new_user.email) # If implementing google_id index
+        # Store primary user data and secondary indexes
+        user_key = f"user:{new_user.email}"
+        google_id_key = f"googleid:{google_user_id}"
+        # Use a pipeline for atomic operations
+        async with r.pipeline(transaction=True) as pipe:
+            pipe.set(user_key, new_user.json())
+            pipe.set(google_id_key, user_key) # Map googleid to primary user key
+            # Consider setting userid index too: pipe.set(f"userid:{new_user_id}", user_key)
+            await pipe.execute()
+        
+        logging.info(f"Stored new user {user_key} and index {google_id_key}")
 
         # Initialize credits for the new user
         try:

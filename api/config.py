@@ -10,8 +10,8 @@ class Config:
     WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY") # Loaded from Vercel env
     REDIS_URL = os.environ.get("REDIS_URL") # Loaded from Vercel env (Upstash)
-    # Google OAuth Client ID (for verifying ID tokens from frontend)
-    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID") # Loaded from Vercel env
+    # Google OAuth Client ID (Hardcoded as requested)
+    GOOGLE_CLIENT_ID = "373897257675-i561f2gcpv310b61bptj0ge2bmvdm03m.apps.googleusercontent.com"
 
     # API configurations
     OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]
