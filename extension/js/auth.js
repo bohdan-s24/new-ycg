@@ -67,17 +67,26 @@ async function initAuth() {
 
 // Initiate Google Sign-In using Chrome's identity API
 function initiateGoogleSignIn() {
-  console.log("Initiating Google Sign-In with Chrome identity API");
+  console.log("[Auth] Initiating Google Sign-In with Chrome identity API...");
+  showLoadingAuth(true); // Show loading indicator
   
   chrome.identity.getAuthToken({ interactive: true }, async function(token) {
-    if (chrome.runtime.lastError) {
-      console.error("Error getting auth token:", chrome.runtime.lastError);
-      showError("Failed to sign in with Google. Please try again.");
+    if (chrome.runtime.lastError || !token) {
+      console.error("[Auth] Error getting auth token:", chrome.runtime.lastError?.message || "No token received");
+      showError(`Google Sign-In failed: ${chrome.runtime.lastError?.message || "Could not retrieve token."}`);
+      showLoadingAuth(false);
       return;
     }
     
+    console.log("[Auth] Successfully received OAuth token from Chrome identity API.");
+    
     try {
-      console.log("Got token from Chrome identity API");
+      const requestBody = {
+        token: token,
+        platform: "chrome_extension"
+      };
+      console.log("[Auth] Sending token to backend:", GOOGLE_LOGIN_ENDPOINT, JSON.stringify(requestBody));
+      
       // Exchange the Google token for your API token
       const response = await fetch(GOOGLE_LOGIN_ENDPOINT, {
         method: "POST",
@@ -91,43 +100,78 @@ function initiateGoogleSignIn() {
         })
       });
       
+      const responseText = await response.text(); // Read response text first for better debugging
+      console.log(`[Auth] Backend response status: ${response.status}, Body: ${responseText}`);
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Login failed with status ${response.status}: ${errorText}`);
-        throw new Error(`Login failed: ${response.status}`);
+        let errorDetail = responseText;
+        try {
+          // Try parsing as JSON to get a more specific error message
+          const errorJson = JSON.parse(responseText);
+          errorDetail = errorJson.error || errorJson.message || responseText;
+        } catch (e) { /* Ignore parsing error, use raw text */ }
+        console.error(`[Auth] Backend login failed with status ${response.status}: ${errorDetail}`);
+        throw new Error(`Backend login failed: ${errorDetail} (Status: ${response.status})`);
       }
       
-      const loginData = await response.json();
-      console.log("Received login response:", loginData);
-      
-      // Check for success and extract token from the response
-      if (!loginData.success) {
-        throw new Error(`Login failed: ${loginData.error || "Unknown error"}`);
+      let loginData;
+      try {
+        loginData = JSON.parse(responseText);
+      } catch (e) {
+         console.error("[Auth] Failed to parse successful backend response as JSON:", e);
+         throw new Error("Received invalid response from backend.");
       }
       
-      if (!loginData.data || !loginData.data.access_token) {
-        throw new Error("Invalid response format: access_token not found");
+      console.log("[Auth] Received successful login response:", loginData);
+      
+      // Check for success flag and extract token from the response data
+      if (!loginData.success || !loginData.data || !loginData.data.access_token) {
+         console.error("[Auth] Invalid response format from backend:", loginData);
+         throw new Error("Invalid response format from backend: access_token not found");
       }
       
       // Save the auth token
       authToken = loginData.data.access_token;
-      chrome.storage.sync.set({ authToken });
-      console.log("Auth token saved");
+      chrome.storage.sync.set({ authToken }, () => {
+         if (chrome.runtime.lastError) {
+            console.error("[Auth] Error saving auth token to storage:", chrome.runtime.lastError);
+            // Proceed anyway, but log the error
+         } else {
+            console.log("[Auth] Auth token saved successfully.");
+         }
+      });
       
-      // Get user info
+      // Get user info (important to do this *after* saving token)
       await fetchUserInfo();
       
       // Hide auth UI
       hideAuthUI();
-      console.log("Login successful!");
+      console.log("[Auth] Google Sign-In successful!");
       
     } catch (error) {
-      console.error("Error during Google Sign-In:", error);
-      showError("Failed to sign in with Google. Please try again.");
-      // Revoke the token if there was an error
-      chrome.identity.removeCachedAuthToken({ token });
+      console.error("[Auth] Error during Google Sign-In processing:", error);
+      showError(`Google Sign-In failed: ${error.message}`);
+      // Revoke the token if there was an error during backend communication
+      if (token) {
+         console.log("[Auth] Revoking potentially invalid Google token...");
+         chrome.identity.removeCachedAuthToken({ token: token }, () => {
+            console.log("[Auth] Token revoked (if cached).");
+         });
+      }
+    } finally {
+       showLoadingAuth(false); // Hide loading indicator
     }
   });
+}
+
+// Helper function to show/hide loading state for auth
+function showLoadingAuth(isLoading) {
+   const googleSignInButton = document.getElementById("google-signin-btn");
+   if (googleSignInButton) {
+      googleSignInButton.disabled = isLoading;
+      googleSignInButton.textContent = isLoading ? "Signing in..." : "Sign in with Google";
+      // You might want to add a spinner icon here too
+   }
 }
 
 // Check if the user is authenticated
