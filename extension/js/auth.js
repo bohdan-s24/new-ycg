@@ -238,6 +238,9 @@ function showAuthUI() {
   console.log("[Auth] Removing 'hidden' class...");
   authContainerElement.classList.remove("hidden");
   console.log("[Auth] #auth-container classes after removal attempt:", authContainerElement.className);
+  // Force display style just in case CSS is interfering
+  authContainerElement.style.setProperty('display', 'block', 'important');
+  console.log("[Auth] Set display: block !important on #auth-container.");
   
   // Hide other UI elements
   const otherElements = [
