@@ -59,6 +59,10 @@ async function initAuth() {
   });
 
   // Check if user is already logged in
+  // Log existence of Google button after DOM load
+  const googleBtnOnInit = document.getElementById("google-signin-btn");
+  console.log("[Auth Init] Google Sign-In button element found:", googleBtnOnInit ? 'Yes' : 'No', googleBtnOnInit);
+
   await checkAuthStatus();
   
   isAuthInitialized = true;
@@ -239,8 +243,22 @@ function showAuthUI() {
   authContainerElement.classList.remove("hidden");
   console.log("[Auth] #auth-container classes after removal attempt:", authContainerElement.className);
   // Force display style just in case CSS is interfering
-  authContainerElement.style.setProperty('display', 'block', 'important');
-  console.log("[Auth] Set display: block !important on #auth-container.");
+  authContainerElement.style.setProperty('display', 'block', 'important'); // Keep forcing container display
+  console.log("[Auth] #auth-container computed display:", getComputedStyle(authContainerElement).display);
+
+  // Also ensure the Google button is visible
+  const googleBtn = document.getElementById("google-signin-btn");
+  if (googleBtn) {
+    googleBtn.classList.remove("hidden"); // Ensure hidden class is removed if accidentally added
+    googleBtn.style.setProperty('display', 'inline-flex', 'important'); // Force display style for the button
+    console.log("[Auth] Set display: inline-flex !important on #google-signin-btn.");
+    // Use setTimeout to allow browser to apply styles before logging computed style
+    setTimeout(() => {
+       console.log("[Auth] #google-signin-btn computed display:", googleBtn ? getComputedStyle(googleBtn).display : 'Not Found');
+    }, 0);
+  } else {
+    console.error("[Auth] Google button element (#google-signin-btn) not found inside showAuthUI!");
+  }
   
   // Hide other UI elements
   const otherElements = [
