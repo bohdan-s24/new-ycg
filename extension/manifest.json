@@ -3,7 +3,7 @@
   "name": "YouTube Chapter Generator",
   "version": "1.0.0",
   "description": "Automatically generate chapters for YouTube videos using AI",
-  "permissions": ["activeTab", "storage", "identity", "https://new-ycg.vercel.app/*", "https://www.googleapis.com/*"],
+  "permissions": ["activeTab", "storage", "identity"],
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://new-ycg.vercel.app/*"

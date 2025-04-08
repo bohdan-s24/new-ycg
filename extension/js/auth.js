@@ -217,6 +217,10 @@ async function handleGoogleSignIn() {
     console.log(`[Auth] Sending token to backend: ${GOOGLE_LOGIN_ENDPOINT}`);
     let response;
     try {
+      // Log the token details (but not the full token for security)
+      const tokenPrefix = token.substring(0, 10);
+      console.log(`[Auth] Token prefix: ${tokenPrefix}...`);
+
       response = await fetch(GOOGLE_LOGIN_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -250,6 +254,30 @@ async function handleGoogleSignIn() {
         } else if (response.status === 404) {
           console.error("[Auth] API endpoint not found. Check server configuration.");
           throw new Error(`Backend API not found (404). Please check server configuration.`);
+        } else if (response.status === 500) {
+          console.error("[Auth] Server error (500). The backend server encountered an error.");
+
+          // Try to revoke the token in case it's causing the issue
+          await new Promise((resolve) => {
+            chrome.identity.removeCachedAuthToken({ token }, () => {
+              console.log("[Auth] Removed cached auth token due to server error");
+              resolve();
+            });
+          });
+
+          // Check if the server is completely down
+          try {
+            const healthCheck = await fetch(`${AUTH_BASE_URL}/health`);
+            if (!healthCheck.ok) {
+              console.error("[Auth] Health check failed. Server might be down.");
+              throw new Error(`Server is currently unavailable. Please try again later.`);
+            } else {
+              throw new Error(`Server error during login. Please try again later or contact support.`);
+            }
+          } catch (healthError) {
+            console.error("[Auth] Health check error:", healthError);
+            throw new Error(`Server is currently unavailable. Please try again later.`);
+          }
         } else {
           throw new Error(`Login failed: ${response.status}`);
         }
@@ -634,12 +662,24 @@ function updateAuthUI() {
 function displayError(message) {
   console.error(`[Auth] Error: ${message}`);
 
+  // Check if the message is a server error
+  const isServerError = message.includes('Server') || message.includes('500');
+
   // Find the error element
   const errorElement = document.getElementById('error-message');
 
   if (errorElement) {
     console.log("[Auth] Displaying error in error-message element");
-    errorElement.textContent = message;
+
+    // Format the message for display
+    let displayMessage = message;
+
+    // If it's a server error, add a more user-friendly message
+    if (isServerError) {
+      displayMessage = "The server is currently experiencing issues. Please try again later or contact support.";
+    }
+
+    errorElement.textContent = displayMessage;
     errorElement.classList.remove('hidden');
 
     // Make sure the auth container is visible
@@ -648,14 +688,23 @@ function displayError(message) {
       authContainer.classList.remove('hidden');
     }
 
-    // Hide after 10 seconds
+    // Hide after 15 seconds for server errors, 10 seconds for other errors
     setTimeout(() => {
       errorElement.classList.add('hidden');
-    }, 10000);
+    }, isServerError ? 15000 : 10000);
   } else {
     // Fallback to alert if error element doesn't exist
     console.log("[Auth] Error element not found, using alert instead");
-    alert(`Authentication Error: ${message}`);
+
+    // Format the message for display
+    let alertMessage = message;
+
+    // If it's a server error, add a more user-friendly message
+    if (isServerError) {
+      alertMessage = "The server is currently experiencing issues. Please try again later or contact support.";
+    }
+
+    alert(`Authentication Error: ${alertMessage}`);
   }
 }
 

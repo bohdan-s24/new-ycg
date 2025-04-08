@@ -6,22 +6,22 @@ const GENERATE_CHAPTERS_ENDPOINT = `${API_BASE_URL}/generate-chapters`
 const PING_ENDPOINT = `${API_BASE_URL}`
 
 // Elements
-const mainContentElement = document.getElementById("main-content")
-const statusElement = document.getElementById("status")
-const videoInfoElement = document.getElementById("video-info")
-const videoTitleElement = document.getElementById("video-title")
-const errorMessageElement = document.getElementById("error-message")
-const generateButton = document.getElementById("generate-btn")
-const loadingElement = document.getElementById("loading")
-const chaptersContainerElement = document.getElementById("chapters-container")
-const chaptersContentElement = document.getElementById("chapters-content")
-const copyButton = document.getElementById("copy-btn")
-const regenerateButton = document.getElementById("regenerate-btn")
-const settingsButton = document.getElementById("settings-btn")
-const prevVersionButton = document.getElementById("prev-version-btn")
-const nextVersionButton = document.getElementById("next-version-btn")
-const versionIndicatorElement = document.getElementById("version-indicator")
-const creditsCountElement = document.getElementById("credits-count")
+let mainContentElement = document.getElementById("main-content")
+let statusElement = document.getElementById("status")
+let videoInfoElement = document.getElementById("video-info")
+let videoTitleElement = document.getElementById("video-title")
+let errorMessageElement = document.getElementById("error-message")
+let generateButton = document.getElementById("generate-btn")
+let loadingElement = document.getElementById("loading")
+let chaptersContainerElement = document.getElementById("chapters-container")
+let chaptersContentElement = document.getElementById("chapters-content")
+let copyButton = document.getElementById("copy-btn")
+let regenerateButton = document.getElementById("regenerate-btn")
+let settingsButton = document.getElementById("settings-btn")
+let prevVersionButton = document.getElementById("prev-version-btn")
+let nextVersionButton = document.getElementById("next-version-btn")
+let versionIndicatorElement = document.getElementById("version-indicator")
+let creditsCountElement = document.getElementById("credits-count")
 
 // State variables
 let currentVideoId = null
