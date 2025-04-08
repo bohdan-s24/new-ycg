@@ -3,11 +3,10 @@
   "name": "YouTube Chapter Generator",
   "version": "1.0.0",
   "description": "Automatically generate chapters for YouTube videos using AI",
-  "permissions": ["activeTab", "storage", "identity"],
+  "permissions": ["activeTab", "storage", "identity", "https://new-ycg.vercel.app/*", "https://www.googleapis.com/*"],
   "host_permissions": [
     "https://www.youtube.com/*",
-    "https://new-ycg.vercel.app/*",
-    "http://localhost:5000/*"
+    "https://new-ycg.vercel.app/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -36,6 +35,6 @@
     ]
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://new-ycg.vercel.app https://www.googleapis.com http://localhost:5000"
+    "extension_pages": "script-src 'self'; object-src 'self'"
   }
 }

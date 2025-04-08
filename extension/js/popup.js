@@ -6,6 +6,7 @@ const GENERATE_CHAPTERS_ENDPOINT = `${API_BASE_URL}/generate-chapters`
 const PING_ENDPOINT = `${API_BASE_URL}`
 
 // Elements
+const mainContentElement = document.getElementById("main-content")
 const statusElement = document.getElementById("status")
 const videoInfoElement = document.getElementById("video-info")
 const videoTitleElement = document.getElementById("video-title")
@@ -34,29 +35,104 @@ let userCredits = 10 // Default value, should be fetched from server or storage
 document.addEventListener("DOMContentLoaded", init)
 
 function init() {
+  console.log("Initializing popup.js...");
+
+  // Initialize main content if not already done by auth.js
+  if (mainContentElement) {
+    // Create the main content structure if it's empty
+    if (mainContentElement.children.length === 0) {
+      console.log("Creating main content structure");
+      mainContentElement.innerHTML = `
+        <div id="status" class="status-message">
+          <p>Checking if you're on a YouTube video page...</p>
+        </div>
+        <div id="error-message" class="error-message hidden"></div>
+        <div id="video-info" class="video-info hidden">
+          <h3>Video Title:</h3>
+          <p id="video-title" class="video-title">Loading...</p>
+          <div class="generate-button-container">
+            <button id="generate-btn" class="btn btn-primary" disabled>
+              <span class="btn-icon">✨</span> Generate Chapters
+            </button>
+          </div>
+        </div>
+        <div id="loading" class="loading hidden">
+          <div class="spinner"></div>
+          <p>Generating chapters...</p>
+        </div>
+        <div id="chapters-container" class="chapters-container hidden">
+          <div class="chapters-header">
+            <h3>Generated Chapters</h3>
+            <div class="version-navigation">
+              <button id="prev-version-btn" class="btn btn-sm" disabled>
+                <span class="btn-icon">◀</span>
+              </button>
+              <span id="version-indicator">Version 1/1</span>
+              <button id="next-version-btn" class="btn btn-sm" disabled>
+                <span class="btn-icon">▶</span>
+              </button>
+            </div>
+          </div>
+          <pre id="chapters-content" class="chapters-content"></pre>
+          <div class="chapters-actions">
+            <button id="copy-btn" class="btn">
+              <span class="btn-icon">📋</span> Copy to Clipboard
+            </button>
+            <button id="regenerate-btn" class="btn" disabled>
+              <span class="btn-icon">🔄</span> Regenerate
+            </button>
+          </div>
+        </div>
+      `;
+
+      // Re-initialize element references after creating the structure
+      initElementReferences();
+    }
+  } else {
+    console.error("Main content element not found!");
+  }
+
   // Set up event listeners
-  generateButton.addEventListener("click", handleGenerateClick)
-  copyButton.addEventListener("click", handleCopyClick)
-  regenerateButton.addEventListener("click", handleRegenerateClick)
-  settingsButton.addEventListener("click", handleSettingsClick)
-  prevVersionButton.addEventListener("click", handlePrevVersionClick)
-  nextVersionButton.addEventListener("click", handleNextVersionClick)
+  if (generateButton) generateButton.addEventListener("click", handleGenerateClick);
+  if (copyButton) copyButton.addEventListener("click", handleCopyClick);
+  if (regenerateButton) regenerateButton.addEventListener("click", handleRegenerateClick);
+  if (settingsButton) settingsButton.addEventListener("click", handleSettingsClick);
+  if (prevVersionButton) prevVersionButton.addEventListener("click", handlePrevVersionClick);
+  if (nextVersionButton) nextVersionButton.addEventListener("click", handleNextVersionClick);
 
   // Load user credits
-  loadUserCredits()
+  loadUserCredits();
 
   // Check API server status first
   checkApiStatus()
     .then(() => {
       // Check if we're on a YouTube video page
-      getCurrentTabInfo()
+      getCurrentTabInfo();
     })
     .catch((error) => {
-      console.error(`API status check failed with error: ${error.message}`)
+      console.error(`API status check failed with error: ${error.message}`);
       // Continue anyway to allow diagnostics
-      getCurrentTabInfo()
-      showError(`API server may have issues: ${error.message}. You can still try to generate chapters.`)
-    })
+      getCurrentTabInfo();
+      showError(`API server may have issues: ${error.message}. You can still try to generate chapters.`);
+    });
+}
+
+// Initialize element references after creating the structure
+function initElementReferences() {
+  console.log("Re-initializing element references");
+  statusElement = document.getElementById("status");
+  videoInfoElement = document.getElementById("video-info");
+  videoTitleElement = document.getElementById("video-title");
+  errorMessageElement = document.getElementById("error-message");
+  generateButton = document.getElementById("generate-btn");
+  loadingElement = document.getElementById("loading");
+  chaptersContainerElement = document.getElementById("chapters-container");
+  chaptersContentElement = document.getElementById("chapters-content");
+  copyButton = document.getElementById("copy-btn");
+  regenerateButton = document.getElementById("regenerate-btn");
+  prevVersionButton = document.getElementById("prev-version-btn");
+  nextVersionButton = document.getElementById("next-version-btn");
+  versionIndicatorElement = document.getElementById("version-indicator");
 }
 
 // Load user credits from storage

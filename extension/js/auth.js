@@ -1,12 +1,8 @@
 // YouTube Chapter Generator Authentication Module
 
 // API endpoints
-// Use local server for testing
-const USE_LOCAL_SERVER = true;
-const LOCAL_BASE_URL = "http://localhost:5000/api";
-const PROD_BASE_URL = "https://new-ycg.vercel.app/api";
-
-const AUTH_BASE_URL = USE_LOCAL_SERVER ? LOCAL_BASE_URL : PROD_BASE_URL;
+// Use production server only
+const AUTH_BASE_URL = "https://new-ycg.vercel.app/api";
 const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/auth/login`;
 const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/auth/login/google`;
 const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`;
@@ -219,39 +215,48 @@ async function handleGoogleSignIn() {
 
     // Exchange token with backend
     console.log(`[Auth] Sending token to backend: ${GOOGLE_LOGIN_ENDPOINT}`);
-    const response = await fetch(GOOGLE_LOGIN_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        token: token,
-        platform: 'chrome_extension'
-      })
-    });
+    let response;
+    try {
+      response = await fetch(GOOGLE_LOGIN_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          token: token,
+          platform: 'chrome_extension'
+        })
+      });
 
-    console.log(`[Auth] Backend response status: ${response.status}`);
+      console.log(`[Auth] Backend response status: ${response.status}`);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[Auth] Login failed: ${response.status}. Response: ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Auth] Login failed: ${response.status}. Response: ${errorText}`);
 
-      // If we get a 403 error, the token might be invalid or expired
-      if (response.status === 403) {
-        console.log("[Auth] Received 403 error, attempting to revoke token and retry");
+        // Handle different error codes
+        if (response.status === 403) {
+          console.log("[Auth] Received 403 error, attempting to revoke token and retry");
 
-        // Revoke the token
-        await new Promise((resolve) => {
-          chrome.identity.removeCachedAuthToken({ token }, () => {
-            console.log("[Auth] Removed cached auth token");
-            resolve();
+          // Revoke the token
+          await new Promise((resolve) => {
+            chrome.identity.removeCachedAuthToken({ token }, () => {
+              console.log("[Auth] Removed cached auth token");
+              resolve();
+            });
           });
-        });
 
-        throw new Error(`Login failed: ${response.status}. Please try again.`);
-      } else {
-        throw new Error(`Login failed: ${response.status}`);
+          throw new Error(`Login failed: ${response.status}. Please try again.`);
+        } else if (response.status === 404) {
+          console.error("[Auth] API endpoint not found. Check server configuration.");
+          throw new Error(`Backend API not found (404). Please check server configuration.`);
+        } else {
+          throw new Error(`Login failed: ${response.status}`);
+        }
       }
+    } catch (fetchError) {
+      console.error("[Auth] Fetch error during token exchange:", fetchError);
+      throw new Error(`Network error during login: ${fetchError.message}`);
     }
 
     const data = await response.json();
@@ -532,6 +537,7 @@ function updateAuthUI() {
 
   if (user) {
     console.log("[Auth] User is logged in, updating UI for authenticated state");
+    console.log("[Auth] User data:", user);
 
     // Show authenticated UI elements
     if (loginBtn) loginBtn.classList.add('hidden');
@@ -544,24 +550,54 @@ function updateAuthUI() {
     if (authContainer) authContainer.classList.add('hidden');
 
     // Show main content
-    if (mainContent) mainContent.classList.remove('hidden');
+    if (mainContent) {
+      mainContent.classList.remove('hidden');
+      console.log("[Auth] Main content is now visible");
+    } else {
+      console.error("[Auth] Main content element not found!");
+    }
 
     // Update user info
-    if (userAvatar && user.picture) userAvatar.src = user.picture;
-    if (menuUserAvatar && user.picture) menuUserAvatar.src = user.picture;
-    if (userName) userName.textContent = user.name || 'User';
-    if (userEmail) userEmail.textContent = user.email || '';
+    if (userAvatar) {
+      if (user.picture) {
+        userAvatar.src = user.picture;
+      } else {
+        console.log("[Auth] No user picture available, using default");
+      }
+    }
+
+    if (menuUserAvatar) {
+      if (user.picture) {
+        menuUserAvatar.src = user.picture;
+      }
+    }
+
+    if (userName) {
+      userName.textContent = user.name || 'User';
+      console.log("[Auth] Set user name to:", userName.textContent);
+    }
+
+    if (userEmail) {
+      userEmail.textContent = user.email || '';
+      console.log("[Auth] Set user email to:", userEmail.textContent);
+    }
 
     // Update credits
     if (creditsCount) {
       creditsCount.textContent = user.credits !== undefined ? user.credits : '-';
+      console.log("[Auth] Set credits count to:", creditsCount.textContent);
+    } else {
+      console.error("[Auth] Credits count element not found!");
     }
 
     // Give new users 3 free credits
     if (user.credits === undefined) {
+      console.log("[Auth] User has no credits, initializing with 3 free credits");
       user.credits = 3;
       localStorage.setItem(USER_KEY, JSON.stringify(user));
-      creditsCount.textContent = user.credits;
+      if (creditsCount) {
+        creditsCount.textContent = user.credits;
+      }
     }
   } else {
     console.log("[Auth] No user logged in, updating UI for unauthenticated state");
