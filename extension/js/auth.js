@@ -226,14 +226,18 @@ async function checkAuthStatus() {
 
 // Show the auth UI
 function showAuthUI() {
+  console.log("[Auth] showAuthUI function called."); // Log function entry
   const authContainerElement = document.getElementById("auth-container");
+  
   if (!authContainerElement) {
-    console.error("Auth container not found");
+    console.error("[Auth] Auth container element (#auth-container) not found in the DOM!");
     return;
   }
   
-  console.log("Showing auth UI");
+  console.log("[Auth] Found #auth-container. Current classes:", authContainerElement.className);
+  console.log("[Auth] Removing 'hidden' class...");
   authContainerElement.classList.remove("hidden");
+  console.log("[Auth] #auth-container classes after removal attempt:", authContainerElement.className);
   
   // Hide other UI elements
   const otherElements = [
