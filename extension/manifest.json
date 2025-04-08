@@ -35,6 +35,6 @@
     ]
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src https://new-ycg.vercel.app;"
+    "extension_pages": "script-src 'self' https://accounts.google.com/gsi/client; connect-src 'self' https://accounts.google.com https://new-ycg.vercel.app;"
   }
 }

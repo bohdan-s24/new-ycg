@@ -1,12 +1,15 @@
 // YouTube Chapter Generator Authentication Module
 
 // API endpoints
-const AUTH_BASE_URL = "https://new-ycg.vercel.app/auth";
-const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login`;
-const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login/google`;
+const AUTH_BASE_URL = "https://new-ycg.vercel.app/api";
+const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/auth/login`;
+const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/auth/login/google`;
 const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`;
-const VERIFY_TOKEN_ENDPOINT = `${AUTH_BASE_URL}/verify`;
-const USER_INFO_ENDPOINT = `${AUTH_BASE_URL}/user`;
+const VERIFY_TOKEN_ENDPOINT = `${AUTH_BASE_URL}/auth/verify`;
+const USER_INFO_ENDPOINT = `${AUTH_BASE_URL}/auth/user`;
+
+// Google Client ID from manifest.json
+const GOOGLE_CLIENT_ID = "373897257675-i561f2gcpv310b61bptj0ge2bmvdm03m.apps.googleusercontent.com";
 
 // State
 let currentUser = null;
@@ -84,6 +87,24 @@ function initDomElements() {
   welcomeContainer = document.getElementById('welcome-container');
   authContainer = document.getElementById('auth-container');
   mainContent = document.getElementById('main-content');
+  
+  // Log which elements were found
+  console.log("[Auth] Found DOM elements:", {
+    loginBtn: !!loginBtn,
+    settingsBtn: !!settingsBtn,
+    userProfile: !!userProfile,
+    userMenu: !!userMenu,
+    userAvatar: !!userAvatar,
+    menuUserAvatar: !!menuUserAvatar,
+    userName: !!userName,
+    userEmail: !!userEmail,
+    creditsCount: !!creditsCount,
+    creditsContainer: !!creditsContainer,
+    logoutLink: !!logoutLink,
+    welcomeContainer: !!welcomeContainer,
+    authContainer: !!authContainer,
+    mainContent: !!mainContent
+  });
   
   console.log("[Auth] DOM elements initialized");
 }
@@ -167,23 +188,15 @@ function toggleUserMenu() {
 async function initGoogleSignIn() {
   console.log("[Auth] Initializing Google Sign-In");
   
-  // Get Google Client ID
-  googleClientId = await getGoogleClientId();
-  
-  if (!googleClientId) {
-    console.error("[Auth] Failed to get Google Client ID");
-    return;
-  }
-  
-  console.log("[Auth] Google Client ID acquired, initializing sign-in button");
-  
   // Find the Google Sign-In button container
   const googleButtonContainer = document.getElementById('google-signin-button');
   
   if (!googleButtonContainer) {
-    console.warn("[Auth] Google Sign-In button container not found");
+    console.error("[Auth] Google Sign-In button container not found");
     return;
   }
+  
+  console.log("[Auth] Google Sign-In button container found:", googleButtonContainer);
   
   // Load the Google Identity Services JavaScript library
   const script = document.createElement('script');
@@ -201,7 +214,7 @@ async function initGoogleSignIn() {
     
     // Initialize the button
     google.accounts.id.initialize({
-      client_id: googleClientId,
+      client_id: GOOGLE_CLIENT_ID,
       callback: window.handleGoogleSignIn,
       auto_select: false,
       cancel_on_tap_outside: true,
@@ -217,73 +230,23 @@ async function initGoogleSignIn() {
         text: "continue_with",
         shape: "rectangular",
         logo_alignment: "left",
-        width: 220
+        width: 240
       }
     );
     
     console.log("[Auth] Google Sign-In button rendered");
+    
+    // Add a small delay to ensure the button is visible
+    setTimeout(() => {
+      googleButtonContainer.style.display = "inline-flex !important";
+      console.log("[Auth] Button container display set to inline-flex");
+    }, 100);
   };
   
   script.onerror = () => {
     console.error("[Auth] Failed to load Google Identity Services library");
-    googleButtonContainer.innerHTML = "Google Sign-In Failed to Load";
+    googleButtonContainer.innerHTML = "Failed to load Google Sign-In";
   };
-}
-
-// Get the Google Client ID from the backend
-async function getGoogleClientId() {
-  console.log("[Auth] Getting Google Client ID");
-  
-  // Check cache first
-  const cachedData = localStorage.getItem(CLIENT_ID_CACHE_KEY);
-  if (cachedData) {
-    try {
-      const { clientId, timestamp } = JSON.parse(cachedData);
-      const now = new Date().getTime();
-      
-      if (now - timestamp < CLIENT_ID_CACHE_EXPIRY) {
-        console.log("[Auth] Using cached Google Client ID");
-        googleClientId = clientId;
-        return clientId;
-      } else {
-        console.log("[Auth] Cached Google Client ID expired");
-      }
-    } catch (error) {
-      console.warn("[Auth] Error parsing cached client ID:", error);
-    }
-  }
-  
-  try {
-    // Add cache buster to prevent caching issues
-    const cacheBuster = `?t=${new Date().getTime()}`;
-    const response = await fetch(`${CONFIG_ENDPOINT}${cacheBuster}`);
-    
-    if (!response.ok) {
-      console.error(`[Auth] Failed to fetch Google Client ID: ${response.status} ${response.statusText}`);
-      return null;
-    }
-    
-    const data = await response.json();
-    const clientId = data.googleClientId;
-    
-    if (!clientId) {
-      console.error("[Auth] No Google Client ID returned from backend");
-      return null;
-    }
-    
-    // Cache the client ID
-    localStorage.setItem(CLIENT_ID_CACHE_KEY, JSON.stringify({
-      clientId,
-      timestamp: new Date().getTime()
-    }));
-    
-    googleClientId = clientId;
-    console.log("[Auth] Successfully fetched Google Client ID from backend");
-    return clientId;
-  } catch (error) {
-    console.error("[Auth] Error fetching Google Client ID:", error);
-    return null;
-  }
 }
 
 // Handler for Google Sign-In
@@ -538,7 +501,18 @@ function updateAuthUI() {
     if (creditsContainer) creditsContainer.classList.add('hidden');
     
     // Show welcome screen, hide auth container
-    if (welcomeContainer) welcomeContainer.classList.remove('hidden');
+    if (welcomeContainer) {
+      welcomeContainer.classList.remove('hidden');
+      // Add explicit styling to ensure Google button is visible
+      const googleButtonContainer = document.getElementById('google-signin-button');
+      if (googleButtonContainer) {
+        googleButtonContainer.style.display = 'inline-flex !important';
+        googleButtonContainer.style.justifyContent = 'center';
+        googleButtonContainer.style.margin = '24px auto';
+        googleButtonContainer.style.width = '100%';
+        googleButtonContainer.style.maxWidth = '240px';
+      }
+    }
     if (authContainer) authContainer.classList.add('hidden');
     
     // Hide main content
