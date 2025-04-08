@@ -260,12 +260,12 @@ function showAuthUI() {
     console.error("[Auth] Google button element (#google-signin-btn) not found inside showAuthUI!");
   }
   
-  // Hide other UI elements
+  // Hide other UI elements (excluding the main generate button container now)
   const otherElements = [
     document.getElementById("status"),
     document.getElementById("video-info"),
     document.getElementById("error-message"),
-    document.querySelector(".generate-button-container"),
+    // document.querySelector(".generate-button-container"), // Don't hide this anymore
     document.getElementById("loading"),
     document.getElementById("chapters-container")
   ];
@@ -289,12 +289,12 @@ function hideAuthUI() {
   console.log("Hiding auth UI");
   authContainerElement.classList.add("hidden");
   
-  // Restore previously visible elements
+  // Restore previously visible elements (excluding the main generate button container)
   const otherElements = [
     document.getElementById("status"),
     document.getElementById("video-info"),
     document.getElementById("error-message"),
-    document.querySelector(".generate-button-container"),
+    // document.querySelector(".generate-button-container"), // No need to restore this
     document.getElementById("loading"),
     document.getElementById("chapters-container")
   ];
