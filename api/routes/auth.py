@@ -92,8 +92,8 @@ async def login_for_access_token():
 
 
 # --- Google Sign-In (Handles both ID Token and Chrome Extension OAuth Token) ---
-@auth_bp.route('/login/google', methods=['POST'])
-async def login_via_google():
+# @auth_bp.route('/login/google', methods=['POST']) # Route definition moved to api/__init__.py
+async def login_via_google(): # Keep the function logic
     """
     Authenticates a user via a Google token.
     Handles both ID tokens (from web) and OAuth tokens (from Chrome extension).

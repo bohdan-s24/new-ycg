@@ -12,6 +12,7 @@ from flask_cors import CORS
 
 from api.config import Config
 from api.routes import register_all_routes
+from api.routes.auth import login_via_google # Import the specific function
 
 
 def create_app() -> Flask:
@@ -47,7 +48,12 @@ def create_app() -> Flask:
     else:
         logging.warning("Stripe API key not found in environment variables. Payment features will be disabled.")
 
-    # Register routes
+    # Register routes from blueprints
     register_all_routes(app)
+
+    # Register the Google login route directly on the app
+    # This bypasses the auth_bp for this specific route as a debugging step
+    app.route('/auth/login/google', methods=['POST'])(login_via_google)
+    logging.info("Registered /auth/login/google directly on app.")
     
     return app
