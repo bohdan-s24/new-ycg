@@ -1,49 +1,68 @@
-import aioredis
+# Use upstash-redis library instead of aioredis
+from upstash_redis import Redis as UpstashRedisSync, RedisError # Sync client for potential non-async use
+from upstash_redis.asyncio import Redis as UpstashRedisAsync # Async client
 import logging
 from typing import Optional
 
 from ..config import Config
 
-# Global variable to hold the Redis connection pool/client
-redis_client: Optional[aioredis.Redis] = None
+# Global variable to hold the async Redis client
+redis_async_client: Optional[UpstashRedisAsync] = None
+# Global variable to hold the sync Redis client (optional, if needed)
+# redis_sync_client: Optional[UpstashRedisSync] = None 
 
-async def get_redis_connection() -> aioredis.Redis:
+async def get_redis_connection() -> UpstashRedisAsync:
     """
-    Initializes and returns an aioredis connection.
-    Uses a global variable to reuse the connection pool.
+    Initializes and returns an async upstash-redis connection.
+    Uses a global variable to reuse the client instance.
     """
-    global redis_client
-    if redis_client is None:
+    global redis_async_client
+    if redis_async_client is None:
         if not Config.REDIS_URL:
             logging.error("REDIS_URL is not configured in environment variables.")
             raise ValueError("Redis URL not configured")
         
         try:
-            # aioredis automatically handles pooling when using Redis.from_url
-            redis_client = aioredis.from_url(
-                Config.REDIS_URL,
-                encoding="utf-8",
-                decode_responses=True # Decode responses to strings automatically
-            )
-            # Test connection
-            await redis_client.ping()
-            logging.info("Successfully connected to Redis.")
-        except Exception as e:
-            logging.error(f"Failed to connect to Redis: {e}")
-            # Reset client so next call tries again
-            redis_client = None 
-            raise ConnectionError(f"Could not connect to Redis: {e}") from e
+            # Initialize the async client using the URL from config
+            # The URL typically contains the token for Upstash
+            redis_async_client = UpstashRedisAsync.from_url(Config.REDIS_URL)
             
-    return redis_client
+            # Test connection (Upstash client might not have an explicit async ping, 
+            # but subsequent operations will fail if connection is bad)
+            # Let's try a simple get/set or info command if available, otherwise rely on first use
+            await redis_async_client.ping() # Ping seems available in async client too
+            logging.info("Successfully connected to Upstash Redis (async).")
+            
+        except RedisError as e:
+            logging.error(f"Failed to connect to Upstash Redis: {e}")
+            redis_async_client = None 
+            raise ConnectionError(f"Could not connect to Upstash Redis: {e}") from e
+        except Exception as e:
+            logging.error(f"An unexpected error occurred during Upstash Redis connection: {e}")
+            redis_async_client = None
+            raise ConnectionError(f"Unexpected error connecting to Upstash Redis: {e}") from e
+            
+    return redis_async_client
 
-async def close_redis_connection():
-    """Closes the Redis connection pool."""
-    global redis_client
-    if redis_client:
-        await redis_client.close()
-        redis_client = None
-        logging.info("Redis connection closed.")
+# Optional: Function to get a sync client if needed elsewhere
+# def get_sync_redis_connection() -> UpstashRedisSync:
+#     """Initializes and returns a sync upstash-redis connection."""
+#     global redis_sync_client
+#     if redis_sync_client is None:
+#         if not Config.REDIS_URL:
+#             logging.error("REDIS_URL is not configured.")
+#             raise ValueError("Redis URL not configured")
+#         try:
+#             redis_sync_client = UpstashRedisSync.from_url(Config.REDIS_URL)
+#             redis_sync_client.ping()
+#             logging.info("Successfully connected to Upstash Redis (sync).")
+#         except Exception as e:
+#             logging.error(f"Failed to connect to Upstash Redis (sync): {e}")
+#             redis_sync_client = None
+#             raise ConnectionError(f"Could not connect to Upstash Redis (sync): {e}") from e
+#     return redis_sync_client
 
-# Consider adding application startup/shutdown hooks in your Flask app 
-# (__init__.py or index.py) to call get_redis_connection (to initialize early)
-# and close_redis_connection (on shutdown).
+# Note: upstash-redis client doesn't require explicit closing typically,
+# as connections are managed per-request (HTTP-based).
+# async def close_redis_connection(): # Likely not needed
+#     pass

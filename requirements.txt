@@ -8,9 +8,10 @@ requests==2.31.0
 httpx==0.24.1 
 google-generativeai==0.8.4
 # PyJWT==2.8.0 # Replaced by python-jose
-redis==5.0.1 # Standard redis client
-aioredis # Asynchronous redis client (let pip choose latest compatible)
-setuptools # Explicitly add setuptools to potentially resolve distutils issue
+redis==5.0.1 # Standard redis client (Keep in case sync operations are needed elsewhere)
+# aioredis # Removed, replaced by upstash-redis
+# setuptools # No longer needed for aioredis workaround
+upstash-redis>=1.0.0 # Use official Upstash client
 passlib>=1.7.4 # For password hashing
 bcrypt>=3.2.0 # Required by passlib[bcrypt]
 python-jose[cryptography]>=3.3.0 # For JWT handling
