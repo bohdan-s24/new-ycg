@@ -13,6 +13,7 @@ aioredis>=2.0.1 # Asynchronous redis client
 passlib>=1.7.4 # For password hashing
 bcrypt>=3.2.0 # Required by passlib[bcrypt]
 python-jose[cryptography]>=3.3.0 # For JWT handling
+email-validator>=2.0.0 # Required by pydantic for EmailStr validation
 stripe==7.9.0
 google-auth==2.27.0
 google-auth-oauthlib==1.2.0
