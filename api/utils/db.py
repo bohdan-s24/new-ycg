@@ -1,5 +1,6 @@
 # Use upstash-redis library instead of aioredis
-from upstash_redis import Redis as UpstashRedisSync, RedisError # Sync client for potential non-async use
+from upstash_redis import Redis as UpstashRedisSync # Sync client for potential non-async use
+# from upstash_redis import RedisError # RedisError might not be exposed directly
 from upstash_redis.asyncio import Redis as UpstashRedisAsync # Async client
 import logging
 from typing import Optional
@@ -33,13 +34,10 @@ async def get_redis_connection() -> UpstashRedisAsync:
             await redis_async_client.ping() # Ping seems available in async client too
             logging.info("Successfully connected to Upstash Redis (async).")
             
-        except RedisError as e:
+        # Catch generic Exception as specific RedisError might not be importable
+        except Exception as e: 
             logging.error(f"Failed to connect to Upstash Redis: {e}")
             redis_async_client = None 
-            raise ConnectionError(f"Could not connect to Upstash Redis: {e}") from e
-        except Exception as e:
-            logging.error(f"An unexpected error occurred during Upstash Redis connection: {e}")
-            redis_async_client = None
             raise ConnectionError(f"Unexpected error connecting to Upstash Redis: {e}") from e
             
     return redis_async_client
