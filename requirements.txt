@@ -9,7 +9,7 @@ httpx==0.24.1
 google-generativeai==0.8.4
 # PyJWT==2.8.0 # Replaced by python-jose
 redis==5.0.1 # Standard redis client
-aioredis>=2.0.1 # Asynchronous redis client
+aioredis # Asynchronous redis client (let pip choose latest compatible)
 passlib>=1.7.4 # For password hashing
 bcrypt>=3.2.0 # Required by passlib[bcrypt]
 python-jose[cryptography]>=3.3.0 # For JWT handling
