@@ -5,6 +5,8 @@ import os
 import sys
 import traceback
 import time
+import stripe # Import stripe
+import logging # Import logging
 from flask import Flask
 from flask_cors import CORS
 
@@ -35,10 +37,17 @@ def create_app() -> Flask:
           f"WEBSHARE_PASSWORD={'✓' if Config.WEBSHARE_PASSWORD else '✗'}, "
           f"JWT_SECRET_KEY={'✓' if Config.JWT_SECRET_KEY else '✗'}, "
           f"REDIS_URL={'✓' if Config.REDIS_URL else '✗'}, "
-          f"STRIPE_API_KEY={'✓' if Config.STRIPE_API_KEY else '✗'}, "
+          f"STRIPE_SECRET_KEY={'✓' if Config.STRIPE_SECRET_KEY else '✗'}, " # Corrected key name
           f"STRIPE_WEBHOOK_SECRET={'✓' if Config.STRIPE_WEBHOOK_SECRET else '✗'}")
+    
+    # Initialize Stripe
+    if Config.STRIPE_SECRET_KEY:
+        stripe.api_key = Config.STRIPE_SECRET_KEY
+        logging.info("Stripe API key configured.")
+    else:
+        logging.warning("Stripe API key not found in environment variables. Payment features will be disabled.")
 
     # Register routes
     register_all_routes(app)
-
+    
     return app

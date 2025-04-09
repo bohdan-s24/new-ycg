@@ -10,13 +10,16 @@ class Config:
     WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY") # Loaded from Vercel env
     REDIS_URL = os.environ.get("REDIS_URL") # Loaded from Vercel env (Upstash)
-
-    # Payment processing
-    STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY")
-    STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
-
+    
     # Google OAuth Client ID (Hardcoded as requested)
     GOOGLE_CLIENT_ID = "373897257675-i561f2gcpv310b61bptj0ge2bmvdm03m.apps.googleusercontent.com"
+    
+    # Stripe Keys
+    STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY") # Loaded from Vercel env
+    STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET") # Loaded from Vercel env
+    
+    # Frontend URL (needed for Stripe Checkout redirects)
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000") # Default for local dev
 
     # API configurations
     OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]

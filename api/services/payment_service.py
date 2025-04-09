@@ -8,8 +8,8 @@ from ..config import Config
 from ..utils.db import get_redis_connection
 from . import credits_service
 
-# Initialize Stripe with the API key
-stripe.api_key = Config.STRIPE_API_KEY
+# Remove top-level initialization:
+# stripe.api_key = Config.STRIPE_SECRET_KEY 
 
 # Redis key prefixes
 PAYMENT_PLANS_KEY = "payment:plans"
