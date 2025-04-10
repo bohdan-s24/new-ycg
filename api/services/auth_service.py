@@ -99,12 +99,15 @@ async def verify_google_oauth_token(token: str) -> Optional[Dict[str, Any]]:
     userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
     headers = {"Authorization": f"Bearer {token}"}
 
-    logging.info(f"Verifying Google OAuth token using userinfo endpoint")
+    # Log token prefix for debugging (not the full token for security)
+    token_prefix = token[:10] if token else "None"
+    logging.info(f"Verifying Google OAuth token (prefix: {token_prefix}...) using userinfo endpoint")
 
     try:
         async with httpx.AsyncClient() as client:
             logging.info(f"Sending request to {userinfo_url}")
-            response = await client.get(userinfo_url, headers=headers)
+            # Add timeout to prevent hanging requests
+            response = await client.get(userinfo_url, headers=headers, timeout=10.0)
 
         logging.info(f"Google userinfo response status: {response.status_code}")
 

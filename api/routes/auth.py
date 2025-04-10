@@ -17,11 +17,24 @@ auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 def auth_debug():
     """Debug endpoint to verify auth blueprint is registered"""
     logging.info("Auth debug endpoint accessed")
+    from flask import current_app
+
+    # Get all routes from the Flask app that belong to this blueprint
+    blueprint_routes = []
+    for rule in current_app.url_map.iter_rules():
+        if rule.endpoint.startswith('auth.'):
+            blueprint_routes.append({
+                'endpoint': rule.endpoint,
+                'methods': [method for method in rule.methods if method not in ['HEAD', 'OPTIONS']],
+                'path': str(rule)
+            })
+
     return success_response({
         "status": "Auth blueprint is working",
-        "routes": [str(rule) for rule in auth_bp.url_map._rules_by_endpoint.values() if rule.endpoint.startswith('auth.')],
+        "routes": blueprint_routes,
         "blueprint_name": auth_bp.name,
-        "url_prefix": auth_bp.url_prefix
+        "url_prefix": auth_bp.url_prefix,
+        "total_routes": len(blueprint_routes)
     })
 
 @auth_bp.route('/register', methods=['POST'])
@@ -112,7 +125,8 @@ async def login_via_google():
     Returns an application access token upon successful verification.
     """
     logging.info("Google login request received at /auth/login/google endpoint")
-    logging.info(f"Current blueprint routes: {[rule.rule for rule in auth_bp.url_map._rules_by_endpoint.values() if rule.endpoint.startswith('auth_bp.')]}")
+    # Blueprints don't have url_map, only the Flask app does
+    logging.info(f"Processing login request with blueprint: {auth_bp.name}, prefix: {auth_bp.url_prefix}")
 
     if not request.is_json:
         logging.error("Request is not JSON")
@@ -137,7 +151,12 @@ async def login_via_google():
         return error_response("Only Chrome extension login is supported.", 400)
 
     logging.info("Verifying Google OAuth token from Chrome extension...")
-    user_info = await auth_service.verify_google_oauth_token(google_token)
+    try:
+        user_info = await auth_service.verify_google_oauth_token(google_token)
+        logging.info(f"Google OAuth token verification successful: {user_info.get('email') if user_info else 'No user info'}")
+    except Exception as e:
+        logging.error(f"Error verifying Google OAuth token: {str(e)}")
+        return error_response(f"Error verifying Google token: {str(e)}", 500)
 
     if not user_info:
         logging.error("Failed to verify Google token")
