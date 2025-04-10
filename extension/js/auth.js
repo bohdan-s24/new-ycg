@@ -1,18 +1,13 @@
 // YouTube Chapter Generator Authentication Module
 
-// API endpoints
 // Use configuration from config.js (window.YCG_CONFIG)
-// Corrected Base URLs based on vercel.json and Flask blueprint structure
-const API_BASE_URL = "https://new-ycg.vercel.app"; // Base URL for the deployment
-const AUTH_BASE_URL = `${API_BASE_URL}/auth`; // Auth routes start directly under /auth
-const CHAPTERS_BASE_URL = `${API_BASE_URL}/api`; // Chapter routes start under /api (assuming chapters_bp prefix is /api)
-
-const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login`;
-const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login/google`;
-const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`; // Assuming config is under /auth
-const VERIFY_TOKEN_ENDPOINT = `${AUTH_BASE_URL}/verify`;
-const USER_INFO_ENDPOINT = `${AUTH_BASE_URL}/user`;
-// Note: Ensure popup.js uses CHAPTERS_BASE_URL for chapter generation endpoint
+const AUTH_BASE_URL = window.YCG_CONFIG.AUTH_BASE_URL;
+const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login`; 
+const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login/google`; 
+const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`; 
+const VERIFY_TOKEN_ENDPOINT = `${AUTH_BASE_URL}/verify`; 
+const USER_INFO_ENDPOINT = `${AUTH_BASE_URL}/user`; 
+// Note: Ensure popup.js uses window.YCG_CONFIG.API_BASE_URL or similar for its endpoints
 
 // State
 let currentUser = null;

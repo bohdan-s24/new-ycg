@@ -1,4 +1,4 @@
-flask==2.0.1
+flask[async]==2.0.1 # Install with async support (adds asgiref) - Required for async views on Vercel
 werkzeug==2.0.3
 youtube-transcript-api==1.0.2
 openai==1.7.0
