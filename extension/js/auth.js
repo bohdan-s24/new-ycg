@@ -1,13 +1,18 @@
 // YouTube Chapter Generator Authentication Module
 
 // API endpoints
-// Use production server only
-const AUTH_BASE_URL = "https://new-ycg.vercel.app/api";
-const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/auth/login`;
-const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/auth/login/google`;
-const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`;
-const VERIFY_TOKEN_ENDPOINT = `${AUTH_BASE_URL}/auth/verify`;
-const USER_INFO_ENDPOINT = `${AUTH_BASE_URL}/auth/user`;
+// Use configuration from config.js (window.YCG_CONFIG)
+// Corrected Base URLs based on vercel.json and Flask blueprint structure
+const API_BASE_URL = "https://new-ycg.vercel.app"; // Base URL for the deployment
+const AUTH_BASE_URL = `${API_BASE_URL}/auth`; // Auth routes start directly under /auth
+const CHAPTERS_BASE_URL = `${API_BASE_URL}/api`; // Chapter routes start under /api (assuming chapters_bp prefix is /api)
+
+const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login`;
+const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login/google`;
+const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`; // Assuming config is under /auth
+const VERIFY_TOKEN_ENDPOINT = `${AUTH_BASE_URL}/verify`;
+const USER_INFO_ENDPOINT = `${AUTH_BASE_URL}/user`;
+// Note: Ensure popup.js uses CHAPTERS_BASE_URL for chapter generation endpoint
 
 // State
 let currentUser = null;
@@ -267,7 +272,8 @@ async function handleGoogleSignIn() {
 
           // Check if the server is completely down
           try {
-            const healthCheck = await fetch(`${AUTH_BASE_URL}/health`);
+            // Use a reliable health check endpoint if available, otherwise use a known good endpoint like config
+            const healthCheck = await fetch(`${CONFIG_ENDPOINT}`); // Changed to config endpoint
             if (!healthCheck.ok) {
               console.error("[Auth] Health check failed. Server might be down.");
               throw new Error(`Server is currently unavailable. Please try again later.`);
@@ -582,7 +588,14 @@ function updateAuthUI() {
       mainContent.classList.remove('hidden');
       console.log("[Auth] Main content is now visible");
     } else {
-      console.error("[Auth] Main content element not found!");
+      // Try finding main content again if not found initially
+      mainContent = document.getElementById('main-content');
+      if (mainContent) {
+         mainContent.classList.remove('hidden');
+         console.log("[Auth] Main content found and made visible");
+      } else {
+         console.error("[Auth] Main content element (#main-content) not found!");
+      }
     }
 
     // Update user info
@@ -591,12 +604,15 @@ function updateAuthUI() {
         userAvatar.src = user.picture;
       } else {
         console.log("[Auth] No user picture available, using default");
+        userAvatar.src = 'icons/user.png'; // Ensure default is set
       }
     }
 
     if (menuUserAvatar) {
       if (user.picture) {
         menuUserAvatar.src = user.picture;
+      } else {
+         menuUserAvatar.src = 'icons/user.png'; // Ensure default is set
       }
     }
 
@@ -618,9 +634,10 @@ function updateAuthUI() {
       console.error("[Auth] Credits count element not found!");
     }
 
-    // Give new users 3 free credits
+    // Give new users 3 free credits (This logic might be redundant if backend handles it)
+    // Consider removing if backend reliably initializes credits
     if (user.credits === undefined) {
-      console.log("[Auth] User has no credits, initializing with 3 free credits");
+      console.log("[Auth] User has no credits, initializing with 3 free credits (frontend)");
       user.credits = 3;
       localStorage.setItem(USER_KEY, JSON.stringify(user));
       if (creditsCount) {
@@ -636,27 +653,24 @@ function updateAuthUI() {
     if (userProfile) userProfile.classList.add('hidden');
     if (creditsContainer) creditsContainer.classList.add('hidden');
 
-    // Show welcome screen, hide auth container
-    if (welcomeContainer) {
-      welcomeContainer.classList.remove('hidden');
-      // Add explicit styling to ensure Google button is visible
-      const googleButtonContainer = document.getElementById('google-signin-button');
-      if (googleButtonContainer) {
-        googleButtonContainer.style.display = 'inline-flex !important';
-        googleButtonContainer.style.justifyContent = 'center';
-        googleButtonContainer.style.margin = '24px auto';
-        googleButtonContainer.style.width = '100%';
-        googleButtonContainer.style.maxWidth = '240px';
-      }
-    }
-    if (authContainer) authContainer.classList.add('hidden');
+    // Show welcome screen or auth container, hide main content
+    // Decide which initial screen to show (welcome or auth)
+    const showWelcome = true; // Change this based on desired initial view
 
-    // Hide main content
+    if (showWelcome && welcomeContainer) {
+       welcomeContainer.classList.remove('hidden');
+       if (authContainer) authContainer.classList.add('hidden');
+    } else if (authContainer) {
+       authContainer.classList.remove('hidden');
+       if (welcomeContainer) welcomeContainer.classList.add('hidden');
+    }
+    
     if (mainContent) mainContent.classList.add('hidden');
   }
 
   console.log("[Auth] Auth UI update complete");
 }
+
 
 // Display an error message
 function displayError(message) {
@@ -682,10 +696,12 @@ function displayError(message) {
     errorElement.textContent = displayMessage;
     errorElement.classList.remove('hidden');
 
-    // Make sure the auth container is visible
-    const authContainer = document.getElementById('auth-container');
-    if (authContainer) {
-      authContainer.classList.remove('hidden');
+    // Make sure the auth container is visible if showing an auth error
+    if (message.toLowerCase().includes('login') || message.toLowerCase().includes('sign-in')) {
+       const authContainer = document.getElementById('auth-container');
+       if (authContainer) {
+         authContainer.classList.remove('hidden');
+       }
     }
 
     // Hide after 15 seconds for server errors, 10 seconds for other errors
@@ -707,6 +723,7 @@ function displayError(message) {
     alert(`Authentication Error: ${alertMessage}`);
   }
 }
+
 
 // Get the current user
 function getCurrentUser() {
