@@ -12,6 +12,18 @@ from ..utils.decorators import token_required # Import the token_required decora
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
 
+# Debug endpoint to check if auth blueprint is registered
+@auth_bp.route('/debug', methods=['GET'])
+def auth_debug():
+    """Debug endpoint to verify auth blueprint is registered"""
+    logging.info("Auth debug endpoint accessed")
+    return success_response({
+        "status": "Auth blueprint is working",
+        "routes": [str(rule) for rule in auth_bp.url_map._rules_by_endpoint.values() if rule.endpoint.startswith('auth.')],
+        "blueprint_name": auth_bp.name,
+        "url_prefix": auth_bp.url_prefix
+    })
+
 @auth_bp.route('/register', methods=['POST'])
 async def register_user():
     """
@@ -99,7 +111,8 @@ async def login_via_google():
     Expects JSON payload: {"token": "google_token_here", "platform": "chrome_extension"}
     Returns an application access token upon successful verification.
     """
-    logging.info("Google login request received")
+    logging.info("Google login request received at /auth/login/google endpoint")
+    logging.info(f"Current blueprint routes: {[rule.rule for rule in auth_bp.url_map._rules_by_endpoint.values() if rule.endpoint.startswith('auth_bp.')]}")
 
     if not request.is_json:
         logging.error("Request is not JSON")

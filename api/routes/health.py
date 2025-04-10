@@ -11,7 +11,7 @@ from api.utils.responses import create_error_response
 def register_health_routes(app: Flask) -> None:
     """
     Register health check routes with the Flask app
-    
+
     Args:
         app: Flask application instance
     """
@@ -19,6 +19,23 @@ def register_health_routes(app: Flask) -> None:
     def root():
         """Simple health check"""
         return "API is running. Try /api for more details.", 200
+
+    @app.route('/api/debug/routes', methods=['GET'])
+    def debug_routes():
+        """Debug endpoint to list all registered routes"""
+        routes = []
+        for rule in app.url_map.iter_rules():
+            routes.append({
+                'endpoint': rule.endpoint,
+                'methods': [method for method in rule.methods if method not in ['HEAD', 'OPTIONS']],
+                'path': str(rule)
+            })
+
+        return jsonify({
+            'success': True,
+            'routes': routes,
+            'total_routes': len(routes)
+        })
 
     @app.route('/api', methods=['GET'])
     def hello():
@@ -35,7 +52,7 @@ def register_health_routes(app: Flask) -> None:
             except Exception as e:
                 print(f"Direct connection test failed: {e}")
                 direct_connection_success = False
-            
+
             # Test proxy connection to YouTube if configured
             proxy_connection_success = None
             proxy_configured = bool(Config.get_proxy_dict())
@@ -63,14 +80,14 @@ def register_health_routes(app: Flask) -> None:
                     'proxy_youtube': proxy_connection_success,
                 }
             }
-            
+
             # Prepare response
             response = jsonify(response_data)
             response.headers.add('Access-Control-Allow-Origin', '*')
             response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Accept')
             response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
-            
+
             return response
-            
+
         except Exception as e:
             return create_error_response(f"Error in status check: {str(e)}", 500)
