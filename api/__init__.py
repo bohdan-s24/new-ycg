@@ -12,7 +12,6 @@ from flask_cors import CORS
 
 from api.config import Config
 from api.routes import register_all_routes
-from api.routes.auth import login_via_google # Import the specific function
 
 
 def create_app() -> Flask:
@@ -40,7 +39,7 @@ def create_app() -> Flask:
           f"REDIS_URL={'✓' if Config.REDIS_URL else '✗'}, "
           f"STRIPE_SECRET_KEY={'✓' if Config.STRIPE_SECRET_KEY else '✗'}, " # Corrected key name
           f"STRIPE_WEBHOOK_SECRET={'✓' if Config.STRIPE_WEBHOOK_SECRET else '✗'}")
-    
+
     # Initialize Stripe
     if Config.STRIPE_SECRET_KEY:
         stripe.api_key = Config.STRIPE_SECRET_KEY
@@ -51,9 +50,6 @@ def create_app() -> Flask:
     # Register routes from blueprints
     register_all_routes(app)
 
-    # Register the Google login route directly on the app
-    # This bypasses the auth_bp for this specific route as a debugging step
-    app.route('/auth/login/google', methods=['POST'])(login_via_google)
-    logging.info("Registered /auth/login/google directly on app.")
-    
+    logging.info("All routes registered via blueprints.")
+
     return app

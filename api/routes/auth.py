@@ -91,13 +91,12 @@ async def login_for_access_token():
     return success_response({"access_token": access_token, "token_type": "bearer"})
 
 
-# --- Google Sign-In (Handles both ID Token and Chrome Extension OAuth Token) ---
-# @auth_bp.route('/login/google', methods=['POST']) # Route definition moved to api/__init__.py
-async def login_via_google(): # Keep the function logic
+# --- Google Sign-In (Chrome Extension OAuth Token only) ---
+@auth_bp.route('/login/google', methods=['POST'])
+async def login_via_google():
     """
-    Authenticates a user via a Google token.
-    Handles both ID tokens (from web) and OAuth tokens (from Chrome extension).
-    Expects JSON payload: {"token": "google_token_here", "platform": "web" | "chrome_extension"}
+    Authenticates a user via a Google OAuth token from Chrome extension.
+    Expects JSON payload: {"token": "google_token_here", "platform": "chrome_extension"}
     Returns an application access token upon successful verification.
     """
     logging.info("Google login request received")
@@ -119,17 +118,13 @@ async def login_via_google(): # Keep the function logic
     logging.info(f"Processing Google login with platform: {platform}")
 
     user_info = None
-    if platform == "chrome_extension":
-        # Verify OAuth token from Chrome extension
-        logging.info("Verifying Google OAuth token from Chrome extension...")
-        user_info = await auth_service.verify_google_oauth_token(google_token)
-    else:
-        # Assume it's an ID token from the web (or default)
-        # Re-enable ID token verification if needed for web frontend
-        # logging.info("Verifying Google ID token...")
-        # user_info = await auth_service.verify_google_id_token(google_token)
-        logging.warning("Received Google login request without 'chrome_extension' platform. ID token verification is currently disabled.")
-        return error_response("Unsupported Google login method.", 400) # Or re-enable ID token verification
+    # Only accept chrome_extension platform
+    if platform != "chrome_extension":
+        logging.warning(f"Received Google login request with unsupported platform: {platform}")
+        return error_response("Only Chrome extension login is supported.", 400)
+
+    logging.info("Verifying Google OAuth token from Chrome extension...")
+    user_info = await auth_service.verify_google_oauth_token(google_token)
 
     if not user_info:
         logging.error("Failed to verify Google token")
