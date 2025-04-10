@@ -1,356 +1,167 @@
 // YouTube Chapter Generator Authentication Module
 
-// Use configuration from config.js (window.YCG_CONFIG)
-const AUTH_BASE_URL = window.YCG_CONFIG.AUTH_BASE_URL;
-const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login`; 
-const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login/google`; 
-const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`; 
-const VERIFY_TOKEN_ENDPOINT = `${AUTH_BASE_URL}/verify`; 
-const USER_INFO_ENDPOINT = `${AUTH_BASE_URL}/user`; 
-// Note: Ensure popup.js uses window.YCG_CONFIG.API_BASE_URL or similar for its endpoints
+// API endpoints (Corrected based on Flask structure and vercel.json)
+const AUTH_BASE_URL = window.YCG_CONFIG.AUTH_BASE_URL; // Should be https://.../auth
+const LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login`;
+const GOOGLE_LOGIN_ENDPOINT = `${AUTH_BASE_URL}/login/google`;
+const CONFIG_ENDPOINT = `${AUTH_BASE_URL}/config`;
+const VERIFY_TOKEN_ENDPOINT = `${AUTH_BASE_URL}/verify`;
+const USER_INFO_ENDPOINT = `${AUTH_BASE_URL}/user`;
+// Note: Ensure popup.js uses correct base URL for its endpoints if needed
 
 // State
-let currentUser = null;
+let currentUser = null; // Use this consistently
 let authToken = null;
-let user = null;
+// let user = null; // Removed redundant variable
 
 // Constants
-const USER_KEY = 'ycg_user';
+const USER_KEY = 'ycg_user_data'; // Key for localStorage (changed for clarity)
 
-// DOM Elements
-let loginBtn = null;
-let settingsBtn = null;
-let userProfile = null;
-let userMenu = null;
-let userAvatar = null;
-let menuUserAvatar = null;
-let userName = null;
-let userEmail = null;
-let creditsCount = null;
-let creditsContainer = null;
-let logoutLink = null;
-let welcomeContainer = null;
-let authContainer = null;
-let mainContent = null;
+// DOM Elements (initialized in initDomElements)
+let loginBtn, settingsBtn, userProfile, userMenu, userAvatar, menuUserAvatar, userName, userEmail, creditsCount, creditsContainer, logoutLink, welcomeContainer, authContainer, mainContent, googleSignInButton1, googleSignInButton2;
 
 // Initialize auth
-document.addEventListener("DOMContentLoaded", async function() {
-  // Initialize auth only after DOM is fully loaded
-  await initAuth();
-});
+document.addEventListener("DOMContentLoaded", initAuth); // Removed async here, initAuth handles async parts
 
 // Initialize auth
 async function initAuth() {
-  console.log("Initializing auth...");
-
-  // Initialize DOM elements
+  console.log("[Auth] Initializing auth...");
   initDomElements();
-
-  // Setup event listeners
   setupEventListeners();
-
-  // Try to get user from localStorage
-  await loadUserFromStorage();
-
-  // Initialize Google Sign-In with Chrome's identity API
-  await initGoogleSignIn();
-
-  // Update UI based on auth state
-  updateAuthUI();
-
-  console.log("Auth initialization complete");
+  await loadUserFromStorage(); // Tries to load and validate currentUser
+  // Don't init Google Sign-In buttons here, do it based on logged-out state in updateAuthUI
+  updateAuthUI(); // Initial UI update based on loaded state
+  console.log("[Auth] Initialization complete. Initial currentUser state:", currentUser);
 }
 
-// Initialize Google Sign-In with Chrome's identity API
-async function initGoogleSignIn() {
-  console.log("[Auth] Initializing Google Sign-In with Chrome's identity API");
-
+// Initialize Google Sign-In buttons (called by updateAuthUI when needed)
+function initGoogleSignInButtons() {
+  console.log("[Auth] Initializing Google Sign-In buttons...");
   try {
-    // Find the Google Sign-In button containers
-    const googleButtonContainer1 = document.getElementById('google-signin-button');
-    const googleButtonContainer2 = document.getElementById('google-signin-button-auth');
-
-    console.log("[Auth] Google button containers:", {
-      'google-signin-button': !!googleButtonContainer1,
-      'google-signin-button-auth': !!googleButtonContainer2
-    });
-
-    // Helper function to create a Google Sign-In button
     const createGoogleButton = () => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = 'Sign in with Google';
-      button.style.padding = '8px 16px';
-      button.style.borderRadius = '4px';
-      button.style.backgroundColor = '#4285F4';
-      button.style.color = 'white';
-      button.style.border = 'none';
-      button.style.cursor = 'pointer';
-      button.style.fontSize = '14px';
-      button.style.width = '240px';
-      button.style.display = 'block';
-      button.style.margin = '10px auto';
-
-      // Add event listener safely
-      button.addEventListener('click', () => {
-        console.log("[Auth] Google Sign-In button clicked");
-        handleGoogleSignIn();
-      });
-
-      return button;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18" style="margin-right: 8px;"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg> Sign in with Google`;
+        button.className = 'btn google-signin-btn-dynamic'; // Use a specific class
+        button.style.width = 'auto';
+        button.style.margin = '10px auto';
+        button.addEventListener('click', handleGoogleSignIn);
+        return button;
     };
 
-    // Helper function to add a button to a container
-    const addButtonToContainer = (container, containerName) => {
-      if (container) {
-        try {
-          // Clear any existing content
-          container.innerHTML = '';
-
-          // Create and add the button
-          const button = createGoogleButton();
-          container.appendChild(button);
-          console.log(`[Auth] Added Google Sign-In button to ${containerName}`);
-          return true;
-        } catch (error) {
-          console.error(`[Auth] Error adding button to ${containerName}:`, error);
-          return false;
+    const addButtonToContainer = (container, containerId) => {
+        if (container) {
+            // Check if button already exists
+            if (!container.querySelector('.google-signin-btn-dynamic')) {
+               container.innerHTML = ''; // Clear existing only if button not present
+               container.appendChild(createGoogleButton());
+               console.log(`[Auth] Added Google Sign-In button to #${containerId}`);
+            } else {
+               console.log(`[Auth] Google Sign-In button already exists in #${containerId}`);
+            }
+            return true;
         }
-      } else {
-        console.warn(`[Auth] ${containerName} not found`);
+        console.warn(`[Auth] Container #${containerId} not found`);
         return false;
-      }
     };
 
-    // Add buttons to containers
-    const container1Success = addButtonToContainer(googleButtonContainer1, 'container 1');
-    const container2Success = addButtonToContainer(googleButtonContainer2, 'container 2');
+    // Add button to the auth container (assuming it's the primary place)
+    addButtonToContainer(authContainer?.querySelector('.generate-button-container'), 'auth-container > .generate-button-container');
+    // Remove references to potentially non-existent second button container
 
-    if (!container1Success && !container2Success) {
-      console.error("[Auth] Failed to add Google Sign-In buttons to any container");
-    }
-
-    // Clear any cached tokens on initialization
-    await clearGoogleAuthTokens();
-
-    console.log("[Auth] Google Sign-In buttons initialization complete");
+    console.log("[Auth] Google Sign-In buttons initialization check complete.");
   } catch (error) {
-    console.error("[Auth] Error initializing Google Sign-In:", error);
+    console.error("[Auth] Error initializing Google Sign-In buttons:", error);
   }
 }
 
 // Clear Google auth token cache
 async function clearGoogleAuthTokens() {
   console.log("[Auth] Clearing Google auth token cache");
-
-  if (!chrome.identity) {
-    console.error("[Auth] chrome.identity API is not available");
-    return false;
-  }
-
+  if (!chrome.identity) { console.error("[Auth] chrome.identity API is not available"); return false; }
   return new Promise((resolve) => {
     try {
       chrome.identity.clearAllCachedAuthTokens(() => {
-        if (chrome.runtime.lastError) {
-          console.error("[Auth] Error clearing tokens:", chrome.runtime.lastError);
-          resolve(false);
-        } else {
-          console.log("[Auth] Successfully cleared all cached auth tokens");
-          resolve(true);
-        }
+        if (chrome.runtime.lastError) { console.error("[Auth] Error clearing tokens:", chrome.runtime.lastError); resolve(false); }
+        else { console.log("[Auth] Successfully cleared all cached auth tokens"); resolve(true); }
       });
-    } catch (error) {
-      console.error("[Auth] Exception during clearAllCachedAuthTokens:", error);
-      resolve(false);
-    }
+    } catch (error) { console.error("[Auth] Exception during clearAllCachedAuthTokens:", error); resolve(false); }
   });
 }
 
-// Handle Google Sign-In
+// Handle Google Sign-In button click
 async function handleGoogleSignIn() {
+  console.log("[Auth] handleGoogleSignIn called");
+  // Show loading state on button? (Need button reference)
   try {
-    console.log("[Auth] Attempting to get auth token from Chrome identity API");
-
-    // Check if chrome.identity is available
     if (!chrome.identity) {
       console.error("[Auth] chrome.identity API is not available");
-      displayError("Chrome identity API is not available. Make sure the extension has the identity permission.");
-      return;
+      return displayError("Chrome identity API is not available.");
     }
 
-    // Clear cached tokens first
-    await clearGoogleAuthTokens();
-
-    // Get the token from Chrome's identity API
-    console.log("[Auth] Calling chrome.identity.getAuthToken");
-
-    // First, try to remove any cached tokens that might be causing issues
-    await new Promise((resolve) => {
-      chrome.identity.removeCachedAuthToken({ token: '' }, resolve);
-    });
-
-    const tokenObj = await new Promise((resolve, reject) => {
-      try {
-        chrome.identity.getAuthToken({ interactive: true }, (token) => {
-          if (chrome.runtime.lastError) {
-            console.error("[Auth] Chrome identity error:", chrome.runtime.lastError);
-            reject(new Error(chrome.runtime.lastError.message));
-          } else {
-            resolve(token);
-          }
-        });
-      } catch (error) {
-        console.error("[Auth] Exception during getAuthToken:", error);
-        reject(error);
-      }
-    });
-
-    // Check if we got a valid token
-    if (!tokenObj) {
-      throw new Error("Failed to get authentication token from Google");
-    }
-
-    const token = tokenObj;
-    console.log("[Auth] Successfully got auth token:", token);
-
-    // Exchange token with backend
-    console.log(`[Auth] Sending token to backend: ${GOOGLE_LOGIN_ENDPOINT}`);
-    let response;
-    try {
-      // Log the token details (but not the full token for security)
-      const tokenPrefix = token.substring(0, 10);
-      console.log(`[Auth] Token prefix: ${tokenPrefix}...`);
-
-      response = await fetch(GOOGLE_LOGIN_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          token: token,
-          platform: 'chrome_extension'
-        })
-      });
-
-      console.log(`[Auth] Backend response status: ${response.status}`);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[Auth] Login failed: ${response.status}. Response: ${errorText}`);
-
-        // Handle different error codes
-        if (response.status === 403) {
-          console.log("[Auth] Received 403 error, attempting to revoke token and retry");
-
-          // Revoke the token
-          await new Promise((resolve) => {
-            chrome.identity.removeCachedAuthToken({ token }, () => {
-              console.log("[Auth] Removed cached auth token");
-              resolve();
-            });
-          });
-
-          throw new Error(`Login failed: ${response.status}. Please try again.`);
-        } else if (response.status === 404) {
-          console.error("[Auth] API endpoint not found. Check server configuration.");
-          throw new Error(`Backend API not found (404). Please check server configuration.`);
-        } else if (response.status === 500) {
-          console.error("[Auth] Server error (500). The backend server encountered an error.");
-
-          // Try to revoke the token in case it's causing the issue
-          await new Promise((resolve) => {
-            chrome.identity.removeCachedAuthToken({ token }, () => {
-              console.log("[Auth] Removed cached auth token due to server error");
-              resolve();
-            });
-          });
-
-          // Check if the server is completely down
-          try {
-            // Use a reliable health check endpoint if available, otherwise use a known good endpoint like config
-            const healthCheck = await fetch(`${CONFIG_ENDPOINT}`); // Changed to config endpoint
-            if (!healthCheck.ok) {
-              console.error("[Auth] Health check failed. Server might be down.");
-              throw new Error(`Server is currently unavailable. Please try again later.`);
-            } else {
-              throw new Error(`Server error during login. Please try again later or contact support.`);
-            }
-          } catch (healthError) {
-            console.error("[Auth] Health check error:", healthError);
-            throw new Error(`Server is currently unavailable. Please try again later.`);
-          }
-        } else {
-          throw new Error(`Login failed: ${response.status}`);
+    console.log("[Auth] Attempting chrome.identity.getAuthToken...");
+    const token = await new Promise((resolve, reject) => {
+      chrome.identity.getAuthToken({ interactive: true }, (token) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message || "Unknown Chrome Identity error"));
+        } else if (!token) {
+           reject(new Error("No token received from Google."));
         }
-      }
-    } catch (fetchError) {
-      console.error("[Auth] Fetch error during token exchange:", fetchError);
-      throw new Error(`Network error during login: ${fetchError.message}`);
-    }
-
-    const data = await response.json();
-    console.log("[Auth] Backend response data:", data);
-
-    if (!data.data || !data.data.access_token) {
-      console.error("[Auth] Invalid response from server:", data);
-      throw new Error("Invalid response from server");
-    }
-
-    // Save auth token
-    const authToken = data.data.access_token;
-
-    // Fetch user info with the new token
-    console.log("[Auth] Authentication successful, fetching user info");
-    const userInfoResponse = await fetch(USER_INFO_ENDPOINT, {
-      headers: {
-        'Authorization': `Bearer ${authToken}`
-      }
+         else {
+          resolve(token);
+        }
+      });
     });
+    console.log("[Auth] Received OAuth token from Chrome identity.");
 
-    if (!userInfoResponse.ok) {
-      console.error(`[Auth] User info fetch failed: ${userInfoResponse.status}`);
-      throw new Error("Failed to get user information. Please try again.");
+    console.log(`[Auth] Sending token to backend: ${GOOGLE_LOGIN_ENDPOINT}`);
+    const response = await fetch(GOOGLE_LOGIN_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token, platform: 'chrome_extension' })
+    });
+    console.log(`[Auth] Backend response status: ${response.status}`);
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error(`[Auth] Backend login failed: ${response.status} ${responseText}`);
+      // Attempt to revoke token if backend failed
+      chrome.identity.removeCachedAuthToken({ token }, () => console.log("[Auth] Revoked potentially invalid token after backend error."));
+      throw new Error(`Backend login failed (${response.status}). Check server logs.`);
     }
 
-    const userInfoData = await userInfoResponse.json();
-
-    if (!userInfoData.data) {
-      console.error("[Auth] Invalid user info response:", userInfoData);
-      throw new Error("Invalid user data received. Please try again.");
+    const data = JSON.parse(responseText);
+    console.log("[Auth] Backend response data:", data);
+    if (!data.success || !data.data || !data.data.access_token) {
+      throw new Error("Invalid response format from backend.");
     }
 
-    // Check if user received their free credits (backend should handle this automatically)
-    console.log("[Auth] User info received:", userInfoData.data);
+    authToken = data.data.access_token;
+    console.log("[Auth] Received app token from backend.");
 
-    // Save user data to local storage
-    user = {
-      ...userInfoData.data,
-      token: authToken
-    };
-
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-
-    // Update UI
-    updateAuthUI();
-
-    console.log("[Auth] Google Sign-In completed successfully");
-
-    // If this is a new user, show a welcome message
-    if (data.data.new_user) {
-      setTimeout(() => {
-        alert(`Welcome to YouTube Chapter Generator! You've received ${user.credits} free credits to get started.`);
-      }, 500); // Small delay to ensure UI is updated
+    // Fetch user info immediately after getting token
+    const userInfo = await fetchUserInfo(authToken); // Pass token directly
+    if (!userInfo) {
+        throw new Error("Failed to fetch user info after login.");
     }
+
+    // Save combined info (token is now part of currentUser)
+    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+    console.log("[Auth] User data saved to localStorage.");
+
+    updateAuthUI(); // Update UI to logged-in state
+    console.log("[Auth] Google Sign-In successful!");
+
   } catch (error) {
     console.error("[Auth] Google Sign-In error:", error);
-    displayError(error.message);
+    displayError(error.message || "An unknown error occurred during sign-in.");
+  } finally {
+     // Hide loading state on button?
   }
 }
 
 // Initialize all DOM element references
 function initDomElements() {
-  console.log("[Auth] Initializing DOM elements");
-
   loginBtn = document.getElementById('login-btn');
   settingsBtn = document.getElementById('settings-btn');
   userProfile = document.getElementById('user-profile');
@@ -362,372 +173,273 @@ function initDomElements() {
   creditsCount = document.getElementById('credits-count');
   creditsContainer = document.getElementById('credits-badge');
   logoutLink = document.getElementById('logout-link');
-  welcomeContainer = document.getElementById('welcome-container');
+  welcomeContainer = document.getElementById('welcome-container'); // Assuming this exists for initial view
   authContainer = document.getElementById('auth-container');
-  mainContent = document.getElementById('main-content');
-
-  // Log which elements were found
-  console.log("[Auth] Found DOM elements:", {
-    loginBtn: !!loginBtn,
-    settingsBtn: !!settingsBtn,
-    userProfile: !!userProfile,
-    userMenu: !!userMenu,
-    userAvatar: !!userAvatar,
-    menuUserAvatar: !!menuUserAvatar,
-    userName: !!userName,
-    userEmail: !!userEmail,
-    creditsCount: !!creditsCount,
-    creditsContainer: !!creditsContainer,
-    logoutLink: !!logoutLink,
-    welcomeContainer: !!welcomeContainer,
-    authContainer: !!authContainer,
-    mainContent: !!mainContent
-  });
-
-  console.log("[Auth] DOM elements initialized");
+  mainContent = document.getElementById('main-content'); // Assuming this holds the main app UI
+  googleSignInButton1 = document.getElementById('google-signin-button'); // Check if this ID exists
+  googleSignInButton2 = document.getElementById('google-signin-button-auth'); // Check if this ID exists
+  console.log("[Auth] DOM elements initialized.");
 }
 
 // Setup event listeners
 function setupEventListeners() {
-  console.log("[Auth] Setting up event listeners");
-
-  // Helper function to safely add event listeners
+  console.log("[Auth] Setting up event listeners...");
   const safeAddEventListener = (element, eventType, handler) => {
-    if (element) {
-      element.addEventListener(eventType, handler);
-      return true;
-    }
+    if (element) { element.addEventListener(eventType, handler); return true; }
+    console.warn(`[Auth] Element not found for ${eventType} listener.`);
     return false;
   };
 
-  // Login button
-  const loginBtnSuccess = safeAddEventListener(loginBtn, 'click', () => {
-    console.log("[Auth] Login button clicked");
-    toggleAuthContainer();
-  });
-  if (!loginBtnSuccess) {
-    console.warn("[Auth] Login button element not found");
-  }
-
-  // Settings button
-  const settingsBtnSuccess = safeAddEventListener(settingsBtn, 'click', () => {
-    console.log("[Auth] Settings button clicked");
-    toggleUserMenu();
-  });
-  if (!settingsBtnSuccess) {
-    console.warn("[Auth] Settings button element not found");
-  }
-
-  // User profile
-  const userProfileSuccess = safeAddEventListener(userProfile, 'click', () => {
-    console.log("[Auth] User profile clicked");
-    toggleUserMenu();
-  });
-  if (!userProfileSuccess) {
-    console.warn("[Auth] User profile element not found");
-  }
-
-  // Logout link
-  const logoutLinkSuccess = safeAddEventListener(logoutLink, 'click', (e) => {
-    console.log("[Auth] Logout link clicked");
-    e.preventDefault();
-    logout();
-  });
-  if (!logoutLinkSuccess) {
-    console.warn("[Auth] Logout link element not found");
-  }
+  safeAddEventListener(loginBtn, 'click', showAuthUI); // Show the auth container
+  // Google button listener is added dynamically in initGoogleSignInButtons
+  safeAddEventListener(settingsBtn, 'click', toggleUserMenu);
+  safeAddEventListener(userProfile, 'click', toggleUserMenu);
+  safeAddEventListener(logoutLink, 'click', (e) => { e.preventDefault(); logout(); });
 
   // Close user menu when clicking outside
   document.addEventListener('click', (e) => {
-    if (userMenu) {
-      const isClickInsideMenu = userMenu.contains(e.target);
-      const isClickOnSettingsBtn = settingsBtn && settingsBtn.contains(e.target);
-      const isClickOnUserProfile = userProfile && userProfile.contains(e.target);
-
-      if (!isClickInsideMenu && !isClickOnSettingsBtn && !isClickOnUserProfile) {
-        userMenu.classList.add('hidden');
-      }
+    if (userMenu && settingsBtn && userProfile && !userMenu.contains(e.target) && !settingsBtn.contains(e.target) && !userProfile.contains(e.target)) {
+      userMenu.classList.add('hidden');
     }
   });
-
-  console.log("[Auth] Event listeners setup complete");
+  console.log("[Auth] Event listeners setup complete.");
 }
 
-// Toggle the auth container visibility
-function toggleAuthContainer() {
-  console.log("[Auth] Toggling auth container");
-
+// Show the auth UI view
+function showAuthUI() {
+  console.log("[Auth] showAuthUI called.");
   if (authContainer) {
-    authContainer.classList.toggle('hidden');
+      authContainer.classList.remove('hidden');
+      authContainer.style.display = 'block'; // Ensure it's block
+      console.log("[Auth] Auth container made visible.");
+      // Initialize buttons *after* container is visible
+      initGoogleSignInButtons();
   } else {
-    console.warn("[Auth] Auth container element not found");
+      console.error("[Auth] Auth container not found!");
   }
+  if (welcomeContainer) welcomeContainer.classList.add('hidden');
+  if (mainContent) mainContent.classList.add('hidden');
 }
+
+// Hide the auth UI view
+function hideAuthUI() {
+    console.log("[Auth] hideAuthUI called.");
+    if (authContainer) {
+        authContainer.classList.add('hidden');
+        authContainer.style.display = 'none'; // Explicitly hide
+    }
+    // Decide what to show instead (main content or welcome)
+    if (mainContent) mainContent.classList.remove('hidden');
+    else if (welcomeContainer) welcomeContainer.classList.remove('hidden');
+}
+
 
 // Toggle the user menu
 function toggleUserMenu() {
-  console.log("[Auth] Toggling user menu");
-
-  if (userMenu) {
-    userMenu.classList.toggle('hidden');
-  } else {
-    console.warn("[Auth] User menu element not found");
-  }
+  if (userMenu) userMenu.classList.toggle('hidden');
+  else console.warn("[Auth] User menu element not found");
 }
 
-// Load user from localStorage
+// Load user from localStorage and validate token
 async function loadUserFromStorage() {
-  console.log("[Auth] Loading user from storage");
-
-  const storedUser = localStorage.getItem(USER_KEY);
-
-  if (!storedUser) {
-    console.log("[Auth] No user found in storage");
+  console.log("[Auth] Loading user from storage...");
+  const storedUserData = localStorage.getItem(USER_KEY);
+  if (!storedUserData) {
+    console.log("[Auth] No user data found in storage.");
+    currentUser = null;
+    authToken = null;
     return;
   }
 
   try {
-    user = JSON.parse(storedUser);
-    console.log("[Auth] User loaded from storage");
+    const storedUser = JSON.parse(storedUserData);
+    if (!storedUser || !storedUser.token) {
+        console.warn("[Auth] Invalid user data in storage.");
+        logout(); // Clear invalid data
+        return;
+    }
+    console.log("[Auth] User data found in storage:", storedUser.email);
+    authToken = storedUser.token; // Set token first
 
-    // Validate and refresh user data
-    await refreshUserData();
+    // Validate token and refresh user info
+    const refreshedUser = await fetchUserInfo(authToken);
+    if (refreshedUser) {
+        currentUser = refreshedUser; // Assign validated & refreshed data
+        localStorage.setItem(USER_KEY, JSON.stringify(currentUser)); // Update storage
+        console.log("[Auth] User validated and refreshed.");
+    } else {
+        console.warn("[Auth] Token validation/refresh failed. Logging out.");
+        logout(); // Logout if token is invalid or refresh fails
+    }
   } catch (error) {
     console.error("[Auth] Error loading user from storage:", error);
-    localStorage.removeItem(USER_KEY);
-    user = null;
+    logout(); // Clear storage on error
   }
 }
 
-// Refresh user data from backend
-async function refreshUserData() {
-  console.log("[Auth] Refreshing user data from backend");
-
-  if (!user || !user.id || !user.token) {
-    console.warn("[Auth] No valid user data to refresh");
-    return false;
+// Fetch user info from the server using a provided token
+async function fetchUserInfo(tokenToUse) {
+  console.log("[Auth] Fetching user info from backend...");
+  if (!tokenToUse) {
+    console.error("[Auth] fetchUserInfo called without a token.");
+    return null;
   }
 
   try {
-    const response = await fetch(`${USER_INFO_ENDPOINT}`, {
-      headers: {
-        'Authorization': `Bearer ${user.token}`
-      }
+    const response = await fetch(USER_INFO_ENDPOINT, {
+      headers: { 'Authorization': `Bearer ${tokenToUse}` }
     });
+    console.log(`[Auth] User info response status: ${response.status}`);
 
     if (!response.ok) {
-      console.error(`[Auth] Failed to refresh user data: ${response.status} ${response.statusText}`);
-
-      // If unauthorized, logout
+      // If unauthorized (401), the token is bad
       if (response.status === 401) {
-        console.log("[Auth] User unauthorized, logging out");
-        logout();
+         console.warn("[Auth] Unauthorized fetching user info. Token likely expired/invalid.");
+         return null; // Indicate failure
       }
-
-      return false;
+      throw new Error(`Failed to fetch user info: ${response.status}`);
     }
 
     const userData = await response.json();
-
-    if (!userData || !userData.data) {
-      console.error("[Auth] Invalid response when refreshing user data");
-      return false;
+    if (!userData.success || !userData.data) {
+      console.error("[Auth] Invalid user info response format:", userData);
+      throw new Error("Invalid user data received.");
     }
 
-    // Update user data
-    user = { ...user, ...userData.data };
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-    console.log("[Auth] User data refreshed successfully");
+    console.log("[Auth] User info fetched successfully:", userData.data);
+    // Return the user data along with the token used to fetch it
+    return { ...userData.data, token: tokenToUse };
 
-    return true;
   } catch (error) {
-    console.error("[Auth] Error refreshing user data:", error);
-    return false;
+    console.error("[Auth] Error fetching user info:", error);
+    return null; // Indicate failure
   }
 }
 
 // Logout the user
 function logout() {
-  console.log("[Auth] Logging out user");
-
-  // Clear user data
-  user = null;
+  console.log("[Auth] Logging out user...");
+  currentUser = null;
+  authToken = null;
   localStorage.removeItem(USER_KEY);
 
-  // Update UI
-  updateAuthUI();
+  // Also revoke any Google tokens
+  if (chrome.identity) {
+      chrome.identity.getAuthToken({ interactive: false }, function(token) {
+        if (token) {
+          chrome.identity.removeCachedAuthToken({ token }, () => {
+             console.log("[Auth] Cleared cached Google token on logout.");
+          });
+          // Also try revoking, although it might require user interaction
+          // fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`);
+        }
+      });
+  }
 
-  console.log("[Auth] User logged out successfully");
+  updateAuthUI(); // Update UI to logged-out state
+  console.log("[Auth] User logged out successfully.");
 }
 
 // Update the UI based on auth state
 function updateAuthUI() {
-  console.log("[Auth] Updating auth UI");
+  console.log("[Auth] Updating auth UI. Current user:", currentUser);
 
-  if (user) {
-    console.log("[Auth] User is logged in, updating UI for authenticated state");
-    console.log("[Auth] User data:", user);
-
-    // Show authenticated UI elements
-    if (loginBtn) loginBtn.classList.add('hidden');
-    if (settingsBtn) settingsBtn.classList.remove('hidden');
-    if (userProfile) userProfile.classList.remove('hidden');
-    if (creditsContainer) creditsContainer.classList.remove('hidden');
-
-    // Hide welcome and auth container
-    if (welcomeContainer) welcomeContainer.classList.add('hidden');
-    if (authContainer) authContainer.classList.add('hidden');
-
-    // Show main content
-    if (mainContent) {
-      mainContent.classList.remove('hidden');
-      console.log("[Auth] Main content is now visible");
-    } else {
-      // Try finding main content again if not found initially
-      mainContent = document.getElementById('main-content');
-      if (mainContent) {
-         mainContent.classList.remove('hidden');
-         console.log("[Auth] Main content found and made visible");
-      } else {
-         console.error("[Auth] Main content element (#main-content) not found!");
+  // Ensure DOM elements are available
+  if (!loginBtn || !settingsBtn || !userProfile || !creditsContainer || !welcomeContainer || !authContainer || !mainContent) {
+      console.warn("[Auth] Some UI elements not found during updateAuthUI. Re-initializing...");
+      initDomElements(); // Try finding them again
+      // Re-check if elements are found now
+      if (!loginBtn || !settingsBtn || !userProfile || !creditsContainer || !welcomeContainer || !authContainer || !mainContent) {
+          console.error("[Auth] Critical UI elements missing. Cannot update UI properly.");
+          return; // Exit if elements are still missing
       }
-    }
-
-    // Update user info
-    if (userAvatar) {
-      if (user.picture) {
-        userAvatar.src = user.picture;
-      } else {
-        console.log("[Auth] No user picture available, using default");
-        userAvatar.src = 'icons/user.png'; // Ensure default is set
-      }
-    }
-
-    if (menuUserAvatar) {
-      if (user.picture) {
-        menuUserAvatar.src = user.picture;
-      } else {
-         menuUserAvatar.src = 'icons/user.png'; // Ensure default is set
-      }
-    }
-
-    if (userName) {
-      userName.textContent = user.name || 'User';
-      console.log("[Auth] Set user name to:", userName.textContent);
-    }
-
-    if (userEmail) {
-      userEmail.textContent = user.email || '';
-      console.log("[Auth] Set user email to:", userEmail.textContent);
-    }
-
-    // Update credits
-    if (creditsCount) {
-      creditsCount.textContent = user.credits !== undefined ? user.credits : '-';
-      console.log("[Auth] Set credits count to:", creditsCount.textContent);
-    } else {
-      console.error("[Auth] Credits count element not found!");
-    }
-
-    // Give new users 3 free credits (This logic might be redundant if backend handles it)
-    // Consider removing if backend reliably initializes credits
-    if (user.credits === undefined) {
-      console.log("[Auth] User has no credits, initializing with 3 free credits (frontend)");
-      user.credits = 3;
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
-      if (creditsCount) {
-        creditsCount.textContent = user.credits;
-      }
-    }
-  } else {
-    console.log("[Auth] No user logged in, updating UI for unauthenticated state");
-
-    // Show unauthenticated UI elements
-    if (loginBtn) loginBtn.classList.remove('hidden');
-    if (settingsBtn) settingsBtn.classList.add('hidden');
-    if (userProfile) userProfile.classList.add('hidden');
-    if (creditsContainer) creditsContainer.classList.add('hidden');
-
-    // Show welcome screen or auth container, hide main content
-    // Decide which initial screen to show (welcome or auth)
-    const showWelcome = true; // Change this based on desired initial view
-
-    if (showWelcome && welcomeContainer) {
-       welcomeContainer.classList.remove('hidden');
-       if (authContainer) authContainer.classList.add('hidden');
-    } else if (authContainer) {
-       authContainer.classList.remove('hidden');
-       if (welcomeContainer) welcomeContainer.classList.add('hidden');
-    }
-    
-    if (mainContent) mainContent.classList.add('hidden');
   }
 
-  console.log("[Auth] Auth UI update complete");
+
+  if (currentUser && authToken) { // Check for currentUser AND authToken
+    console.log("[Auth] Rendering logged-in state.");
+    loginBtn.classList.add('hidden');
+    settingsBtn.classList.remove('hidden');
+    userProfile.classList.remove('hidden');
+    creditsContainer.classList.remove('hidden');
+    welcomeContainer?.classList.add('hidden'); // Hide welcome if it exists
+    authContainer.classList.add('hidden'); // Hide auth form
+    mainContent?.classList.remove('hidden'); // Show main app content if it exists
+
+    // Update user details in profile and menu
+    const picture = currentUser.picture || 'icons/user.png';
+    if (userAvatar) userAvatar.src = picture;
+    if (menuUserAvatar) menuUserAvatar.src = picture;
+    if (userName) userName.textContent = currentUser.name || 'User';
+    if (userEmail) userEmail.textContent = currentUser.email || '';
+    if (creditsCount) creditsCount.textContent = currentUser.credits !== undefined ? currentUser.credits : '-';
+
+  } else {
+    console.log("[Auth] Rendering logged-out state.");
+    loginBtn.classList.remove('hidden');
+    settingsBtn.classList.add('hidden');
+    userProfile.classList.add('hidden');
+    creditsContainer.classList.add('hidden');
+    if (userMenu) userMenu.classList.add('hidden'); // Ensure menu is hidden
+
+    // Show initial screen (e.g., welcome or auth form)
+    // Let's default to showing the auth form if logged out
+    authContainer.classList.remove('hidden');
+    authContainer.style.display = 'block'; // Ensure it's visible
+    if (welcomeContainer) welcomeContainer.classList.add('hidden');
+    if (mainContent) mainContent.classList.add('hidden');
+
+    // Ensure Google Sign-In buttons are ready/visible in the auth container
+    initGoogleSignInButtons();
+  }
+  console.log("[Auth] Auth UI update complete.");
 }
 
 
 // Display an error message
 function displayError(message) {
   console.error(`[Auth] Error: ${message}`);
-
-  // Check if the message is a server error
   const isServerError = message.includes('Server') || message.includes('500');
-
-  // Find the error element
   const errorElement = document.getElementById('error-message');
 
   if (errorElement) {
-    console.log("[Auth] Displaying error in error-message element");
-
-    // Format the message for display
     let displayMessage = message;
-
-    // If it's a server error, add a more user-friendly message
     if (isServerError) {
-      displayMessage = "The server is currently experiencing issues. Please try again later or contact support.";
+      displayMessage = "The server is currently experiencing issues. Please try again later.";
+    } else if (message.includes("404")) {
+        displayMessage = "Cannot reach the server (404). Please check your connection or contact support.";
+    } else if (message.includes("403")) {
+         displayMessage = "Authentication failed (403). Please try signing in again.";
+    } else if (message.includes("token")) {
+         displayMessage = "Failed to get authentication token. Please ensure you are signed into Chrome.";
     }
 
     errorElement.textContent = displayMessage;
     errorElement.classList.remove('hidden');
 
-    // Make sure the auth container is visible if showing an auth error
+    // Show auth container on login errors
     if (message.toLowerCase().includes('login') || message.toLowerCase().includes('sign-in')) {
-       const authContainer = document.getElementById('auth-container');
-       if (authContainer) {
-         authContainer.classList.remove('hidden');
-       }
+       if (authContainer) authContainer.classList.remove('hidden');
     }
 
-    // Hide after 15 seconds for server errors, 10 seconds for other errors
+    // Auto-hide error message
     setTimeout(() => {
-      errorElement.classList.add('hidden');
-    }, isServerError ? 15000 : 10000);
+      if (errorElement) errorElement.classList.add('hidden');
+    }, 10000);
   } else {
-    // Fallback to alert if error element doesn't exist
-    console.log("[Auth] Error element not found, using alert instead");
-
-    // Format the message for display
-    let alertMessage = message;
-
-    // If it's a server error, add a more user-friendly message
-    if (isServerError) {
-      alertMessage = "The server is currently experiencing issues. Please try again later or contact support.";
-    }
-
-    alert(`Authentication Error: ${alertMessage}`);
+    console.warn("[Auth] Error element not found, using alert.");
+    alert(`Authentication Error: ${message}`);
   }
 }
 
-
-// Get the current user
+// Get the current user data
 function getCurrentUser() {
-  return user;
+  return currentUser;
 }
 
 // Check if user is logged in
 function isLoggedIn() {
-  return !!user;
+  return !!currentUser && !!authToken;
 }
 
 // Export functions for external use
