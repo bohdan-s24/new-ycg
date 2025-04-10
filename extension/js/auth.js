@@ -183,6 +183,21 @@ async function handleGoogleSignIn() {
     localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
     console.log("[Auth] User data saved to localStorage.");
 
+    // Hide auth container and welcome container
+    if (authContainer) {
+      authContainer.classList.add('hidden');
+      authContainer.style.display = 'none';
+    }
+    if (welcomeContainer) {
+      welcomeContainer.classList.add('hidden');
+    }
+
+    // Show main content
+    if (mainContent) {
+      mainContent.classList.remove('hidden');
+      console.log("[Auth] Main content is now visible");
+    }
+
     updateAuthUI(); // Update UI to logged-in state
     console.log("[Auth] Google Sign-In successful!");
 
@@ -224,7 +239,12 @@ function setupEventListeners() {
     return false;
   };
 
-  safeAddEventListener(loginBtn, 'click', showAuthUI); // Show the auth container
+  safeAddEventListener(loginBtn, 'click', () => {
+    // Hide welcome container
+    if (welcomeContainer) welcomeContainer.classList.add('hidden');
+    // Show auth container
+    showAuthUI();
+  }); // Show the auth container
   // Google button listener is added dynamically in initGoogleSignInButtons
   safeAddEventListener(settingsBtn, 'click', toggleUserMenu);
   safeAddEventListener(userProfile, 'click', toggleUserMenu);
@@ -416,12 +436,20 @@ function updateAuthUI() {
     creditsContainer.classList.add('hidden');
     if (userMenu) userMenu.classList.add('hidden'); // Ensure menu is hidden
 
-    // Show initial screen (e.g., welcome or auth form)
-    // Let's default to showing the auth form if logged out
-    authContainer.classList.remove('hidden');
-    authContainer.style.display = 'block'; // Ensure it's visible
-    if (welcomeContainer) welcomeContainer.classList.add('hidden');
-    if (mainContent) mainContent.classList.add('hidden');
+    // Show welcome screen when logged out
+    if (welcomeContainer) {
+      welcomeContainer.classList.remove('hidden');
+      welcomeContainer.style.display = 'block'; // Ensure it's visible
+    }
+
+    // Hide auth container and main content
+    if (authContainer) {
+      authContainer.classList.add('hidden');
+      authContainer.style.display = 'none';
+    }
+    if (mainContent) {
+      mainContent.classList.add('hidden');
+    }
 
     // Ensure Google Sign-In buttons are ready/visible in the auth container
     initGoogleSignInButtons();
@@ -476,9 +504,19 @@ function isLoggedIn() {
   return !!currentUser && !!authToken;
 }
 
+// Clear localStorage (for debugging)
+function clearStorage() {
+  localStorage.removeItem(USER_KEY);
+  console.log("[Auth] Cleared user data from localStorage.");
+  currentUser = null;
+  authToken = null;
+  updateAuthUI();
+}
+
 // Export functions for external use
 window.auth = {
   getCurrentUser,
   isLoggedIn,
-  logout
+  logout,
+  clearStorage
 };
