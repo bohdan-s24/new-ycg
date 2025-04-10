@@ -10,7 +10,7 @@ class Config:
     WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY") # Loaded from Vercel env
     REDIS_URL = os.environ.get("REDIS_URL") # Full Upstash URL (e.g., rediss://...)
-    REDIS_TOKEN = os.environ.get("REDIS_TOKEN") # Upstash Token (part after 'default:')
+    KV_REST_API_TOKEN = os.environ.get("KV_REST_API_TOKEN") # Use the Vercel KV token variable name
     
     # Google OAuth Client ID (Hardcoded as requested)
     GOOGLE_CLIENT_ID = "373897257675-i561f2gcpv310b61bptj0ge2bmvdm03m.apps.googleusercontent.com"
