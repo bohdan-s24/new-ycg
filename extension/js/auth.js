@@ -49,27 +49,29 @@ function initGoogleSignInButtons() {
         return button;
     };
 
-    const addButtonToContainer = (container, containerId) => {
-        if (container) {
-            // Check if button already exists
-            if (!container.querySelector('.google-signin-btn-dynamic')) {
-               container.innerHTML = ''; // Clear existing only if button not present
-               container.appendChild(createGoogleButton());
-               console.log(`[Auth] Added Google Sign-In button to #${containerId}`);
-            } else {
-               console.log(`[Auth] Google Sign-In button already exists in #${containerId}`);
-            }
-            return true;
-        }
-        console.warn(`[Auth] Container #${containerId} not found`);
-        return false;
-    };
+    // Find the Google sign-in button containers
+    const googleSignInButton1 = document.getElementById('google-signin-button');
+    const googleSignInButton2 = document.getElementById('google-signin-button-auth');
 
-    // Add button to the auth container (assuming it's the primary place)
-    addButtonToContainer(authContainer?.querySelector('.generate-button-container'), 'auth-container > .generate-button-container');
-    // Remove references to potentially non-existent second button container
+    console.log("[Auth] Google button containers:", {
+      'google-signin-button': !!googleSignInButton1,
+      'google-signin-button-auth': !!googleSignInButton2
+    });
 
-    console.log("[Auth] Google Sign-In buttons initialization check complete.");
+    // Add buttons to both containers
+    if (googleSignInButton1) {
+      googleSignInButton1.innerHTML = '';
+      googleSignInButton1.appendChild(createGoogleButton());
+      console.log("[Auth] Added Google Sign-In button to container 1");
+    }
+
+    if (googleSignInButton2) {
+      googleSignInButton2.innerHTML = '';
+      googleSignInButton2.appendChild(createGoogleButton());
+      console.log("[Auth] Added Google Sign-In button to container 2");
+    }
+
+    console.log("[Auth] Google Sign-In buttons initialization complete.");
   } catch (error) {
     console.error("[Auth] Error initializing Google Sign-In buttons:", error);
   }
@@ -91,13 +93,17 @@ async function clearGoogleAuthTokens() {
 
 // Handle Google Sign-In button click
 async function handleGoogleSignIn() {
-  console.log("[Auth] handleGoogleSignIn called");
+  console.log("[Auth] Google Sign-In button clicked");
   // Show loading state on button? (Need button reference)
   try {
     if (!chrome.identity) {
       console.error("[Auth] chrome.identity API is not available");
       return displayError("Chrome identity API is not available.");
     }
+
+    // Clear any existing tokens first
+    console.log("[Auth] Clearing Google auth token cache");
+    await clearGoogleAuthTokens();
 
     console.log("[Auth] Attempting chrome.identity.getAuthToken...");
     const token = await new Promise((resolve, reject) => {
@@ -115,22 +121,50 @@ async function handleGoogleSignIn() {
     console.log("[Auth] Received OAuth token from Chrome identity.");
 
     console.log(`[Auth] Sending token to backend: ${GOOGLE_LOGIN_ENDPOINT}`);
-    const response = await fetch(GOOGLE_LOGIN_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: token, platform: 'chrome_extension' })
-    });
-    console.log(`[Auth] Backend response status: ${response.status}`);
 
-    const responseText = await response.text();
-    if (!response.ok) {
-      console.error(`[Auth] Backend login failed: ${response.status} ${responseText}`);
-      // Attempt to revoke token if backend failed
-      chrome.identity.removeCachedAuthToken({ token }, () => console.log("[Auth] Revoked potentially invalid token after backend error."));
-      throw new Error(`Backend login failed (${response.status}). Check server logs.`);
+    // Log token prefix for debugging (not the full token for security)
+    const tokenPrefix = token.substring(0, 10);
+    console.log(`[Auth] Token prefix: ${tokenPrefix}...`);
+
+    let response;
+    let data;
+
+    try {
+      response = await fetch(GOOGLE_LOGIN_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: token, platform: 'chrome_extension' })
+      });
+
+      console.log(`[Auth] Backend response status: ${response.status}`);
+
+      const responseText = await response.text();
+      console.log(`[Auth] Backend response text: ${responseText.substring(0, 100)}...`);
+
+      if (!response.ok) {
+        console.error(`[Auth] Backend login failed: ${response.status} ${responseText}`);
+        // Attempt to revoke token if backend failed
+        chrome.identity.removeCachedAuthToken({ token }, () => console.log("[Auth] Revoked potentially invalid token after backend error."));
+
+        if (response.status === 500) {
+          throw new Error(`Server error (500). Please try again later or contact support.`);
+        } else {
+          throw new Error(`Backend login failed (${response.status}). Check server logs.`);
+        }
+      }
+
+      // Parse the response text as JSON
+      try {
+        data = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error("[Auth] Failed to parse response as JSON:", jsonError);
+        throw new Error("Invalid response format from server.");
+      }
+    } catch (fetchError) {
+      console.error("[Auth] Fetch error during token exchange:", fetchError);
+      throw new Error(`Network error during login: ${fetchError.message}`);
     }
 
-    const data = JSON.parse(responseText);
     console.log("[Auth] Backend response data:", data);
     if (!data.success || !data.data || !data.data.access_token) {
       throw new Error("Invalid response format from backend.");
