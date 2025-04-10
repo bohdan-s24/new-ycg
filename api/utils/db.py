@@ -19,14 +19,13 @@ async def get_redis_connection() -> UpstashRedisAsync:
     """
     global redis_async_client
     if redis_async_client is None:
-        if not Config.REDIS_URL:
-            logging.error("REDIS_URL is not configured in environment variables.")
-            raise ValueError("Redis URL not configured")
+        if not Config.REDIS_URL or not Config.REDIS_TOKEN:
+            logging.error("REDIS_URL or REDIS_TOKEN is not configured in environment variables.")
+            raise ValueError("Redis URL or Token not configured")
         
         try:
-            # Initialize the async client using the constructor with the URL
-            # The Upstash URL typically includes the token
-            redis_async_client = UpstashRedisAsync(url=Config.REDIS_URL)
+            # Initialize the async client using the constructor with URL and Token
+            redis_async_client = UpstashRedisAsync(url=Config.REDIS_URL, token=Config.REDIS_TOKEN)
             
             # Test connection (Upstash client might not have an explicit async ping, 
             # but subsequent operations will fail if connection is bad)
