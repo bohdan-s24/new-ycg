@@ -43,28 +43,25 @@ async def deduct_credits(user_id: str, amount: int = DEFAULT_GENERATION_COST, de
     r = await get_redis_connection()
     key = f"{CREDIT_BALANCE_KEY_PREFIX}{user_id}"
 
-    # Lua script for atomic check and decrement
-    lua_script = """
-    local current_balance = redis.call('GET', KEYS[1])
-    if current_balance == false or tonumber(current_balance) < tonumber(ARGV[1]) then
-        return -1 -- Indicate insufficient funds or key not found
-    end
-    local new_balance = redis.call('DECRBY', KEYS[1], ARGV[1])
-    return new_balance
-    """
-    
+    # Check if the user has enough credits and deduct them
     try:
-        script_sha = await r.script_load(lua_script)
-        result = await r.evalsha(script_sha, 1, key, amount)
-        
-        if result == -1:
-            logging.warning(f"Insufficient credits for user {user_id} to deduct {amount}.")
+        # First, get the current balance
+        current_balance = await r.get(key)
+        current_balance = int(current_balance) if current_balance is not None else 0
+
+        # Check if there are enough credits
+        if current_balance < amount:
+            logging.warning(f"Insufficient credits for user {user_id}. Has {current_balance}, needs {amount}.")
             return False
-        else:
-            logging.info(f"Deducted {amount} credits from user {user_id}. New balance: {result}")
-            # Log the transaction
-            await add_transaction(user_id, -amount, "deduction", description)
-            return True
+
+        # Deduct the credits
+        new_balance = await r.decrby(key, amount)
+        result = new_balance
+
+        logging.info(f"Deducted {amount} credits from user {user_id}. New balance: {result}")
+        # Log the transaction
+        await add_transaction(user_id, -amount, "deduction", description)
+        return True
     except Exception as e:
         logging.error(f"Error deducting credits for user {user_id}: {e}")
         return False
@@ -75,7 +72,7 @@ async def add_credits(user_id: str, amount: int, transaction_type: str = "purcha
     if amount <= 0:
         logging.warning(f"Attempted to add non-positive credit amount ({amount}) for user {user_id}")
         return None
-        
+
     r = await get_redis_connection()
     key = f"{CREDIT_BALANCE_KEY_PREFIX}{user_id}"
     try:

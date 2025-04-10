@@ -227,12 +227,23 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Tuple[Optional[
         # Store primary user data and secondary indexes
         user_key = f"user:{new_user.email}"
         google_id_key = f"googleid:{google_user_id}"
-        # Use a pipeline for atomic operations
-        async with r.pipeline(transaction=True) as pipe:
-            pipe.set(user_key, new_user.json())
-            pipe.set(google_id_key, user_key) # Map googleid to primary user key
-            # Consider setting userid index too: pipe.set(f"userid:{new_user_id}", user_key)
-            await pipe.execute()
+        # Store user data and indexes
+        # Note: Upstash Redis client might not support transactions in pipeline
+        # so we'll use individual commands
+        try:
+            # Store the user data
+            await r.set(user_key, new_user.json())
+            logging.info(f"Stored user data at {user_key}")
+
+            # Store the Google ID index
+            await r.set(google_id_key, user_key) # Map googleid to primary user key
+            logging.info(f"Stored Google ID index at {google_id_key}")
+
+            # Consider setting userid index too if needed
+            # await r.set(f"userid:{new_user_id}", user_key)
+        except Exception as e:
+            logging.error(f"Error storing user data: {e}")
+            raise
 
         logging.info(f"Stored new user {user_key} and index {google_id_key}")
 
