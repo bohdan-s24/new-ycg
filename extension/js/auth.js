@@ -174,12 +174,20 @@ async function handleGoogleSignIn() {
     console.log("[Auth] Received app token from backend.");
 
     // Fetch user info immediately after getting token
-    const userInfo = await fetchUserInfo(authToken); // Pass token directly
-    if (!userInfo) {
+    console.log("[Auth] Calling fetchUserInfo with token:", authToken);
+    const fetchedUserInfo = await fetchUserInfo(authToken); // Pass token directly
+    console.log("[Auth] fetchUserInfo returned:", fetchedUserInfo);
+
+    if (!fetchedUserInfo) {
+        // fetchUserInfo logs errors internally
         throw new Error("Failed to fetch user info after login.");
     }
 
-    // Save combined info (token is now part of currentUser)
+    // Set the global currentUser AFTER the await fetchUserInfo completes
+    currentUser = fetchedUserInfo;
+    console.log("[Auth] Global currentUser updated:", currentUser);
+
+    // Save the correct currentUser to localStorage
     localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
     console.log("[Auth] User data saved to localStorage.");
 
@@ -362,6 +370,7 @@ async function fetchUserInfo(tokenToUse) {
 
     console.log("[Auth] User info fetched successfully:", userData.data);
     // Return the user data along with the token used to fetch it
+    // Don't set global currentUser here, let the caller do it after await
     return { ...userData.data, token: tokenToUse };
 
   } catch (error) {
