@@ -1,6 +1,6 @@
 /**
  * YouTube Chapter Generator API Service Module
- * 
+ *
  * This module provides a centralized API service for making network requests.
  * It handles authentication, error handling, and request formatting.
  */
@@ -10,7 +10,7 @@ const API = {
   // Base URLs
   BASE_URL: window.YCG_CONFIG.API_BASE_URL,
   AUTH_BASE_URL: window.YCG_CONFIG.AUTH_BASE_URL,
-  
+
   // Auth endpoints
   AUTH: {
     LOGIN_GOOGLE: `${window.YCG_CONFIG.AUTH_BASE_URL}/login/google`,
@@ -18,26 +18,26 @@ const API = {
     USER_INFO: `${window.YCG_CONFIG.AUTH_BASE_URL}/user`,
     CONFIG: `${window.YCG_CONFIG.AUTH_BASE_URL}/config`
   },
-  
+
   // Chapters endpoints
   CHAPTERS: {
-    GENERATE: `${window.YCG_CONFIG.API_BASE_URL}/chapters/generate`
+    GENERATE: `${window.YCG_CONFIG.API_BASE_URL}/v1/chapters/generate`
   },
-  
+
   // Credits endpoints
   CREDITS: {
-    BALANCE: `${window.YCG_CONFIG.API_BASE_URL}/credits/balance`
+    BALANCE: `${window.YCG_CONFIG.API_BASE_URL}/v1/credits/balance`
   },
-  
+
   // Payment endpoints
   PAYMENT: {
-    PLANS: `${window.YCG_CONFIG.API_BASE_URL}/payment/plans`,
-    CREATE_SESSION: `${window.YCG_CONFIG.API_BASE_URL}/payment/create-session`
+    PLANS: `${window.YCG_CONFIG.API_BASE_URL}/v1/payment/plans`,
+    CREATE_SESSION: `${window.YCG_CONFIG.API_BASE_URL}/v1/payment/create-session`
   },
-  
+
   // Health check
   HEALTH: {
-    PING: `${window.YCG_CONFIG.API_BASE_URL}/health`
+    PING: `${window.YCG_CONFIG.API_BASE_URL}/v1/health`
   }
 };
 
@@ -51,7 +51,7 @@ class ApiService {
     this.maxRetries = 3;
     this.retryDelay = 1000; // 1 second
   }
-  
+
   /**
    * Get the authentication token from the store
    * @returns {string|null} The authentication token
@@ -60,7 +60,7 @@ class ApiService {
     const state = this.store.getState();
     return state.auth.token;
   }
-  
+
   /**
    * Make a network request with error handling and authentication
    * @param {string} url - The URL to request
@@ -76,7 +76,7 @@ class ApiService {
         'Content-Type': 'application/json'
       }
     };
-    
+
     // Merge options
     const mergedOptions = {
       ...defaultOptions,
@@ -86,23 +86,23 @@ class ApiService {
         ...options.headers
       }
     };
-    
+
     // Add authentication token if required
     if (requiresAuth) {
       const token = this.getToken();
       if (!token) {
         throw new Error('Authentication required but no token available');
       }
-      
+
       mergedOptions.headers['Authorization'] = `Bearer ${token}`;
     }
-    
+
     try {
       console.log(`[API] ${mergedOptions.method} request to ${url}`);
-      
+
       // Make the request
       const response = await fetch(url, mergedOptions);
-      
+
       // Handle non-JSON responses
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
@@ -111,49 +111,49 @@ class ApiService {
         }
         return { success: response.ok };
       }
-      
+
       // Parse JSON response
       const data = await response.json();
-      
+
       // Handle API errors
       if (!response.ok) {
         const error = data.error || `HTTP Error: ${response.status}`;
         throw new Error(error);
       }
-      
+
       return data;
     } catch (error) {
       // Handle network errors
       console.error(`[API] Error in ${url}:`, error);
-      
+
       // Retry logic for network errors
       if (this.retryCount < this.maxRetries && this.isNetworkError(error)) {
         this.retryCount++;
         console.log(`[API] Retrying request (${this.retryCount}/${this.maxRetries})...`);
-        
+
         // Wait before retrying
         await new Promise(resolve => setTimeout(resolve, this.retryDelay * this.retryCount));
-        
+
         // Retry the request
         return this.request(url, options, requiresAuth);
       }
-      
+
       // Reset retry count
       this.retryCount = 0;
-      
+
       // Handle authentication errors
       if (this.isAuthError(error) && requiresAuth) {
         // Dispatch logout action
         this.store.dispatch('auth', { type: 'LOGOUT' });
-        
+
         // Save state to storage
         await this.store.saveToStorage();
       }
-      
+
       throw error;
     }
   }
-  
+
   /**
    * Check if an error is a network error
    * @param {Error} error - The error to check
@@ -167,7 +167,7 @@ class ApiService {
       error.message.includes('Network Error')
     );
   }
-  
+
   /**
    * Check if an error is an authentication error
    * @param {Error} error - The error to check
@@ -181,7 +181,7 @@ class ApiService {
       error.message.includes('Unauthorized')
     );
   }
-  
+
   /**
    * Verify a token with the server
    * @param {string} token - The token to verify
@@ -193,7 +193,7 @@ class ApiService {
       body: JSON.stringify({ token })
     });
   }
-  
+
   /**
    * Get the current user's information
    * @returns {Promise<Object>} The user information
@@ -201,7 +201,7 @@ class ApiService {
   async getUserInfo() {
     return this.request(API.AUTH.USER_INFO, {}, true);
   }
-  
+
   /**
    * Login with Google
    * @param {string} googleToken - The Google OAuth token
@@ -216,7 +216,7 @@ class ApiService {
       })
     });
   }
-  
+
   /**
    * Get the user's credit balance
    * @returns {Promise<Object>} The credit balance
@@ -224,7 +224,7 @@ class ApiService {
   async getCreditBalance() {
     return this.request(API.CREDITS.BALANCE, {}, true);
   }
-  
+
   /**
    * Generate chapters for a video
    * @param {string} videoId - The YouTube video ID
@@ -240,7 +240,7 @@ class ApiService {
       })
     }, true);
   }
-  
+
   /**
    * Get available payment plans
    * @returns {Promise<Object>} The payment plans
@@ -248,7 +248,7 @@ class ApiService {
   async getPaymentPlans() {
     return this.request(API.PAYMENT.PLANS);
   }
-  
+
   /**
    * Create a payment session
    * @param {string} planId - The payment plan ID
@@ -260,7 +260,7 @@ class ApiService {
       body: JSON.stringify({ plan_id: planId })
     }, true);
   }
-  
+
   /**
    * Check if the API is available
    * @returns {Promise<boolean>} Whether the API is available

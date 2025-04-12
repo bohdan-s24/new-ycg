@@ -9,14 +9,14 @@ from flask import Blueprint, jsonify, request
 class VersionedBlueprint(Blueprint):
     """
     A Flask Blueprint that supports versioning.
-    
+
     This class extends Flask's Blueprint to add version prefixes to routes.
     """
-    
+
     def __init__(self, name, import_name, version="v1", **kwargs):
         """
         Initialize a versioned blueprint.
-        
+
         Args:
             name: The name of the blueprint
             import_name: The import name of the blueprint
@@ -24,21 +24,22 @@ class VersionedBlueprint(Blueprint):
             **kwargs: Additional arguments to pass to Blueprint
         """
         self.version = version
-        
+
         # Set the URL prefix to include the version
         url_prefix = kwargs.get("url_prefix", "")
-        kwargs["url_prefix"] = f"/api/{version}{url_prefix}"
-        
+        # For Vercel compatibility, don't include /api in the prefix
+        kwargs["url_prefix"] = f"/{version}{url_prefix}"
+
         super().__init__(name, import_name, **kwargs)
-        
+
     def route(self, rule, **options):
         """
         Register a route with the blueprint.
-        
+
         Args:
             rule: The URL rule
             **options: Additional options to pass to Blueprint.route
-            
+
         Returns:
             The route decorator
         """
@@ -50,15 +51,16 @@ class VersionedBlueprint(Blueprint):
 def create_version_blueprint(app):
     """
     Create a blueprint for API version information.
-    
+
     Args:
         app: The Flask application
-        
+
     Returns:
         A Flask Blueprint for API version information
     """
-    version_bp = Blueprint("version", __name__, url_prefix="/api")
-    
+    # For Vercel compatibility, don't include /api in the prefix
+    version_bp = Blueprint("version", __name__, url_prefix="/")
+
     @version_bp.route("/version", methods=["GET"])
     def get_version():
         """Get API version information."""
@@ -69,7 +71,7 @@ def create_version_blueprint(app):
             "latest": "v1"
         }
         return jsonify({"success": True, "versions": versions})
-    
+
     @version_bp.route("/", methods=["GET"])
     def api_root():
         """API root endpoint."""
@@ -79,5 +81,5 @@ def create_version_blueprint(app):
             "version": "v1",
             "documentation": "/api/docs"
         })
-    
+
     return version_bp
