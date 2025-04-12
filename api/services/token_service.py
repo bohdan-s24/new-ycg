@@ -3,7 +3,7 @@ Token service for handling JWT token operations.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Any
 
 from jose import jwt, JWTError
@@ -28,9 +28,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.now(datetime.timezone.utc) + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(datetime.timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
 
     try:
@@ -76,7 +76,7 @@ def create_user_token(user_id: str, email: str) -> str:
     token_data = {
         "sub": user_id,
         "email": email,
-        "iat": datetime.now(datetime.timezone.utc)
+        "iat": datetime.now(timezone.utc)
     }
     return create_access_token(token_data)
 
@@ -103,8 +103,8 @@ def validate_token(token: str) -> Dict[str, Any]:
 
         # Check if token is expired
         if "exp" in payload:
-            expiration = datetime.fromtimestamp(payload["exp"], tz=datetime.timezone.utc)
-            if expiration < datetime.now(datetime.timezone.utc):
+            expiration = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+            if expiration < datetime.now(timezone.utc):
                 raise AuthenticationError("Token has expired")
 
         return payload

@@ -1,4 +1,6 @@
 import logging
+import json
+import datetime
 from typing import Optional
 
 from ..utils.db import redis_operation
@@ -68,10 +70,8 @@ async def deduct_credits(user_id: str, amount: int = DEFAULT_GENERATION_COST, de
 
         # Log the transaction (using the same redis connection)
         transaction_key = f"{TRANSACTION_LOG_KEY_PREFIX}{user_id}"
-        import json
-        import datetime
         transaction_data = {
-            "timestamp": datetime.datetime.now(datetime.datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now().isoformat(),
             "amount": -amount,
             "type": "deduction",
             "description": description
@@ -102,10 +102,8 @@ async def add_credits(user_id: str, amount: int, transaction_type: str = "purcha
 
         # Log the transaction (using the same redis connection)
         transaction_key = f"{TRANSACTION_LOG_KEY_PREFIX}{user_id}"
-        import json
-        import datetime
         transaction_data = {
-            "timestamp": datetime.datetime.now(datetime.datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now().isoformat(),
             "amount": amount,
             "type": transaction_type,
             "description": description
@@ -123,12 +121,9 @@ async def add_credits(user_id: str, amount: int, transaction_type: str = "purcha
 async def add_transaction(user_id: str, amount: int, type: str, description: str):
     """Adds a transaction record to the user's log (using a Redis List)."""
     key = f"{TRANSACTION_LOG_KEY_PREFIX}{user_id}"
-    import json
-    import datetime
-
     async def _add_transaction(redis, _, amount, type, description):
         transaction_data = {
-            "timestamp": datetime.datetime.now(datetime.datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now().isoformat(),
             "amount": amount,
             "type": type,
             "description": description
@@ -151,7 +146,7 @@ async def get_transactions(user_id: str, limit: int = 50) -> list:
     async def _get_transactions(redis, _, limit):
         # LRANGE 0 to limit-1 gets the first 'limit' items (most recent due to LPUSH)
         transactions_json = await redis.lrange(key, 0, limit - 1)
-        import json
+        # Parse JSON
         transactions = [json.loads(t) for t in transactions_json]
         return transactions
 
