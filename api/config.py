@@ -11,14 +11,14 @@ class Config:
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY") # Loaded from Vercel env
     REDIS_URL = os.environ.get("REDIS_URL") # Full Upstash URL (e.g., rediss://...)
     KV_REST_API_TOKEN = os.environ.get("KV_REST_API_TOKEN") # Use the Vercel KV token variable name
-    
-    # Google OAuth Client ID (Hardcoded as requested)
-    GOOGLE_CLIENT_ID = "373897257675-i561f2gcpv310b61bptj0ge2bmvdm03m.apps.googleusercontent.com"
-    
+
+    # Google OAuth Client ID
+    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+
     # Stripe Keys
     STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY") # Loaded from Vercel env
     STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET") # Loaded from Vercel env
-    
+
     # Frontend URL (needed for Stripe Checkout redirects)
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000") # Default for local dev
 

@@ -4,8 +4,8 @@ const CONFIG = {
   API_BASE_URL: "https://new-ycg.vercel.app/api",
   AUTH_BASE_URL: "https://new-ycg.vercel.app/auth", // Remove /api prefix
 
-  // Google OAuth
-  GOOGLE_CLIENT_ID: "373897257675-i561f2gcpv310b61bptj0ge2bmvdm03m.apps.googleusercontent.com"
+  // Google OAuth - This will be replaced during build with the actual client ID
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || "GOOGLE_CLIENT_ID_PLACEHOLDER"
 };
 
 // Export the configuration

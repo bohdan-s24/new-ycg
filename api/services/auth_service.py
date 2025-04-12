@@ -37,9 +37,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     """Creates a JWT access token."""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(datetime.timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(datetime.timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     if not Config.JWT_SECRET_KEY:
         raise ValueError("JWT_SECRET_KEY not configured")
@@ -63,7 +63,7 @@ async def get_user_by_email(email: str) -> Optional[User]:
     r = await get_redis_connection()
     user_data_json = await r.get(f"user:{email}")
     if user_data_json:
-        user_data = User.parse_raw(user_data_json)
+        user_data = User.model_validate_json(user_data_json)
         return user_data
     return None
 
@@ -82,11 +82,11 @@ async def create_user(user_data: UserCreate) -> Optional[User]:
         email=user_data.email,
         name=user_data.name,
         password_hash=hashed_password,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(datetime.timezone.utc)
         # Initialize other fields as needed
     )
 
-    await r.set(f"user:{new_user.email}", new_user.json())
+    await r.set(f"user:{new_user.email}", new_user.model_dump_json())
     # Consider setting an index for user ID if needed: await r.set(f"userid:{user_id}", new_user.email)
 
     return new_user
@@ -155,7 +155,7 @@ async def get_user_by_google_id(google_id: str) -> Optional[User]:
     user_data_json = await r.get(user_key)
     if user_data_json:
         try:
-            user_data = User.parse_raw(user_data_json)
+            user_data = User.model_validate_json(user_data_json)
             logging.info(f"Retrieved user {user_key} using Google ID {google_id}")
             return user_data
         except Exception as e:
@@ -198,7 +198,7 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Tuple[Optional[
             logging.info(f"Linking Google ID {google_user_id} to existing user {user_email}")
             user.google_id = google_user_id
             # Update user data in Redis
-            await r.set(f"user:{user.email}", user.json())
+            await r.set(f"user:{user.email}", user.model_dump_json())
             # Set the secondary index googleid:<google_id> -> user:<email>
             await r.set(f"googleid:{google_user_id}", f"user:{user.email}")
             logging.info(f"Set Google ID index for {google_user_id} to {f'user:{user.email}'}")
@@ -219,7 +219,7 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Tuple[Optional[
             name=user_name,
             google_id=google_user_id,
             email_verified=userinfo.get('email_verified', False), # Use verification status from Google
-            created_at=datetime.utcnow()
+            created_at=datetime.now(datetime.timezone.utc)
             # No password_hash needed for Google-only users
             # Add picture field to User model if you want to store it
         )
@@ -232,7 +232,7 @@ async def get_or_create_google_user(userinfo: Dict[str, Any]) -> Tuple[Optional[
         # so we'll use individual commands
         try:
             # Store the user data
-            await r.set(user_key, new_user.json())
+            await r.set(user_key, new_user.model_dump_json())
             logging.info(f"Stored user data at {user_key}")
 
             # Store the Google ID index
