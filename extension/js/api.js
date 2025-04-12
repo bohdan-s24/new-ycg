@@ -86,9 +86,10 @@ class ApiService {
    * @param {string} url - The URL to request
    * @param {Object} options - The fetch options
    * @param {boolean} requiresAuth - Whether the request requires authentication
+   * @param {number} timeout - Request timeout in milliseconds (default: 5000)
    * @returns {Promise<Object>} The response data
    */
-  async request(url, options = {}, requiresAuth = false) {
+  async request(url, options = {}, requiresAuth = false, timeout = 5000) {
     // Set default options
     const defaultOptions = {
       method: 'GET',
@@ -120,8 +121,21 @@ class ApiService {
     try {
       console.log(`[API] ${mergedOptions.method} request to ${url}`);
 
+      // Add timeout if not already set
+      let timeoutId;
+      if (!mergedOptions.signal) {
+        const controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), timeout);
+        mergedOptions.signal = controller.signal;
+      }
+
       // Make the request
       const response = await fetch(url, mergedOptions);
+
+      // Clear the timeout if we set one
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
 
       // Handle non-JSON responses
       const contentType = response.headers.get('content-type');
@@ -239,13 +253,57 @@ class ApiService {
    * @returns {Promise<Object>} The login result
    */
   async loginWithGoogle(googleToken) {
-    return this.request(this.API.AUTH.LOGIN_GOOGLE, {
-      method: 'POST',
-      body: JSON.stringify({
-        token: googleToken,
-        platform: 'chrome_extension'
-      })
-    });
+    // Add retry logic specifically for login
+    const maxRetries = 3;
+    const baseDelay = 1000; // 1 second
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[API] Login attempt ${attempt}/${maxRetries}`);
+
+        // Use a longer timeout for login requests
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+        const result = await this.request(
+          this.API.AUTH.LOGIN_GOOGLE,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              token: googleToken,
+              platform: 'chrome_extension'
+            }),
+            signal: controller.signal
+          }
+        );
+
+        clearTimeout(timeoutId);
+
+        // Handle the nested response structure
+        console.log('[API] Login response structure:', JSON.stringify(result));
+
+        // Check if the response has a nested data structure
+        if (result.success && result.data) {
+          console.log('[API] Found nested data structure in login response');
+          // Return the data object which contains the access_token
+          return result.data;
+        }
+
+        return result;
+      } catch (error) {
+        console.error(`[API] Login attempt ${attempt} failed:`, error);
+
+        if (attempt === maxRetries) {
+          // Last attempt failed, throw the error
+          throw error;
+        }
+
+        // Wait before retrying
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        console.log(`[API] Retrying login in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
 
   /**

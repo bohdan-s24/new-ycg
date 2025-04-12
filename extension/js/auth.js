@@ -213,11 +213,28 @@ async function handleGoogleSignIn() {
     const loginResult = await api.loginWithGoogle(token);
 
     console.log('[AUTH-DEBUG] Login API call completed, result:', loginResult ? 'success' : 'null/undefined');
+    console.log('[AUTH-DEBUG] Login result structure:', JSON.stringify(loginResult));
 
-    if (!loginResult || !loginResult.access_token) {
+    if (!loginResult) {
+      throw new Error("Failed to login with Google: No response from server");
+    }
+
+    // Check for access_token in the response
+    if (!loginResult.access_token) {
       console.error('[AUTH-DEBUG] Login result missing access_token:', loginResult);
       throw new Error("Failed to login with Google: No access token returned");
     }
+
+    console.log("[AUTH-DEBUG] Login successful with token:", loginResult.access_token.substring(0, 10) + '...');
+
+    // Log extracted user info
+    console.log("[AUTH-DEBUG] Extracted user info:", {
+      user_id: loginResult.user_id,
+      email: loginResult.email,
+      name: loginResult.name,
+      picture: loginResult.picture ? 'present' : 'missing',
+      credits: loginResult.credits
+    });
 
     console.log("[AUTH-DEBUG] Login result details:", {
       access_token: loginResult.access_token ? `${loginResult.access_token.substring(0, 10)}...` : null,
