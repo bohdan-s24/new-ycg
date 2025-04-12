@@ -1,4 +1,4 @@
-from flask import Blueprint, request, g, current_app
+from flask import request, g, current_app
 import logging
 import stripe
 import json
@@ -7,8 +7,10 @@ from ..utils.responses import success_response, error_response
 from ..utils.decorators import token_required
 from ..services import payment_service
 from ..config import Config
+from ..utils.versioning import VersionedBlueprint
 
-payment_bp = Blueprint('payment', __name__, url_prefix='/payment')
+# Create a versioned blueprint
+payment_bp = VersionedBlueprint('payment', __name__, url_prefix='/payment')
 
 @payment_bp.route('/plans', methods=['GET'])
 async def get_plans():
@@ -32,32 +34,32 @@ async def create_checkout():
     user_id = getattr(g, 'current_user_id', None)
     if not user_id:
         return error_response("Authentication error.", 401)
-        
+
     if not request.is_json:
         return error_response("Request must be JSON", 400)
-        
+
     data = request.get_json()
     plan_id = data.get('plan_id')
     success_url = data.get('success_url')
     cancel_url = data.get('cancel_url')
-    
+
     if not plan_id:
         return error_response("Missing plan_id in request", 400)
-        
+
     if not success_url or not cancel_url:
         return error_response("Missing success_url or cancel_url in request", 400)
-        
+
     try:
         checkout_session = await payment_service.create_checkout_session(
-            user_id, 
-            plan_id, 
-            success_url, 
+            user_id,
+            plan_id,
+            success_url,
             cancel_url
         )
-        
+
         if not checkout_session:
             return error_response("Failed to create checkout session", 500)
-            
+
         return success_response(checkout_session)
     except Exception as e:
         logging.error(f"Error creating checkout session: {e}")
@@ -70,10 +72,10 @@ async def webhook():
     """
     payload = request.data
     sig_header = request.headers.get('Stripe-Signature')
-    
+
     if not sig_header:
         return error_response("Missing Stripe signature", 400)
-        
+
     try:
         # Verify the event
         event = stripe.Webhook.construct_event(
@@ -87,20 +89,20 @@ async def webhook():
         # Invalid signature
         logging.error(f"Invalid Stripe signature: {e}")
         return error_response("Invalid signature", 400)
-        
+
     # Handle the event
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         session_id = session['id']
-        
+
         # Process the payment
         success = await payment_service.handle_checkout_completed(session_id)
-        
+
         if success:
             logging.info(f"Successfully processed payment for session {session_id}")
         else:
             logging.error(f"Failed to process payment for session {session_id}")
-            
+
     # Return a 200 response to acknowledge receipt of the event
     return success_response({"received": True})
 
@@ -113,7 +115,7 @@ async def get_purchases():
     user_id = getattr(g, 'current_user_id', None)
     if not user_id:
         return error_response("Authentication error.", 401)
-        
+
     try:
         purchases = await payment_service.get_user_purchases(user_id)
         return success_response({"purchases": purchases})

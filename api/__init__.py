@@ -5,13 +5,15 @@ import os
 import sys
 import traceback
 import time
-import stripe # Import stripe
-import logging # Import logging
+import stripe
+import logging
 from flask import Flask
 from flask_cors import CORS
 
 from api.config import Config
 from api.routes import register_all_routes
+from api.utils.error_handlers import register_error_handlers
+from api.utils.versioning import create_version_blueprint
 
 
 def create_app() -> Flask:
@@ -47,9 +49,19 @@ def create_app() -> Flask:
     else:
         logging.warning("Stripe API key not found in environment variables. Payment features will be disabled.")
 
+    # Configure logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    # Register error handlers
+    register_error_handlers(app)
+    logging.info("Error handlers registered.")
+
+    # Register version blueprint
+    app.register_blueprint(create_version_blueprint(app))
+    logging.info("Version blueprint registered.")
+
     # Register routes from blueprints
     register_all_routes(app)
-
     logging.info("All routes registered via blueprints.")
 
     return app

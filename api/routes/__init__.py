@@ -2,15 +2,14 @@
 Routes package for the API
 """
 from flask import Flask
+import logging
 
-# Import blueprints or registration functions
-from api.routes.health import register_health_routes
-# Remove old chapter route registration function import
-# from api.routes.chapters import register_chapter_routes
-from api.routes.chapters import chapters_bp # Import the chapters blueprint
-from api.routes.auth import auth_bp # Import the auth blueprint
-from api.routes.credits import credits_bp # Import the credits blueprint
-from api.routes.payment import payment_bp # Import the payment blueprint
+# Import blueprints
+from api.routes.health import health_bp
+from api.routes.chapters import chapters_bp
+from api.routes.auth import auth_bp
+from api.routes.credits import credits_bp
+from api.routes.payment import payment_bp
 
 
 def register_all_routes(app: Flask) -> None:
@@ -20,13 +19,12 @@ def register_all_routes(app: Flask) -> None:
     Args:
         app: Flask application instance
     """
-    # Existing routes
-    register_health_routes(app)
-    # Remove old chapter route registration call
-    # register_chapter_routes(app)
-
-    # Register the new blueprints
+    # Register all blueprints
+    app.register_blueprint(health_bp)
     app.register_blueprint(chapters_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(credits_bp)
     app.register_blueprint(payment_bp)
+
+    # Log registered routes
+    logging.info(f"Registered blueprints: health, chapters, auth, credits, payment")

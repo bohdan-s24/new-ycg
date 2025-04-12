@@ -1,11 +1,13 @@
-from flask import Blueprint, g # Import g to access user info set by decorator
+from flask import g # Import g to access user info set by decorator
 import logging
 
 from ..services import credits_service
 from ..utils.decorators import token_required
 from ..utils.responses import success_response, error_response
+from ..utils.versioning import VersionedBlueprint
 
-credits_bp = Blueprint('credits', __name__, url_prefix='/credits')
+# Create a versioned blueprint
+credits_bp = VersionedBlueprint('credits', __name__, url_prefix='/credits')
 
 @credits_bp.route('/balance', methods=['GET'])
 @token_required
@@ -18,7 +20,7 @@ async def get_balance():
         # This shouldn't happen if token_required works correctly, but good practice
         logging.error("User ID not found in g context after token_required.")
         return error_response("Authentication error.", 500)
-        
+
     try:
         balance = await credits_service.get_credit_balance(user_id)
         return success_response({"balance": balance})
@@ -36,7 +38,7 @@ async def get_transaction_history():
     if not user_id:
         logging.error("User ID not found in g context after token_required.")
         return error_response("Authentication error.", 500)
-        
+
     try:
         # Add optional query parameter for limit later if needed
         transactions = await credits_service.get_transactions(user_id)

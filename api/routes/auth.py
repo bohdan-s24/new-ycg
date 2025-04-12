@@ -1,4 +1,5 @@
-from flask import Blueprint, request, current_app
+from flask import request, current_app
+from datetime import timedelta
 import logging
 
 # Import services and utilities
@@ -8,8 +9,10 @@ from ..models.user import UserCreate, UserLogin
 from ..utils.responses import success_response, error_response
 from ..utils.decorators import token_required
 from ..utils.exceptions import AuthenticationError, ValidationError
+from ..utils.versioning import VersionedBlueprint
 
-auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
+# Create a versioned blueprint
+auth_bp = VersionedBlueprint('auth', __name__, url_prefix='/auth')
 
 # Debug endpoint to check if auth blueprint is registered
 @auth_bp.route('/debug', methods=['GET'])

@@ -1,21 +1,22 @@
 import time
 import logging
-from flask import Blueprint, request, g # Import Blueprint and g
+from flask import request, g
 
 # Import necessary services, utils, and decorators
-from ..utils.responses import success_response, error_response # Use consistent responses
-from ..utils.cache import get_from_cache, add_to_cache # Keep using in-memory cache for now
+from ..utils.responses import success_response, error_response
+from ..utils.cache import get_from_cache, add_to_cache
 from ..services.youtube import fetch_transcript
 from ..services.openai_service import create_chapter_prompt, generate_chapters_with_openai
 from ..utils.transcript import format_transcript_for_model
-from ..utils.decorators import token_required # Import the auth decorator
-from ..services import credits_service # Import the credits service
+from ..utils.decorators import token_required
+from ..services import credits_service
+from ..utils.versioning import VersionedBlueprint
 
-# Create the Blueprint
-chapters_bp = Blueprint('chapters', __name__, url_prefix='/api')
+# Create a versioned blueprint
+chapters_bp = VersionedBlueprint('chapters', __name__, url_prefix='/chapters')
 
 # Define the route under the blueprint
-@chapters_bp.route('/generate-chapters', methods=['POST'])
+@chapters_bp.route('/generate', methods=['POST'])
 @token_required # Apply the authentication decorator
 async def generate_chapters():
     """
@@ -31,7 +32,7 @@ async def generate_chapters():
     data = request.get_json()
     if not data:
         return error_response('Request must be JSON', 400)
-        
+
     video_id = data.get('video_id')
     if not video_id:
         return error_response('Missing video_id parameter', 400)
@@ -42,7 +43,7 @@ async def generate_chapters():
         if not has_credits:
             logging.warning(f"User {user_id} attempted generation with insufficient credits for video {video_id}.")
             # 402 Payment Required is appropriate here
-            return error_response('Insufficient credits to generate chapters.', 402) 
+            return error_response('Insufficient credits to generate chapters.', 402)
     except Exception as e:
         logging.error(f"Error checking credits for user {user_id}: {e}")
         return error_response("Failed to verify credit balance.", 500)
