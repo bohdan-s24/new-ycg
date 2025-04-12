@@ -25,9 +25,21 @@ class UiManager {
     // Cache DOM elements
     this.cacheElements();
 
+    // Debug: Log all cached elements
+    console.log('[UI-DEBUG] Cached DOM elements:', Object.keys(this.elements).reduce((acc, key) => {
+      acc[key] = {};
+      for (const elemKey in this.elements[key]) {
+        acc[key][elemKey] = this.elements[key][elemKey] ? true : false;
+      }
+      return acc;
+    }, {}));
+
     // Subscribe to state changes
     if (this.store) {
-      this.unsubscribe = this.store.subscribe(state => this.updateUI(state));
+      this.unsubscribe = this.store.subscribe(state => {
+        console.log('[UI-DEBUG] State changed, updating UI');
+        this.updateUI(state);
+      });
     } else {
       console.error('[UI] Store is not available');
     }
@@ -37,7 +49,9 @@ class UiManager {
 
     // Initial UI update
     if (this.store) {
-      this.updateUI(this.store.getState());
+      const initialState = this.store.getState();
+      console.log('[UI-DEBUG] Initial state:', JSON.stringify(initialState));
+      this.updateUI(initialState);
     }
 
     console.log('[UI] UI manager initialized');
@@ -164,39 +178,93 @@ class UiManager {
    */
   updateAuthUI(state) {
     const { auth } = state;
+    console.log('[UI-DEBUG] Updating auth UI with state:', JSON.stringify(auth));
+
     const { loginBtn, userProfile, userAvatar, menuUserAvatar, userName, userEmail } = this.elements.header;
 
+    // Debug: Log all header elements
+    console.log('[UI-DEBUG] Header elements:', {
+      loginBtn: loginBtn ? true : false,
+      userProfile: userProfile ? true : false,
+      userAvatar: userAvatar ? true : false,
+      menuUserAvatar: menuUserAvatar ? true : false,
+      userName: userName ? true : false,
+      userEmail: userEmail ? true : false
+    });
+
     if (auth.isAuthenticated && auth.user) {
+      console.log('[UI-DEBUG] User is authenticated:', auth.user.email);
+
       // User is authenticated
-      if (loginBtn) loginBtn.classList.add('hidden');
-      if (userProfile) userProfile.classList.remove('hidden');
+      if (loginBtn) {
+        loginBtn.classList.add('hidden');
+        console.log('[UI-DEBUG] Login button hidden');
+      }
+
+      if (userProfile) {
+        userProfile.classList.remove('hidden');
+        console.log('[UI-DEBUG] User profile shown');
+      }
 
       // Update user profile
-      if (userAvatar && auth.user.picture) {
-        userAvatar.src = auth.user.picture;
-        userAvatar.alt = auth.user.name || 'User';
+      if (userAvatar) {
+        if (auth.user.picture) {
+          userAvatar.src = auth.user.picture;
+          userAvatar.alt = auth.user.name || 'User';
+          console.log('[UI-DEBUG] User avatar updated with:', auth.user.picture.substring(0, 30) + '...');
+        } else {
+          console.log('[UI-DEBUG] No user picture available for avatar');
+        }
       }
 
-      if (menuUserAvatar && auth.user.picture) {
-        menuUserAvatar.src = auth.user.picture;
-        menuUserAvatar.alt = auth.user.name || 'User';
+      if (menuUserAvatar) {
+        if (auth.user.picture) {
+          menuUserAvatar.src = auth.user.picture;
+          menuUserAvatar.alt = auth.user.name || 'User';
+          console.log('[UI-DEBUG] Menu user avatar updated');
+        }
       }
 
-      if (userName) userName.textContent = auth.user.name || 'User';
-      if (userEmail) userEmail.textContent = auth.user.email || '';
+      if (userName) {
+        userName.textContent = auth.user.name || 'User';
+        console.log('[UI-DEBUG] User name updated:', auth.user.name || 'User');
+      }
+
+      if (userEmail) {
+        userEmail.textContent = auth.user.email || '';
+        console.log('[UI-DEBUG] User email updated:', auth.user.email || '');
+      }
     } else {
+      console.log('[UI-DEBUG] User is not authenticated');
+
       // User is not authenticated
-      if (loginBtn) loginBtn.classList.remove('hidden');
-      if (userProfile) userProfile.classList.add('hidden');
+      if (loginBtn) {
+        loginBtn.classList.remove('hidden');
+        console.log('[UI-DEBUG] Login button shown');
+      }
+
+      if (userProfile) {
+        userProfile.classList.add('hidden');
+        console.log('[UI-DEBUG] User profile hidden');
+      }
     }
 
     // Update error message if any
     if (auth.error && this.elements.auth.errorMessage) {
       this.elements.auth.errorMessage.textContent = auth.error;
       this.elements.auth.errorMessage.classList.remove('hidden');
+      console.log('[UI-DEBUG] Error message shown:', auth.error);
     } else if (this.elements.auth.errorMessage) {
       this.elements.auth.errorMessage.classList.add('hidden');
+      console.log('[UI-DEBUG] Error message hidden');
     }
+
+    // Force a repaint to ensure UI updates are applied
+    document.body.style.display = 'none';
+    document.body.offsetHeight; // Force a reflow
+    document.body.style.display = '';
+
+    console.log('[UI-DEBUG] Auth UI update complete');
   }
 
   /**
@@ -226,7 +294,23 @@ class UiManager {
    */
   updateActiveView(state) {
     const { ui, auth } = state;
+    console.log('[UI-DEBUG] Updating active view with state:', {
+      'ui.activeView': ui.activeView,
+      'auth.isAuthenticated': auth.isAuthenticated,
+      'auth.user': auth.user ? auth.user.email : null
+    });
+
     const { welcomeContainer, authContainer, mainContent } = this.elements.containers;
+
+    // Debug: Log container elements
+    console.log('[UI-DEBUG] Container elements:', {
+      welcomeContainer: welcomeContainer ? true : false,
+      authContainer: authContainer ? true : false,
+      mainContent: mainContent ? true : false,
+      welcomeHidden: welcomeContainer ? welcomeContainer.classList.contains('hidden') : 'N/A',
+      authHidden: authContainer ? authContainer.classList.contains('hidden') : 'N/A',
+      mainHidden: mainContent ? mainContent.classList.contains('hidden') : 'N/A'
+    });
 
     // Determine which view should be active
     let activeView = ui.activeView;
@@ -234,15 +318,15 @@ class UiManager {
     // Override based on auth state
     if (!auth.isAuthenticated) {
       activeView = 'welcome';
-      console.log('[UI] User not authenticated, showing welcome view');
+      console.log('[UI-DEBUG] User not authenticated, should show welcome view');
     } else if (activeView === 'welcome') {
       activeView = 'main';
-      console.log('[UI] User authenticated, showing main view');
+      console.log('[UI-DEBUG] User authenticated, should show main view');
     }
 
     // Update the store if needed
     if (activeView !== ui.activeView) {
-      console.log(`[UI] Changing view from ${ui.activeView} to ${activeView}`);
+      console.log(`[UI-DEBUG] Changing view from ${ui.activeView} to ${activeView}`);
       this.store.dispatch('ui', {
         type: 'SET_ACTIVE_VIEW',
         payload: { view: activeView }
@@ -250,26 +334,34 @@ class UiManager {
       return; // The UI will be updated again after the state change
     }
 
-    console.log(`[UI] Current view: ${activeView}`);
+    console.log(`[UI-DEBUG] Current view: ${activeView}`);
 
     // Force refresh the view if needed
     if (auth.isAuthenticated && activeView === 'main' && mainContent && mainContent.classList.contains('hidden')) {
-      console.log('[UI] Forcing main view to be visible');
+      console.log('[UI-DEBUG] Forcing main view to be visible');
       mainContent.classList.remove('hidden');
     }
 
     // Update the visible container
     if (welcomeContainer) {
-      welcomeContainer.classList.toggle('hidden', activeView !== 'welcome');
+      const shouldBeHidden = activeView !== 'welcome';
+      welcomeContainer.classList.toggle('hidden', shouldBeHidden);
+      console.log(`[UI-DEBUG] Welcome container ${shouldBeHidden ? 'hidden' : 'shown'}`);
     }
 
     if (authContainer) {
-      authContainer.classList.toggle('hidden', activeView !== 'auth');
+      const shouldBeHidden = activeView !== 'auth';
+      authContainer.classList.toggle('hidden', shouldBeHidden);
+      console.log(`[UI-DEBUG] Auth container ${shouldBeHidden ? 'hidden' : 'shown'}`);
     }
 
     if (mainContent) {
-      mainContent.classList.toggle('hidden', activeView !== 'main');
+      const shouldBeHidden = activeView !== 'main';
+      mainContent.classList.toggle('hidden', shouldBeHidden);
+      console.log(`[UI-DEBUG] Main content ${shouldBeHidden ? 'hidden' : 'shown'}`);
     }
+
+    console.log('[UI-DEBUG] Active view update complete');
   }
 
   /**

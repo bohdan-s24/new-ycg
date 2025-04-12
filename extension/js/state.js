@@ -1,6 +1,6 @@
 /**
  * YouTube Chapter Generator State Management Module
- * 
+ *
  * This module provides a centralized state management system for the extension.
  * It uses a simple pub/sub pattern to notify components of state changes.
  */
@@ -15,7 +15,7 @@ const initialState = {
     isLoading: false,
     error: null
   },
-  
+
   // Video state
   video: {
     id: null,
@@ -23,7 +23,7 @@ const initialState = {
     isOnVideoPage: false,
     error: null
   },
-  
+
   // Chapters state
   chapters: {
     versions: [],
@@ -31,14 +31,14 @@ const initialState = {
     isGenerating: false,
     error: null
   },
-  
+
   // Credits state
   credits: {
     count: 0,
     isLoading: false,
     error: null
   },
-  
+
   // UI state
   ui: {
     activeView: 'welcome', // 'welcome', 'auth', 'main'
@@ -54,7 +54,7 @@ class Store {
     this.listeners = [];
     this.reducers = {};
   }
-  
+
   /**
    * Get the current state
    * @returns {Object} The current state
@@ -62,7 +62,7 @@ class Store {
   getState() {
     return { ...this.state };
   }
-  
+
   /**
    * Register a reducer function for a specific state slice
    * @param {string} sliceName - The name of the state slice
@@ -71,33 +71,39 @@ class Store {
   registerReducer(sliceName, reducer) {
     this.reducers[sliceName] = reducer;
   }
-  
+
   /**
    * Dispatch an action to update the state
    * @param {string} sliceName - The name of the state slice to update
    * @param {Object} action - The action object with type and payload
    */
   dispatch(sliceName, action) {
-    console.log(`[Store] Dispatching action to ${sliceName}:`, action);
-    
+    console.log(`[STORE-DEBUG] Dispatching action to ${sliceName}:`, action);
+
     if (!this.reducers[sliceName]) {
-      console.error(`[Store] No reducer registered for slice: ${sliceName}`);
+      console.error(`[STORE-DEBUG] No reducer registered for slice: ${sliceName}`);
       return;
     }
-    
+
     const currentSliceState = this.state[sliceName];
+    console.log(`[STORE-DEBUG] Current state for ${sliceName}:`, currentSliceState);
+
     const newSliceState = this.reducers[sliceName](currentSliceState, action);
-    
+    console.log(`[STORE-DEBUG] New state for ${sliceName}:`, newSliceState);
+
     // Update the state
     this.state = {
       ...this.state,
       [sliceName]: newSliceState
     };
-    
+
+    console.log(`[STORE-DEBUG] Full state after update:`, this.state);
+
     // Notify listeners
+    console.log(`[STORE-DEBUG] Notifying ${this.listeners.length} listeners`);
     this.notifyListeners();
   }
-  
+
   /**
    * Subscribe to state changes
    * @param {Function} listener - The listener function
@@ -105,20 +111,20 @@ class Store {
    */
   subscribe(listener) {
     this.listeners.push(listener);
-    
+
     // Return unsubscribe function
     return () => {
       this.listeners = this.listeners.filter(l => l !== listener);
     };
   }
-  
+
   /**
    * Notify all listeners of state changes
    */
   notifyListeners() {
     this.listeners.forEach(listener => listener(this.state));
   }
-  
+
   /**
    * Reset the state to initial values
    */
@@ -126,7 +132,7 @@ class Store {
     this.state = { ...initialState };
     this.notifyListeners();
   }
-  
+
   /**
    * Save the state to chrome.storage.local
    */
@@ -143,14 +149,14 @@ class Store {
           count: this.state.credits.count
         }
       };
-      
+
       await chrome.storage.local.set({ 'ycg_state': persistentState });
       console.log('[Store] State saved to storage');
     } catch (error) {
       console.error('[Store] Error saving state to storage:', error);
     }
   }
-  
+
   /**
    * Load the state from chrome.storage.local
    */
@@ -158,7 +164,7 @@ class Store {
     try {
       const result = await chrome.storage.local.get('ycg_state');
       const savedState = result.ycg_state;
-      
+
       if (savedState) {
         // Merge saved state with initial state
         this.state = {
@@ -172,7 +178,7 @@ class Store {
             ...savedState.credits
           }
         };
-        
+
         console.log('[Store] State loaded from storage');
         this.notifyListeners();
       }
@@ -184,15 +190,21 @@ class Store {
 
 // Create reducers for each state slice
 const authReducer = (state, action) => {
+  console.log('[STORE-DEBUG] Auth reducer called with action:', action.type);
+  console.log('[STORE-DEBUG] Current auth state:', state);
+
+  let newState;
   switch (action.type) {
     case 'LOGIN_START':
-      return {
+      newState = {
         ...state,
         isLoading: true,
         error: null
       };
+      console.log('[STORE-DEBUG] New auth state after LOGIN_START:', newState);
+      return newState;
     case 'LOGIN_SUCCESS':
-      return {
+      newState = {
         ...state,
         isAuthenticated: true,
         user: action.payload.user,
@@ -200,8 +212,11 @@ const authReducer = (state, action) => {
         isLoading: false,
         error: null
       };
+      console.log('[STORE-DEBUG] New auth state after LOGIN_SUCCESS:', newState);
+      console.log('[STORE-DEBUG] User data:', action.payload.user);
+      return newState;
     case 'LOGIN_FAILURE':
-      return {
+      newState = {
         ...state,
         isAuthenticated: false,
         user: null,
@@ -209,8 +224,11 @@ const authReducer = (state, action) => {
         isLoading: false,
         error: action.payload.error
       };
+      console.log('[STORE-DEBUG] New auth state after LOGIN_FAILURE:', newState);
+      console.log('[STORE-DEBUG] Error:', action.payload.error);
+      return newState;
     case 'LOGOUT':
-      return {
+      newState = {
         ...state,
         isAuthenticated: false,
         user: null,
@@ -218,6 +236,8 @@ const authReducer = (state, action) => {
         isLoading: false,
         error: null
       };
+      console.log('[STORE-DEBUG] New auth state after LOGOUT:', newState);
+      return newState;
     case 'UPDATE_USER':
       return {
         ...state,
@@ -334,12 +354,19 @@ const creditsReducer = (state, action) => {
 };
 
 const uiReducer = (state, action) => {
+  console.log('[STORE-DEBUG] UI reducer called with action:', action.type);
+  console.log('[STORE-DEBUG] Current UI state:', state);
+
+  let newState;
   switch (action.type) {
     case 'SET_ACTIVE_VIEW':
-      return {
+      newState = {
         ...state,
         activeView: action.payload.view
       };
+      console.log('[STORE-DEBUG] New UI state after SET_ACTIVE_VIEW:', newState);
+      console.log('[STORE-DEBUG] Active view changed to:', action.payload.view);
+      return newState;
     case 'TOGGLE_MENU':
       return {
         ...state,

@@ -6,11 +6,26 @@
 
 // Initialize auth when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
+  console.log('[AUTH-DEBUG] DOM content loaded, checking for store and API');
+
   // Wait for the store and API to be initialized
   if (window.YCG_STORE && window.YCG_API) {
+    console.log('[AUTH-DEBUG] Store and API available, initializing auth');
     initAuth();
   } else {
     console.error("[Auth] Failed to initialize auth: YCG_STORE or YCG_API not available");
+    console.log('[AUTH-DEBUG] Available globals:', Object.keys(window).filter(key => key.startsWith('YCG_')));
+
+    // Try again after a short delay
+    setTimeout(() => {
+      console.log('[AUTH-DEBUG] Retrying auth initialization after delay');
+      if (window.YCG_STORE && window.YCG_API) {
+        console.log('[AUTH-DEBUG] Store and API now available, initializing auth');
+        initAuth();
+      } else {
+        console.error("[Auth] Still failed to initialize auth after retry");
+      }
+    }, 500);
   }
 });
 
@@ -157,14 +172,19 @@ function setupAuthEventListeners() {
  * Handle Google Sign-In button click
  */
 async function handleGoogleSignIn() {
-  console.log("[Auth] Google Sign-In button clicked");
+  console.log("[AUTH-DEBUG] Google Sign-In button clicked");
 
   // Get references to the store and API
   const store = window.YCG_STORE;
   const api = window.YCG_API;
 
+  console.log('[AUTH-DEBUG] Store available:', !!store);
+  console.log('[AUTH-DEBUG] API available:', !!api);
+
   if (!store || !api) {
     console.error("[Auth] Store or API not available");
+    console.log('[AUTH-DEBUG] Available globals:', Object.keys(window).filter(key => key.startsWith('YCG_')));
+
     if (window.YCG_UI) {
       window.YCG_UI.showNotification("Authentication service not available", "error");
     }
@@ -172,7 +192,11 @@ async function handleGoogleSignIn() {
   }
 
   // Dispatch login start action
+  console.log('[AUTH-DEBUG] Dispatching LOGIN_START action');
   store.dispatch('auth', { type: 'LOGIN_START' });
+
+  // Debug: Log current state
+  console.log('[AUTH-DEBUG] Current state after LOGIN_START:', JSON.stringify(store.getState().auth));
 
   try {
     // Launch Google Sign-In
@@ -185,19 +209,31 @@ async function handleGoogleSignIn() {
     console.log("[Auth] Got Google token, logging in...");
 
     // Login with Google
+    console.log('[AUTH-DEBUG] Calling API loginWithGoogle');
     const loginResult = await api.loginWithGoogle(token);
 
+    console.log('[AUTH-DEBUG] Login API call completed, result:', loginResult ? 'success' : 'null/undefined');
+
     if (!loginResult || !loginResult.access_token) {
+      console.error('[AUTH-DEBUG] Login result missing access_token:', loginResult);
       throw new Error("Failed to login with Google: No access token returned");
     }
 
-    console.log("[Auth] Login result:", loginResult);
-    console.log("[Auth] Login successful");
+    console.log("[AUTH-DEBUG] Login result details:", {
+      access_token: loginResult.access_token ? `${loginResult.access_token.substring(0, 10)}...` : null,
+      user_id: loginResult.user_id,
+      email: loginResult.email,
+      name: loginResult.name,
+      picture: loginResult.picture ? 'present' : 'missing',
+      credits: loginResult.credits
+    });
+    console.log("[AUTH-DEBUG] Login successful");
 
     // Extract user info and token
     const { access_token, user_id, email, name, picture, credits } = loginResult;
 
     // Update auth state
+    console.log('[AUTH-DEBUG] Dispatching LOGIN_SUCCESS action');
     store.dispatch('auth', {
       type: 'LOGIN_SUCCESS',
       payload: {
@@ -211,7 +247,11 @@ async function handleGoogleSignIn() {
       }
     });
 
+    // Debug: Log state after login success
+    console.log('[AUTH-DEBUG] State after LOGIN_SUCCESS:', JSON.stringify(store.getState().auth));
+
     // Update credits
+    console.log('[AUTH-DEBUG] Dispatching SET_CREDITS action with count:', credits || 0);
     store.dispatch('credits', {
       type: 'SET_CREDITS',
       payload: {
@@ -220,25 +260,61 @@ async function handleGoogleSignIn() {
     });
 
     // Set active view to main
+    console.log('[AUTH-DEBUG] Dispatching SET_ACTIVE_VIEW action to show main view');
     store.dispatch('ui', {
       type: 'SET_ACTIVE_VIEW',
       payload: { view: 'main' }
     });
 
     // Save state to storage
+    console.log('[AUTH-DEBUG] Saving state to storage');
     await store.saveToStorage();
+    console.log('[AUTH-DEBUG] State saved to storage');
+
+    // Debug: Log final state
+    console.log('[AUTH-DEBUG] Final state after login:', {
+      auth: store.getState().auth.isAuthenticated,
+      view: store.getState().ui.activeView
+    });
 
     // Show success notification
     if (window.YCG_UI) {
+      console.log('[AUTH-DEBUG] Showing success notification');
       window.YCG_UI.showNotification("Successfully logged in!", "success");
     }
+
+    // Force UI update
+    if (window.YCG_UI) {
+      console.log('[AUTH-DEBUG] Forcing UI update');
+      window.YCG_UI.updateUI(store.getState());
+    }
   } catch (error) {
-    console.error("[Auth] Error during Google Sign-In:", error);
+    console.error("[AUTH-DEBUG] Error during Google Sign-In:", error);
+    console.log('[AUTH-DEBUG] Error details:', {
+      message: error.message,
+      stack: error.stack ? error.stack.split('\n')[0] : 'No stack trace'
+    });
+
+    // Handle the error
+    console.log('[AUTH-DEBUG] Calling handleAuthError');
     handleAuthError(store, error);
+
+    // Debug: Log state after error
+    console.log('[AUTH-DEBUG] State after error:', {
+      auth: store.getState().auth,
+      view: store.getState().ui.activeView
+    });
 
     // Show error notification
     if (window.YCG_UI) {
+      console.log('[AUTH-DEBUG] Showing error notification');
       window.YCG_UI.showNotification(`Login failed: ${error.message}`, "error");
+    }
+
+    // Force UI update
+    if (window.YCG_UI) {
+      console.log('[AUTH-DEBUG] Forcing UI update after error');
+      window.YCG_UI.updateUI(store.getState());
     }
   }
 }
@@ -287,9 +363,20 @@ function launchGoogleSignIn() {
  * @param {Error} error - The error object
  */
 function handleAuthError(store, error) {
-  console.error("[Auth] Authentication error:", error);
+  console.error("[AUTH-DEBUG] Authentication error:", error);
+  console.log('[AUTH-DEBUG] Error details:', {
+    message: error.message,
+    stack: error.stack ? error.stack.split('\n')[0] : 'No stack trace'
+  });
+
+  // Debug: Log current state before changes
+  console.log('[AUTH-DEBUG] State before error handling:', {
+    auth: store.getState().auth.isAuthenticated,
+    view: store.getState().ui.activeView
+  });
 
   // Dispatch login failure action
+  console.log('[AUTH-DEBUG] Dispatching LOGIN_FAILURE action');
   store.dispatch('auth', {
     type: 'LOGIN_FAILURE',
     payload: {
@@ -298,11 +385,20 @@ function handleAuthError(store, error) {
   });
 
   // Set active view to welcome
+  console.log('[AUTH-DEBUG] Dispatching SET_ACTIVE_VIEW action to show welcome view');
   store.dispatch('ui', {
     type: 'SET_ACTIVE_VIEW',
     payload: { view: 'welcome' }
   });
 
+  // Debug: Log state after dispatching actions
+  console.log('[AUTH-DEBUG] State after dispatching actions:', {
+    auth: store.getState().auth.isAuthenticated,
+    view: store.getState().ui.activeView
+  });
+
   // Save state to storage
+  console.log('[AUTH-DEBUG] Saving state to storage');
   store.saveToStorage();
+  console.log('[AUTH-DEBUG] State saved to storage');
 }
