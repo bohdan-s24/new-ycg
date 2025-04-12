@@ -71,7 +71,7 @@ def parse_redis_url(url: str) -> Tuple[str, Optional[str]]:
     logging.warning(f"Could not parse Redis URL format: {url[:10]}..., using as is")
     return url, None
 
-async def retry_async(max_retries=MAX_RETRIES, base_delay=BASE_RETRY_DELAY):
+def retry_async(max_retries=MAX_RETRIES, base_delay=BASE_RETRY_DELAY):
     """
     Decorator for retrying async functions with exponential backoff.
 
