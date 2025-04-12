@@ -19,7 +19,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["js/content.js"]
+      "js": ["content.js"]
     }
   ],
   "icons": {
@@ -35,6 +35,6 @@
     ]
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://new-ycg.vercel.app https://www.googleapis.com"
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://new-ycg.vercel.app;"
   }
 }

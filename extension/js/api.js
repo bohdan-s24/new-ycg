@@ -11,12 +11,12 @@
 class ApiService {
   constructor() {
     // Initialize API endpoints
-    this.API = this.initApiEndpoints();
+    this.API = this.initApiEndpoints()
 
-    this.store = window.YCG_STORE;
-    this.retryCount = 0;
-    this.maxRetries = 3;
-    this.retryDelay = 1000; // 1 second
+    this.store = window.YCG_STORE
+    this.retryCount = 0
+    this.maxRetries = 3
+    this.retryDelay = 1000 // 1 second
   }
 
   /**
@@ -24,11 +24,11 @@ class ApiService {
    * @returns {Object} The API endpoints
    */
   initApiEndpoints() {
-    const config = window.YCG_CONFIG;
+    const config = window.YCG_CONFIG
 
     if (!config) {
-      console.error('[API] YCG_CONFIG is not defined');
-      return {};
+      console.error("[API] YCG_CONFIG is not defined")
+      return {}
     }
 
     return {
@@ -41,30 +41,30 @@ class ApiService {
         LOGIN_GOOGLE: `${config.AUTH_BASE_URL}/login/google`,
         VERIFY_TOKEN: `${config.AUTH_BASE_URL}/verify`,
         USER_INFO: `${config.AUTH_BASE_URL}/user`,
-        CONFIG: `${config.AUTH_BASE_URL}/config`
+        CONFIG: `${config.AUTH_BASE_URL}/config`,
       },
 
       // Chapters endpoints
       CHAPTERS: {
-        GENERATE: `${config.API_BASE_URL}/v1/chapters/generate`
+        GENERATE: `${config.API_BASE_URL}/v1/chapters/generate`,
       },
 
       // Credits endpoints
       CREDITS: {
-        BALANCE: `${config.API_BASE_URL}/v1/credits/balance`
+        BALANCE: `${config.API_BASE_URL}/v1/credits/balance`,
       },
 
       // Payment endpoints
       PAYMENT: {
         PLANS: `${config.API_BASE_URL}/v1/payment/plans`,
-        CREATE_SESSION: `${config.API_BASE_URL}/v1/payment/create-session`
+        CREATE_SESSION: `${config.API_BASE_URL}/v1/payment/create-session`,
       },
 
       // Health check
       HEALTH: {
-        PING: `${config.API_BASE_URL}/v1/health`
-      }
-    };
+        PING: `${config.API_BASE_URL}/v1/health`,
+      },
+    }
   }
 
   /**
@@ -73,12 +73,12 @@ class ApiService {
    */
   getToken() {
     if (!this.store) {
-      console.error('[API] Store is not available');
-      return null;
+      console.error("[API] Store is not available")
+      return null
     }
 
-    const state = this.store.getState();
-    return state.auth.token;
+    const state = this.store.getState()
+    return state.auth.token
   }
 
   /**
@@ -92,11 +92,11 @@ class ApiService {
   async request(url, options = {}, requiresAuth = false, timeout = 5000) {
     // Set default options
     const defaultOptions = {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Content-Type': 'application/json'
-      }
-    };
+        "Content-Type": "application/json",
+      },
+    }
 
     // Merge options
     const mergedOptions = {
@@ -104,98 +104,98 @@ class ApiService {
       ...options,
       headers: {
         ...defaultOptions.headers,
-        ...options.headers
-      }
-    };
+        ...options.headers,
+      },
+    }
 
     // Add authentication token if required
     if (requiresAuth) {
-      const token = this.getToken();
+      const token = this.getToken()
       if (!token) {
-        throw new Error('Authentication required but no token available');
+        throw new Error("Authentication required but no token available")
       }
 
-      mergedOptions.headers['Authorization'] = `Bearer ${token}`;
+      mergedOptions.headers["Authorization"] = `Bearer ${token}`
     }
 
     try {
-      console.log(`[API] ${mergedOptions.method} request to ${url}`);
+      console.log(`[API] ${mergedOptions.method} request to ${url}`)
 
       // Add timeout if not already set
-      let timeoutId;
+      let timeoutId
       if (!mergedOptions.signal) {
-        const controller = new AbortController();
-        timeoutId = setTimeout(() => controller.abort(), timeout);
-        mergedOptions.signal = controller.signal;
+        const controller = new AbortController()
+        timeoutId = setTimeout(() => controller.abort(), timeout)
+        mergedOptions.signal = controller.signal
       }
 
       // Make the request
-      const response = await fetch(url, mergedOptions);
+      const response = await fetch(url, mergedOptions)
 
       // Clear the timeout if we set one
       if (timeoutId) {
-        clearTimeout(timeoutId);
+        clearTimeout(timeoutId)
       }
 
       // Handle non-JSON responses
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
+      const contentType = response.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
         if (!response.ok) {
-          console.error(`[API] Network error: ${response.status} ${response.statusText}`);
-          throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`);
+          console.error(`[API] Network error: ${response.status} ${response.statusText}`)
+          throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`)
         }
-        return { success: response.ok };
+        return { success: response.ok }
       }
 
       // Parse JSON response
-      let data;
+      let data
       try {
-        data = await response.json();
-        console.log(`[API] Response data:`, data);
+        data = await response.json()
       } catch (parseError) {
-        console.error(`[API] Error parsing JSON response:`, parseError);
-        throw new Error(`Error parsing response: ${parseError.message}`);
+        console.error(`[API] Error parsing JSON response:`, parseError)
+        throw new Error(`Error parsing response: ${parseError.message}`)
       }
 
       // Handle API errors
       if (!response.ok) {
-        const errorMessage = data.error || `HTTP Error: ${response.status}`;
-        console.error(`[API] API error:`, errorMessage, data);
-        throw new Error(errorMessage);
+        const errorMessage = data.error || `HTTP Error: ${response.status}`
+        console.error(`[API] API error:`, errorMessage, data)
+        throw new Error(errorMessage)
       }
 
-      return data;
+      console.log(`[API] Response data:`, data)
+      return data
     } catch (error) {
       // Handle network errors
-      console.error(`[API] Error in ${url}:`, error);
+      console.error(`[API] Error in ${url}:`, error)
 
       // Retry logic for network errors
       if (this.retryCount < this.maxRetries && this.isNetworkError(error)) {
-        this.retryCount++;
-        console.log(`[API] Retrying request (${this.retryCount}/${this.maxRetries})...`);
+        this.retryCount++
+        console.log(`[API] Retrying request (${this.retryCount}/${this.maxRetries})...`)
 
         // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, this.retryDelay * this.retryCount));
+        await new Promise((resolve) => setTimeout(resolve, this.retryDelay * this.retryCount))
 
         // Retry the request
-        return this.request(url, options, requiresAuth);
+        return this.request(url, options, requiresAuth)
       }
 
       // Reset retry count
-      this.retryCount = 0;
+      this.retryCount = 0
 
       // Handle authentication errors
       if (this.isAuthError(error) && requiresAuth) {
         // Dispatch logout action
         if (this.store) {
-          this.store.dispatch('auth', { type: 'LOGOUT' });
+          this.store.dispatch("auth", { type: "LOGOUT" })
 
           // Save state to storage
-          await this.store.saveToStorage();
+          await this.store.saveToStorage()
         }
       }
 
-      throw error;
+      throw error
     }
   }
 
@@ -206,11 +206,11 @@ class ApiService {
    */
   isNetworkError(error) {
     return (
-      error.message.includes('Failed to fetch') ||
-      error.message.includes('Network request failed') ||
-      error.message.includes('network error') ||
-      error.message.includes('Network Error')
-    );
+      error.message.includes("Failed to fetch") ||
+      error.message.includes("Network request failed") ||
+      error.message.includes("network error") ||
+      error.message.includes("Network Error")
+    )
   }
 
   /**
@@ -220,11 +220,11 @@ class ApiService {
    */
   isAuthError(error) {
     return (
-      error.message.includes('Authentication required') ||
-      error.message.includes('Invalid token') ||
-      error.message.includes('Token expired') ||
-      error.message.includes('Unauthorized')
-    );
+      error.message.includes("Authentication required") ||
+      error.message.includes("Invalid token") ||
+      error.message.includes("Token expired") ||
+      error.message.includes("Unauthorized")
+    )
   }
 
   /**
@@ -234,9 +234,9 @@ class ApiService {
    */
   async verifyToken(token) {
     return this.request(this.API.AUTH.VERIFY_TOKEN, {
-      method: 'POST',
-      body: JSON.stringify({ token })
-    });
+      method: "POST",
+      body: JSON.stringify({ token }),
+    })
   }
 
   /**
@@ -244,7 +244,7 @@ class ApiService {
    * @returns {Promise<Object>} The user information
    */
   async getUserInfo() {
-    return this.request(this.API.AUTH.USER_INFO, {}, true);
+    return this.request(this.API.AUTH.USER_INFO, {}, true)
   }
 
   /**
@@ -254,54 +254,54 @@ class ApiService {
    */
   async loginWithGoogle(googleToken) {
     // Add retry logic specifically for login
-    const maxRetries = 3;
-    const baseDelay = 1000; // 1 second
+    const maxRetries = 3
+    const baseDelay = 1000 // 1 second
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`[API] Login attempt ${attempt}/${maxRetries}`);
+        console.log(`[API] Login attempt ${attempt}/${maxRetries}`)
 
         // Use a longer timeout for login requests
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
         const result = await this.request(
           this.API.AUTH.LOGIN_GOOGLE,
           {
-            method: 'POST',
+            method: "POST",
             body: JSON.stringify({
               token: googleToken,
-              platform: 'chrome_extension'
+              platform: "chrome_extension",
             }),
-            signal: controller.signal
+            signal: controller.signal,
           }
-        );
+        )
 
-        clearTimeout(timeoutId);
+        clearTimeout(timeoutId)
 
         // Handle the nested response structure
-        console.log('[API] Login response structure:', JSON.stringify(result));
-
+        console.log('[API] Login response structure:', JSON.stringify(result))
+        
         // Check if the response has a nested data structure
         if (result.success && result.data) {
-          console.log('[API] Found nested data structure in login response');
+          console.log('[API] Found nested data structure in login response')
           // Return the data object which contains the access_token
-          return result.data;
+          return result.data
         }
 
-        return result;
+        return result
       } catch (error) {
-        console.error(`[API] Login attempt ${attempt} failed:`, error);
+        console.error(`[API] Login attempt ${attempt} failed:`, error)
 
         if (attempt === maxRetries) {
           // Last attempt failed, throw the error
-          throw error;
+          throw error
         }
 
         // Wait before retrying
-        const delay = baseDelay * Math.pow(2, attempt - 1);
-        console.log(`[API] Retrying login in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        const delay = baseDelay * Math.pow(2, attempt - 1)
+        console.log(`[API] Retrying login in ${delay}ms...`)
+        await new Promise((resolve) => setTimeout(resolve, delay))
       }
     }
   }
@@ -311,7 +311,7 @@ class ApiService {
    * @returns {Promise<Object>} The credit balance
    */
   async getCreditBalance() {
-    return this.request(this.API.CREDITS.BALANCE, {}, true);
+    return this.request(this.API.CREDITS.BALANCE, {}, true)
   }
 
   /**
@@ -321,13 +321,17 @@ class ApiService {
    * @returns {Promise<Object>} The generated chapters
    */
   async generateChapters(videoId, videoTitle) {
-    return this.request(this.API.CHAPTERS.GENERATE, {
-      method: 'POST',
-      body: JSON.stringify({
-        video_id: videoId,
-        video_title: videoTitle
-      })
-    }, true);
+    return this.request(
+      this.API.CHAPTERS.GENERATE,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          video_id: videoId,
+          video_title: videoTitle,
+        }),
+      },
+      true,
+    )
   }
 
   /**
@@ -335,7 +339,7 @@ class ApiService {
    * @returns {Promise<Object>} The payment plans
    */
   async getPaymentPlans() {
-    return this.request(this.API.PAYMENT.PLANS);
+    return this.request(this.API.PAYMENT.PLANS)
   }
 
   /**
@@ -344,10 +348,14 @@ class ApiService {
    * @returns {Promise<Object>} The payment session
    */
   async createPaymentSession(planId) {
-    return this.request(this.API.PAYMENT.CREATE_SESSION, {
-      method: 'POST',
-      body: JSON.stringify({ plan_id: planId })
-    }, true);
+    return this.request(
+      this.API.PAYMENT.CREATE_SESSION,
+      {
+        method: "POST",
+        body: JSON.stringify({ plan_id: planId }),
+      },
+      true,
+    )
   }
 
   /**
@@ -356,23 +364,23 @@ class ApiService {
    */
   async ping() {
     try {
-      await this.request(this.API.HEALTH.PING);
-      return true;
+      await this.request(this.API.HEALTH.PING)
+      return true
     } catch (error) {
-      console.error('[API] Ping failed:', error);
-      return false;
+      console.error("[API] Ping failed:", error)
+      return false
     }
   }
 }
 
 // Create and export the API service
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener("DOMContentLoaded", () => {
   // Wait for the DOM to be loaded before creating the API service
   // This ensures that YCG_CONFIG and YCG_STORE are available
   if (window.YCG_CONFIG && window.YCG_STORE) {
-    window.YCG_API = new ApiService();
-    console.log('[API] API service initialized');
+    window.YCG_API = new ApiService()
+    console.log("[API] API service initialized")
   } else {
-    console.error('[API] Failed to initialize API service: YCG_CONFIG or YCG_STORE not available');
+    console.error("[API] Failed to initialize API service: YCG_CONFIG or YCG_STORE not available")
   }
-});
+})
