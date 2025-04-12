@@ -5,7 +5,14 @@
  */
 
 // Initialize auth when DOM is loaded
-document.addEventListener("DOMContentLoaded", initAuth);
+document.addEventListener("DOMContentLoaded", () => {
+  // Wait for the store and API to be initialized
+  if (window.YCG_STORE && window.YCG_API) {
+    initAuth();
+  } else {
+    console.error("[Auth] Failed to initialize auth: YCG_STORE or YCG_API not available");
+  }
+});
 
 /**
  * Initialize authentication
@@ -133,7 +140,6 @@ function initGoogleSignIn() {
 function setupAuthEventListeners() {
   // Get references to the store and UI
   const store = window.YCG_STORE;
-  const ui = window.YCG_UI;
   
   // Login button
   const loginBtn = document.getElementById('login-btn');
@@ -156,6 +162,14 @@ async function handleGoogleSignIn() {
   // Get references to the store and API
   const store = window.YCG_STORE;
   const api = window.YCG_API;
+  
+  if (!store || !api) {
+    console.error("[Auth] Store or API not available");
+    if (window.YCG_UI) {
+      window.YCG_UI.showNotification("Authentication service not available", "error");
+    }
+    return;
+  }
   
   // Dispatch login start action
   store.dispatch('auth', { type: 'LOGIN_START' });
@@ -214,13 +228,17 @@ async function handleGoogleSignIn() {
     await store.saveToStorage();
     
     // Show success notification
-    window.YCG_UI.showNotification("Successfully logged in!", "success");
+    if (window.YCG_UI) {
+      window.YCG_UI.showNotification("Successfully logged in!", "success");
+    }
   } catch (error) {
     console.error("[Auth] Error during Google Sign-In:", error);
     handleAuthError(store, error);
     
     // Show error notification
-    window.YCG_UI.showNotification(`Login failed: ${error.message}`, "error");
+    if (window.YCG_UI) {
+      window.YCG_UI.showNotification(`Login failed: ${error.message}`, "error");
+    }
   }
 }
 

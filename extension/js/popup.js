@@ -5,7 +5,16 @@
  */
 
 // Initialize when DOM is loaded
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener("DOMContentLoaded", () => {
+  // Wait for the store, API, and video service to be initialized
+  setTimeout(() => {
+    if (window.YCG_STORE && window.YCG_API && window.YCG_VIDEO) {
+      init();
+    } else {
+      console.error("[Popup] Failed to initialize: YCG_STORE, YCG_API, or YCG_VIDEO not available");
+    }
+  }, 100); // Small delay to ensure all services are initialized
+});
 
 /**
  * Initialize the popup
@@ -26,7 +35,9 @@ async function init() {
     const isApiAvailable = await api.ping();
     if (!isApiAvailable) {
       console.error("[Popup] API is not available");
-      window.YCG_UI.showNotification("API is not available. Please try again later.", "error");
+      if (window.YCG_UI) {
+        window.YCG_UI.showNotification("API is not available. Please try again later.", "error");
+      }
     }
   } catch (error) {
     console.error("[Popup] Error checking API availability:", error);

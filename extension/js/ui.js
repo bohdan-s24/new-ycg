@@ -14,13 +14,6 @@ class UiManager {
     this.api = window.YCG_API;
     this.elements = {};
     this.unsubscribe = null;
-    
-    // Initialize when DOM is loaded
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => this.init());
-    } else {
-      this.init();
-    }
   }
   
   /**
@@ -33,13 +26,19 @@ class UiManager {
     this.cacheElements();
     
     // Subscribe to state changes
-    this.unsubscribe = this.store.subscribe(state => this.updateUI(state));
+    if (this.store) {
+      this.unsubscribe = this.store.subscribe(state => this.updateUI(state));
+    } else {
+      console.error('[UI] Store is not available');
+    }
     
     // Set up event listeners
     this.setupEventListeners();
     
     // Initial UI update
-    this.updateUI(this.store.getState());
+    if (this.store) {
+      this.updateUI(this.store.getState());
+    }
     
     console.log('[UI] UI manager initialized');
   }
@@ -103,7 +102,9 @@ class UiManager {
     // Header event listeners
     if (this.elements.header.settingsBtn) {
       this.elements.header.settingsBtn.addEventListener('click', () => {
-        this.store.dispatch('ui', { type: 'TOGGLE_MENU' });
+        if (this.store) {
+          this.store.dispatch('ui', { type: 'TOGGLE_MENU' });
+        }
       });
     }
     
@@ -115,7 +116,7 @@ class UiManager {
       if (userMenu && settingsBtn && 
           !userMenu.contains(event.target) && 
           !settingsBtn.contains(event.target) &&
-          this.store.getState().ui.isMenuOpen) {
+          this.store && this.store.getState().ui.isMenuOpen) {
         this.store.dispatch('ui', { type: 'CLOSE_MENU' });
       }
     });
@@ -462,6 +463,11 @@ class UiManager {
    * Handle generate chapters button click
    */
   async handleGenerateChapters() {
+    if (!this.store || !this.api) {
+      this.showNotification('API service not available', 'error');
+      return;
+    }
+    
     const state = this.store.getState();
     const { video, credits } = state;
     
@@ -514,6 +520,11 @@ class UiManager {
    * Handle copy chapters button click
    */
   handleCopyChapters() {
+    if (!this.store) {
+      this.showNotification('Store not available', 'error');
+      return;
+    }
+    
     const state = this.store.getState();
     const { chapters } = state;
     
@@ -548,6 +559,8 @@ class UiManager {
    * Handle previous version button click
    */
   handlePrevVersion() {
+    if (!this.store) return;
+    
     const state = this.store.getState();
     const { chapters } = state;
     
@@ -563,6 +576,8 @@ class UiManager {
    * Handle next version button click
    */
   handleNextVersion() {
+    if (!this.store) return;
+    
     const state = this.store.getState();
     const { chapters } = state;
     
@@ -578,6 +593,8 @@ class UiManager {
    * Handle logout button click
    */
   async handleLogout() {
+    if (!this.store) return;
+    
     // Dispatch logout action
     this.store.dispatch('auth', { type: 'LOGOUT' });
     
@@ -643,4 +660,13 @@ class UiManager {
 }
 
 // Create and export the UI manager
-window.YCG_UI = new UiManager();
+document.addEventListener('DOMContentLoaded', () => {
+  // Wait for the DOM to be loaded before creating the UI manager
+  // This ensures that YCG_STORE is available
+  if (window.YCG_STORE) {
+    window.YCG_UI = new UiManager();
+    window.YCG_UI.init();
+  } else {
+    console.error('[UI] Failed to create UI manager: YCG_STORE not available');
+  }
+});

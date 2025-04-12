@@ -104,4 +104,13 @@ class VideoService {
 }
 
 // Create and export the video service
-window.YCG_VIDEO = new VideoService();
+document.addEventListener('DOMContentLoaded', () => {
+  // Wait for the DOM to be loaded before creating the video service
+  // This ensures that YCG_STORE is available
+  if (window.YCG_STORE) {
+    window.YCG_VIDEO = new VideoService();
+    console.log('[Video] Video service created');
+  } else {
+    console.error('[Video] Failed to create video service: YCG_STORE not available');
+  }
+});
