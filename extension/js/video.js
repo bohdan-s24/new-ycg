@@ -61,14 +61,44 @@ class VideoService {
         return
       }
 
-      // Send message to content script
-      const response = await chrome.tabs.sendMessage(currentTab.id, { action: "getVideoInfo" })
+      // Send message to content script with timeout
+      try {
+        // Create a promise that will reject after a timeout
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("Content script communication timed out"))
+          }, 5000) // 5 second timeout
+        })
 
-      if (!response || !response.success) {
-        const error = response?.error || "Failed to get video information"
+        // Create the message promise
+        const messagePromise = new Promise((resolve) => {
+          chrome.tabs.sendMessage(currentTab.id, { action: "getVideoInfo" }, (response) => {
+            // Check for chrome runtime error
+            if (chrome.runtime.lastError) {
+              console.warn("[Video] Chrome runtime error:", chrome.runtime.lastError)
+              resolve({ success: false, error: chrome.runtime.lastError.message })
+            } else {
+              resolve(response || { success: false, error: "No response from content script" })
+            }
+          })
+        })
+
+        // Race the message against the timeout
+        const response = await Promise.race([messagePromise, timeoutPromise])
+
+        if (!response || !response.success) {
+          const error = response?.error || "Failed to get video information"
+          this.store.dispatch("video", {
+            type: "SET_VIDEO_ERROR",
+            payload: { error },
+          })
+          return
+        }
+      } catch (timeoutError) {
+        console.error("[Video] Content script communication error:", timeoutError)
         this.store.dispatch("video", {
           type: "SET_VIDEO_ERROR",
-          payload: { error },
+          payload: { error: "Communication with YouTube page timed out. Please refresh the page." },
         })
         return
       }

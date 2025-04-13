@@ -59,14 +59,22 @@ async function initAuth() {
           const result = await api.verifyToken(state.auth.token)
           console.log("[AUTH-DEBUG] Token verification response:", result)
 
-          if (result && result.valid) {
-            console.log("[Auth] Token is valid")
+          // Check if the result is valid or if we're using fallback validation
+          if (result && (result.valid || result.fallback)) {
+            console.log(result.fallback
+              ? "[Auth] Token is valid (using client-side validation due to server unavailability)"
+              : "[Auth] Token is valid")
 
             // Get user info
             try {
               console.log("[AUTH-DEBUG] Fetching user info")
               const userInfo = await api.getUserInfo()
               console.log("[AUTH-DEBUG] User info received:", userInfo ? 'success' : 'failed')
+
+              // Check if we're using fallback user info
+              if (userInfo && userInfo.fallback) {
+                console.log("[AUTH-DEBUG] Using fallback user info due to server unavailability")
+              }
 
               // Update user in store
               store.dispatch("auth", {

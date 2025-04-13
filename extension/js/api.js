@@ -346,9 +346,35 @@ class ApiService {
     try {
       console.log('[API] Verifying token...')
 
+      // First, check if the token is valid by decoding it
+      try {
+        // Parse the JWT token to check if it's valid
+        const base64Url = token.split('.')[1]
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+        }).join(''))
+
+        const payload = JSON.parse(jsonPayload)
+
+        // Check if token has expiration and is not expired
+        if (payload.exp) {
+          const currentTime = Math.floor(Date.now() / 1000)
+          if (currentTime > payload.exp) {
+            console.log('[API] Token is expired based on client-side validation')
+            throw new Error('Token is expired')
+          }
+        }
+
+        console.log('[API] Token is valid based on client-side validation')
+      } catch (decodeError) {
+        console.error('[API] Token is invalid based on client-side validation:', decodeError)
+        throw new Error('Invalid token format')
+      }
+
       // Check if token is expired or about to expire
       if (this.isTokenExpiredOrExpiringSoon(token)) {
-        console.log('[API] Token is expired or expiring soon, refreshing before verification')
+        console.log('[API] Token is expiring soon, refreshing before verification')
         // Try to refresh the token first
         try {
           await this.refreshToken()
@@ -364,17 +390,37 @@ class ApiService {
         }
       }
 
-      // Verify with a longer timeout
-      return await this.request(
-        this.API.AUTH.VERIFY_TOKEN,
-        {
-          method: "POST",
-          body: JSON.stringify({ token }),
-        },
-        false, // Not requiring auth for this request
-        15000,  // 15 second timeout
-        false   // Don't try to refresh token for this request
-      )
+      // Try to verify with the server, but don't fail if server is unavailable
+      try {
+        // Verify with a longer timeout
+        const result = await this.request(
+          this.API.AUTH.VERIFY_TOKEN,
+          {
+            method: "POST",
+            body: JSON.stringify({ token }),
+          },
+          false, // Not requiring auth for this request
+          10000,  // 10 second timeout - reduced to avoid long waits
+          false   // Don't try to refresh token for this request
+        )
+
+        return result
+      } catch (serverError) {
+        // If server verification fails but client validation passed, we can still proceed
+        // This handles cases where the server is down or timing out
+        console.warn('[API] Server verification failed, but token appears valid:', serverError)
+
+        // Check error type
+        const errorType = this.classifyError(serverError)
+        if (errorType === 'timeout' || errorType === 'network') {
+          // For timeout or network errors, assume token is valid since we already validated it client-side
+          console.log('[API] Using client-side validation as fallback due to server unavailability')
+          return { valid: true, fallback: true }
+        } else {
+          // For other errors (like auth errors), the token is likely invalid
+          throw serverError
+        }
+      }
     } catch (error) {
       console.error('[API] Token verification failed:', error)
       throw error
@@ -386,7 +432,61 @@ class ApiService {
    * @returns {Promise<Object>} The user information
    */
   async getUserInfo() {
-    return this.request(this.API.AUTH.USER_INFO, {}, true)
+    try {
+      console.log('[API] Getting user info...')
+
+      // Try to get user info from server with a reasonable timeout
+      const userInfo = await this.request(
+        this.API.AUTH.USER_INFO,
+        {},
+        true, // Requires authentication
+        10000, // 10 second timeout
+        true   // Try to refresh token if needed
+      )
+
+      return userInfo
+    } catch (error) {
+      console.error('[API] Error getting user info:', error)
+
+      // Check error type
+      const errorType = this.classifyError(error)
+      if (errorType === 'timeout' || errorType === 'network') {
+        // For timeout or network errors, try to use cached user info
+        console.log('[API] Server unavailable, trying to use cached user info')
+
+        // Try to get user info from token
+        const token = this.getToken()
+        if (token) {
+          try {
+            // Parse the JWT token to get user info
+            const base64Url = token.split('.')[1]
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+            }).join(''))
+
+            const payload = JSON.parse(jsonPayload)
+
+            // Extract basic user info from token
+            if (payload.sub && payload.email) {
+              console.log('[API] Using user info from token as fallback')
+              return {
+                id: payload.sub,
+                email: payload.email,
+                name: payload.name || payload.email.split('@')[0], // Use email username as fallback
+                credits: 0, // Default to 0 credits when offline
+                fallback: true // Indicate this is fallback data
+              }
+            }
+          } catch (tokenError) {
+            console.error('[API] Error extracting user info from token:', tokenError)
+          }
+        }
+      }
+
+      // If we can't get user info from token or it's not a network/timeout error, throw the original error
+      throw error
+    }
   }
 
   /**
