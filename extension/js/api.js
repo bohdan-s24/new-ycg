@@ -17,6 +17,14 @@ class ApiService {
     this.retryCount = 0
     this.maxRetries = 3
     this.retryDelay = 1000 // 1 second
+
+    // Token refresh state
+    this.isRefreshing = false
+    this.refreshPromise = null
+    this.tokenRefreshInterval = null
+
+    // Start token refresh monitoring if we have a token
+    this.setupTokenRefreshMonitoring()
   }
 
   /**
@@ -40,6 +48,7 @@ class ApiService {
       AUTH: {
         LOGIN_GOOGLE: `${config.AUTH_BASE_URL}/login/google`,
         VERIFY_TOKEN: `${config.AUTH_BASE_URL}/verify`,
+        REFRESH_TOKEN: `${config.AUTH_BASE_URL}/refresh`,
         USER_INFO: `${config.AUTH_BASE_URL}/user`,
         CONFIG: `${config.AUTH_BASE_URL}/config`,
       },
@@ -86,10 +95,11 @@ class ApiService {
    * @param {string} url - The URL to request
    * @param {Object} options - The fetch options
    * @param {boolean} requiresAuth - Whether the request requires authentication
-   * @param {number} timeout - Request timeout in milliseconds (default: 5000)
+   * @param {number} timeout - Request timeout in milliseconds (default: 15000)
+   * @param {boolean} shouldRefreshToken - Whether to attempt token refresh if needed
    * @returns {Promise<Object>} The response data
    */
-  async request(url, options = {}, requiresAuth = false, timeout = 5000) {
+  async request(url, options = {}, requiresAuth = false, timeout = 15000, shouldRefreshToken = true) {
     // Set default options
     const defaultOptions = {
       method: "GET",
@@ -110,6 +120,16 @@ class ApiService {
 
     // Add authentication token if required
     if (requiresAuth) {
+      // Check if token needs refresh before using it
+      if (shouldRefreshToken) {
+        try {
+          await this.checkAndRefreshTokenIfNeeded()
+        } catch (refreshError) {
+          console.error(`[API] Token refresh failed:`, refreshError)
+          // Continue with the current token, it might still work
+        }
+      }
+
       const token = this.getToken()
       if (!token) {
         throw new Error("Authentication required but no token available")
@@ -125,7 +145,10 @@ class ApiService {
       let timeoutId
       if (!mergedOptions.signal) {
         const controller = new AbortController()
-        timeoutId = setTimeout(() => controller.abort(), timeout)
+        timeoutId = setTimeout(() => {
+          console.log(`[API] Request timeout after ${timeout}ms for ${url}`)
+          controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
+        }, timeout)
         mergedOptions.signal = controller.signal
       }
 
@@ -166,65 +189,152 @@ class ApiService {
       console.log(`[API] Response data:`, data)
       return data
     } catch (error) {
-      // Handle network errors
-      console.error(`[API] Error in ${url}:`, error)
+      // Classify and handle the error
+      const errorType = this.classifyError(error)
+      console.error(`[API] ${errorType} error in ${url}:`, error)
 
-      // Retry logic for network errors
-      if (this.retryCount < this.maxRetries && this.isNetworkError(error)) {
-        this.retryCount++
-        console.log(`[API] Retrying request (${this.retryCount}/${this.maxRetries})...`)
+      // Handle based on error type
+      switch (errorType) {
+        case 'timeout':
+          throw new Error(`Request timed out: ${error.message || 'The operation took too long to complete'}`)
 
-        // Wait before retrying
-        await new Promise((resolve) => setTimeout(resolve, this.retryDelay * this.retryCount))
+        case 'network':
+          // Retry logic for network errors
+          if (this.retryCount < this.maxRetries) {
+            this.retryCount++
+            console.log(`[API] Retrying request (${this.retryCount}/${this.maxRetries})...`)
 
-        // Retry the request
-        return this.request(url, options, requiresAuth)
+            // Wait before retrying with exponential backoff
+            const delay = this.retryDelay * Math.pow(2, this.retryCount - 1)
+            console.log(`[API] Waiting ${delay}ms before retry`)
+            await new Promise((resolve) => setTimeout(resolve, delay))
+
+            // Retry the request
+            return this.request(url, options, requiresAuth, timeout, false) // Don't try to refresh token on retry
+          }
+          // Reset retry count if we're not retrying
+          this.retryCount = 0
+          throw new Error(`Network error after ${this.maxRetries} retries: ${error.message}`)
+
+        case 'auth':
+          if (requiresAuth) {
+            // If token refresh failed or wasn't attempted, logout
+            if (!shouldRefreshToken || url.includes('/refresh')) {
+              console.log('[API] Authentication error, logging out')
+              // Dispatch logout action
+              if (this.store) {
+                this.store.dispatch("auth", { type: "LOGOUT" })
+                // Save state to storage
+                await this.store.saveToStorage()
+              }
+              throw new Error(`Authentication failed: ${error.message}`)
+            } else {
+              // Try to refresh the token and retry the request
+              try {
+                console.log('[API] Attempting to refresh token and retry request')
+                await this.refreshToken()
+                // Retry the original request with the new token
+                return this.request(url, options, requiresAuth, timeout, false) // Don't try to refresh token again
+              } catch (refreshError) {
+                console.error('[API] Token refresh failed:', refreshError)
+                // Logout if refresh fails
+                if (this.store) {
+                  this.store.dispatch("auth", { type: "LOGOUT" })
+                  await this.store.saveToStorage()
+                }
+                throw new Error(`Authentication failed: Unable to refresh token`)
+              }
+            }
+          }
+          throw error
+
+        default:
+          // For other errors, just throw them
+          throw error
       }
-
-      // Reset retry count
-      this.retryCount = 0
-
-      // Handle authentication errors
-      if (this.isAuthError(error) && requiresAuth) {
-        // Dispatch logout action
-        if (this.store) {
-          this.store.dispatch("auth", { type: "LOGOUT" })
-
-          // Save state to storage
-          await this.store.saveToStorage()
-        }
-      }
-
-      throw error
     }
   }
 
   /**
-   * Check if an error is a network error
-   * @param {Error} error - The error to check
-   * @returns {boolean} Whether the error is a network error
+   * Classify an error into specific types for better handling
+   * @param {Error} error - The error to classify
+   * @returns {string} The error type: 'network', 'auth', 'timeout', or 'unknown'
    */
-  isNetworkError(error) {
-    return (
-      error.message.includes("Failed to fetch") ||
-      error.message.includes("Network request failed") ||
-      error.message.includes("network error") ||
-      error.message.includes("Network Error")
-    )
+  classifyError(error) {
+    // Check for timeout errors
+    if (error.name === 'AbortError' ||
+        error.name === 'TimeoutError' ||
+        (error instanceof DOMException && error.name === 'AbortError') ||
+        error.message.includes('aborted') ||
+        error.message.includes('timeout')) {
+      return 'timeout'
+    }
+
+    // Check for network errors
+    if (error.message.includes("Failed to fetch") ||
+        error.message.includes("Network request failed") ||
+        error.message.includes("network error") ||
+        error.message.includes("Network Error") ||
+        error.message.includes("net::") ||
+        error.name === 'NetworkError') {
+      return 'network'
+    }
+
+    // Check for authentication errors
+    if (error.message.includes("Authentication required") ||
+        error.message.includes("Invalid token") ||
+        error.message.includes("Token expired") ||
+        error.message.includes("Unauthorized") ||
+        error.message.includes("Not authenticated") ||
+        error.message.includes("JWT") ||
+        error.message.includes("token") ||
+        error.status === 401 ||
+        error.status === 403) {
+      return 'auth'
+    }
+
+    // Default to unknown error type
+    return 'unknown'
   }
 
   /**
-   * Check if an error is an authentication error
-   * @param {Error} error - The error to check
-   * @returns {boolean} Whether the error is an authentication error
+   * Check if a token is expired or about to expire
+   * @param {string} token - The JWT token to check
+   * @returns {boolean} Whether the token is expired or will expire soon
    */
-  isAuthError(error) {
-    return (
-      error.message.includes("Authentication required") ||
-      error.message.includes("Invalid token") ||
-      error.message.includes("Token expired") ||
-      error.message.includes("Unauthorized")
-    )
+  isTokenExpiredOrExpiringSoon(token) {
+    if (!token) return true
+
+    try {
+      // Parse the JWT token
+      const base64Url = token.split('.')[1]
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+      }).join(''))
+
+      const payload = JSON.parse(jsonPayload)
+
+      // Check if token has expiration
+      if (!payload.exp) return false
+
+      // Get current time in seconds
+      const currentTime = Math.floor(Date.now() / 1000)
+
+      // Check if token is expired or will expire in the next 5 minutes
+      const expiresIn = payload.exp - currentTime
+      const isExpiringSoon = expiresIn < 300 // 5 minutes in seconds
+
+      if (isExpiringSoon) {
+        console.log(`[API] Token will expire in ${expiresIn} seconds`)
+      }
+
+      return isExpiringSoon
+    } catch (error) {
+      console.error('[API] Error checking token expiration:', error)
+      // If we can't parse the token, assume it's invalid
+      return true
+    }
   }
 
   /**
@@ -233,10 +343,42 @@ class ApiService {
    * @returns {Promise<Object>} The verification result
    */
   async verifyToken(token) {
-    return this.request(this.API.AUTH.VERIFY_TOKEN, {
-      method: "POST",
-      body: JSON.stringify({ token }),
-    })
+    try {
+      console.log('[API] Verifying token...')
+
+      // Check if token is expired or about to expire
+      if (this.isTokenExpiredOrExpiringSoon(token)) {
+        console.log('[API] Token is expired or expiring soon, refreshing before verification')
+        // Try to refresh the token first
+        try {
+          await this.refreshToken()
+          // Get the new token after refresh
+          token = this.getToken()
+          if (!token) {
+            throw new Error('No token available after refresh')
+          }
+        } catch (refreshError) {
+          console.error('[API] Token refresh failed during verification:', refreshError)
+          // Continue with verification using the original token
+          // The server will reject it if it's invalid
+        }
+      }
+
+      // Verify with a longer timeout
+      return await this.request(
+        this.API.AUTH.VERIFY_TOKEN,
+        {
+          method: "POST",
+          body: JSON.stringify({ token }),
+        },
+        false, // Not requiring auth for this request
+        15000,  // 15 second timeout
+        false   // Don't try to refresh token for this request
+      )
+    } catch (error) {
+      console.error('[API] Token verification failed:', error)
+      throw error
+    }
   }
 
   /**
@@ -245,6 +387,118 @@ class ApiService {
    */
   async getUserInfo() {
     return this.request(this.API.AUTH.USER_INFO, {}, true)
+  }
+
+  /**
+   * Setup token refresh monitoring
+   * This sets up a periodic check to refresh the token before it expires
+   */
+  setupTokenRefreshMonitoring() {
+    // Clear any existing interval
+    if (this.tokenRefreshInterval) {
+      clearInterval(this.tokenRefreshInterval)
+    }
+
+    // Set up a new interval to check token every minute
+    this.tokenRefreshInterval = setInterval(() => {
+      this.checkAndRefreshTokenIfNeeded().catch(error => {
+        console.error('[API] Background token refresh failed:', error)
+      })
+    }, 60000) // Check every minute
+
+    console.log('[API] Token refresh monitoring started')
+  }
+
+  /**
+   * Check if token needs refresh and refresh it if needed
+   * @returns {Promise<void>}
+   */
+  async checkAndRefreshTokenIfNeeded() {
+    // Get current token
+    const token = this.getToken()
+
+    // If no token or not about to expire, do nothing
+    if (!token || !this.isTokenExpiredOrExpiringSoon(token)) {
+      return
+    }
+
+    console.log('[API] Token is expiring soon, refreshing...')
+
+    // Refresh the token
+    await this.refreshToken()
+  }
+
+  /**
+   * Refresh the authentication token
+   * @returns {Promise<string>} The new token
+   */
+  async refreshToken() {
+    // If already refreshing, return the existing promise
+    if (this.isRefreshing && this.refreshPromise) {
+      console.log('[API] Token refresh already in progress, waiting...')
+      return this.refreshPromise
+    }
+
+    // Set refreshing state
+    this.isRefreshing = true
+
+    // Create a new refresh promise
+    this.refreshPromise = new Promise(async (resolve, reject) => {
+      try {
+        console.log('[API] Refreshing token...')
+
+        // Get current token
+        const currentToken = this.getToken()
+        if (!currentToken) {
+          throw new Error('No token available to refresh')
+        }
+
+        // Call refresh endpoint
+        const result = await this.request(
+          this.API.AUTH.REFRESH_TOKEN,
+          {
+            method: 'POST',
+            body: JSON.stringify({ token: currentToken }),
+          },
+          false, // Not requiring auth for this request
+          20000, // 20 second timeout
+          false  // Don't try to refresh token for this request
+        )
+
+        // Check if we got a new token
+        if (!result || !result.access_token) {
+          throw new Error('Failed to refresh token: No new token returned')
+        }
+
+        console.log('[API] Token refreshed successfully')
+
+        // Update token in store
+        if (this.store) {
+          const state = this.store.getState()
+          this.store.dispatch('auth', {
+            type: 'LOGIN_SUCCESS',
+            payload: {
+              user: state.auth.user,
+              token: result.access_token,
+            },
+          })
+
+          // Save to storage
+          await this.store.saveToStorage()
+        }
+
+        resolve(result.access_token)
+      } catch (error) {
+        console.error('[API] Token refresh failed:', error)
+        reject(error)
+      } finally {
+        // Reset refreshing state
+        this.isRefreshing = false
+        this.refreshPromise = null
+      }
+    })
+
+    return this.refreshPromise
   }
 
   /**
@@ -263,7 +517,10 @@ class ApiService {
 
         // Use a longer timeout for login requests
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+        const timeoutId = setTimeout(() => {
+          console.log('[API] Login request timed out after 20 seconds')
+          controller.abort(new DOMException('Login request timed out', 'TimeoutError'))
+        }, 20000) // 20 second timeout
 
         const result = await this.request(
           this.API.AUTH.LOGIN_GOOGLE,
@@ -274,20 +531,30 @@ class ApiService {
               platform: "chrome_extension",
             }),
             signal: controller.signal,
-          }
+          },
+          false, // Not requiring auth for this request
+          20000, // 20 second timeout
+          false  // Don't try to refresh token for this request
         )
 
         clearTimeout(timeoutId)
 
         // Handle the nested response structure
         console.log('[API] Login response structure:', JSON.stringify(result))
-        
+
         // Check if the response has a nested data structure
         if (result.success && result.data) {
           console.log('[API] Found nested data structure in login response')
           // Return the data object which contains the access_token
+
+          // Start token refresh monitoring after successful login
+          this.setupTokenRefreshMonitoring()
+
           return result.data
         }
+
+        // Start token refresh monitoring after successful login
+        this.setupTokenRefreshMonitoring()
 
         return result
       } catch (error) {
@@ -298,7 +565,7 @@ class ApiService {
           throw error
         }
 
-        // Wait before retrying
+        // Wait before retrying with exponential backoff
         const delay = baseDelay * Math.pow(2, attempt - 1)
         console.log(`[API] Retrying login in ${delay}ms...`)
         await new Promise((resolve) => setTimeout(resolve, delay))

@@ -51,49 +51,72 @@ async function initAuth() {
     console.log("[Auth] Found token in storage, verifying...")
 
     try {
-      // Verify token with server
-      const result = await api.verifyToken(state.auth.token)
-
-      if (result.valid) {
-        console.log("[Auth] Token is valid")
-
-        // Get user info
+      // Add a timeout for the entire verification process
+      const verificationPromise = new Promise(async (resolve, reject) => {
         try {
-          const userInfo = await api.getUserInfo()
+          // Verify token with server
+          console.log("[AUTH-DEBUG] Sending token verification request")
+          const result = await api.verifyToken(state.auth.token)
+          console.log("[AUTH-DEBUG] Token verification response:", result)
 
-          // Update user in store
-          store.dispatch("auth", {
-            type: "LOGIN_SUCCESS",
-            payload: {
-              user: userInfo,
-              token: state.auth.token,
-            },
-          })
+          if (result && result.valid) {
+            console.log("[Auth] Token is valid")
 
-          // Update credits
-          store.dispatch("credits", {
-            type: "SET_CREDITS",
-            payload: {
-              count: userInfo.credits || 0,
-            },
-          })
+            // Get user info
+            try {
+              console.log("[AUTH-DEBUG] Fetching user info")
+              const userInfo = await api.getUserInfo()
+              console.log("[AUTH-DEBUG] User info received:", userInfo ? 'success' : 'failed')
 
-          // Set active view to main
-          store.dispatch("ui", {
-            type: "SET_ACTIVE_VIEW",
-            payload: { view: "main" },
-          })
+              // Update user in store
+              store.dispatch("auth", {
+                type: "LOGIN_SUCCESS",
+                payload: {
+                  user: userInfo,
+                  token: state.auth.token,
+                },
+              })
 
-          // Save state to storage
-          await store.saveToStorage()
+              // Update credits
+              store.dispatch("credits", {
+                type: "SET_CREDITS",
+                payload: {
+                  count: userInfo.credits || 0,
+                },
+              })
+
+              // Set active view to main
+              store.dispatch("ui", {
+                type: "SET_ACTIVE_VIEW",
+                payload: { view: "main" },
+              })
+
+              // Save state to storage
+              await store.saveToStorage()
+              resolve(true)
+            } catch (error) {
+              console.error("[Auth] Error getting user info:", error)
+              reject(error)
+            }
+          } else {
+            console.log("[Auth] Token is invalid")
+            reject(new Error("Invalid token"))
+          }
         } catch (error) {
-          console.error("[Auth] Error getting user info:", error)
-          handleAuthError(store, error)
+          console.error("[Auth] Error in verification process:", error)
+          reject(error)
         }
-      } else {
-        console.log("[Auth] Token is invalid")
-        handleAuthError(store, new Error("Invalid token"))
-      }
+      })
+
+      // Set a timeout for the entire verification process
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("Authentication verification timed out after 15 seconds"))
+        }, 15000) // 15 second timeout
+      })
+
+      // Race the verification against the timeout
+      await Promise.race([verificationPromise, timeoutPromise])
     } catch (error) {
       console.error("[Auth] Error verifying token:", error)
       handleAuthError(store, error)
@@ -199,14 +222,31 @@ async function handleGoogleSignIn() {
   console.log('[AUTH-DEBUG] Current state after LOGIN_START:', JSON.stringify(store.getState().auth))
 
   try {
-    // Launch Google Sign-In
-    const token = await launchGoogleSignIn()
+    // Show loading notification
+    if (window.YCG_UI) {
+      window.YCG_UI.showNotification("Connecting to Google...", "info")
+    }
+
+    // Launch Google Sign-In with timeout
+    const googleSignInPromise = launchGoogleSignIn()
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("Google Sign-In timed out after 20 seconds"))
+      }, 20000) // 20 second timeout
+    })
+
+    const token = await Promise.race([googleSignInPromise, timeoutPromise])
 
     if (!token) {
       throw new Error("Failed to get Google token")
     }
 
     console.log("[Auth] Got Google token, logging in...")
+
+    // Show login in progress notification
+    if (window.YCG_UI) {
+      window.YCG_UI.showNotification("Logging in...", "info")
+    }
 
     // Login with Google
     console.log('[AUTH-DEBUG] Calling API loginWithGoogle')
@@ -323,12 +363,21 @@ function launchGoogleSignIn() {
         return
       }
 
+      // Set a timeout for the entire operation
+      const timeoutId = setTimeout(() => {
+        console.error("[Auth] Google auth token request timed out")
+        reject(new Error("Google authentication timed out"))
+      }, 15000) // 15 second timeout
+
       // First try to clear any cached tokens
       chrome.identity.clearAllCachedAuthTokens(() => {
         console.log("[Auth] Cleared cached tokens")
 
         // Now get a fresh token
         chrome.identity.getAuthToken({ interactive: true }, (token) => {
+          // Clear the timeout since we got a response
+          clearTimeout(timeoutId)
+
           if (chrome.runtime.lastError) {
             console.error("[Auth] Chrome identity error:", chrome.runtime.lastError)
             reject(new Error(chrome.runtime.lastError.message))
@@ -361,18 +410,35 @@ function handleAuthError(store, error) {
   console.error("[AUTH-DEBUG] Authentication error:", error)
   console.log("[AUTH-DEBUG] Error details:", error)
 
+  // Format error message for user display
+  let userErrorMessage = "Authentication failed"
+
+  // Classify the error for better user feedback
+  if (error.message.includes("timed out") || error.message.includes("aborted")) {
+    userErrorMessage = "Connection timed out. Please try again."
+  } else if (error.message.includes("network") || error.message.includes("fetch")) {
+    userErrorMessage = "Network error. Please check your connection and try again."
+  } else if (error.message.includes("token") || error.message.includes("auth")) {
+    userErrorMessage = "Authentication error. Please try logging in again."
+  } else if (error.message.includes("Chrome identity") || error.message.includes("Google")) {
+    userErrorMessage = "Google authentication error. Please try again."
+  } else {
+    // Use the original error message if it's user-friendly, otherwise use generic message
+    userErrorMessage = error.message.length < 100 ? error.message : "Authentication failed. Please try again."
+  }
+
   // Debug: Log state before error handling
   console.log('[AUTH-DEBUG] State before error handling:', {
     auth: store.getState().auth.isAuthenticated,
     view: store.getState().ui.activeView
   })
 
-  // Dispatch login failure action
+  // Dispatch login failure action with user-friendly error message
   console.log('[AUTH-DEBUG] Dispatching LOGIN_FAILURE action')
   store.dispatch("auth", {
     type: "LOGIN_FAILURE",
     payload: {
-      error: error.message,
+      error: userErrorMessage,
     },
   })
 
