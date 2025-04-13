@@ -84,7 +84,7 @@ class UiManager {
 
     // Main content elements will be created dynamically
     this.elements.main = {}
-    
+
     console.log("[UI] DOM elements cached")
     console.log("[UI-DEBUG] Cached DOM elements:", this.elements)
   }
@@ -163,7 +163,7 @@ class UiManager {
   updateAuthUI(state) {
     const { auth } = state
     const { userProfile, userAvatar, menuUserAvatar, userName, userEmail } = this.elements.header
-    
+
     console.log("[UI-DEBUG] Updating auth UI with state:", JSON.stringify(auth))
     console.log("[UI-DEBUG] Header elements:", this.elements.header)
 
@@ -210,7 +210,7 @@ class UiManager {
       console.log("[UI-DEBUG] Error message hidden")
       this.elements.auth.errorMessage.classList.add("hidden")
     }
-    
+
     console.log("[UI-DEBUG] Auth UI update complete")
   }
 
@@ -242,13 +242,13 @@ class UiManager {
   updateActiveView(state) {
     const { ui, auth } = state
     const { welcomeContainer, authContainer, mainContent } = this.elements.containers
-    
+
     console.log("[UI-DEBUG] Updating active view with state:", {
       "ui.activeView": ui.activeView,
       "auth.isAuthenticated": auth.isAuthenticated,
       "auth.user": auth.user
     })
-    
+
     console.log("[UI-DEBUG] Container elements:", this.elements.containers)
 
     // Determine which view should be active
@@ -293,7 +293,7 @@ class UiManager {
       console.log("[UI-DEBUG] Main content hidden")
       mainContent.classList.toggle("hidden", activeView !== "main")
     }
-    
+
     console.log("[UI-DEBUG] Active view update complete")
   }
 
@@ -324,43 +324,61 @@ class UiManager {
 
       // Create the main content structure
       mainContentArea.innerHTML = `
-        <div id="status" class="status-message">
-          <p>Checking if you're on a YouTube video page...</p>
-        </div>
-        <div id="error-message" class="error-message hidden"></div>
-        <div id="video-info" class="video-info hidden">
-          <h3>Current Video</h3>
-          <p id="video-title" class="video-title">Video Title</p>
-          <button id="generate-btn" class="btn btn-primary btn-full">Generate Chapters</button>
-        </div>
-        <div id="loading" class="loading hidden">
-          <div class="spinner"></div>
-          <p>Generating chapters...</p>
-        </div>
-        <div id="chapters-container" class="chapters-container hidden">
-          <div class="chapters-header">
-            <h3>Generated Chapters</h3>
-            <div class="version-controls">
-              <button id="prev-version-btn" class="btn btn-secondary" disabled>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="15 18 9 12 15 6"></polyline>
-                </svg>
-              </button>
-              <span id="version-indicator">1/1</span>
-              <button id="next-version-btn" class="btn btn-secondary" disabled>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-              </button>
-            </div>
+      <div id="status" class="status-message">
+        <p>Checking if you're on a YouTube video page...</p>
+      </div>
+      <div id="error-message" class="error-message hidden"></div>
+      <div id="video-info" class="video-info hidden">
+        <h3>Current Video</h3>
+        <p id="video-title" class="video-title">Video Title</p>
+        <button id="generate-btn" class="btn btn-primary btn-full">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
+          </svg>
+          Generate Chapters
+        </button>
+      </div>
+      <div id="loading" class="loading hidden">
+        <div class="spinner"></div>
+        <p>Generating chapters...</p>
+        <p class="text-sm text-muted-foreground mt-2">This may take a few moments</p>
+      </div>
+      <div id="chapters-container" class="chapters-container hidden">
+        <div class="chapters-header">
+          <h3>Generated Chapters</h3>
+          <div class="version-controls">
+            <button id="prev-version-btn" class="btn btn-secondary" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+            <span id="version-indicator">1/1</span>
+            <button id="next-version-btn" class="btn btn-secondary" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
           </div>
-          <div id="chapters-content" class="chapters-content"></div>
-          <div class="chapters-actions">
-            <button id="copy-btn" class="btn btn-primary">Copy to Clipboard</button>
-            <button id="regenerate-btn" class="btn btn-secondary">Regenerate</button>
-          </div>
         </div>
-      `
+        <div id="chapters-content" class="chapters-content"></div>
+        <div class="chapters-actions">
+          <button id="copy-btn" class="btn btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            Copy
+          </button>
+          <button id="regenerate-btn" class="btn btn-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+              <path d="M23 4v6h-6"></path>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            Regenerate
+          </button>
+        </div>
+      </div>
+    `
 
       // Cache the new elements
       this.elements.main = {
