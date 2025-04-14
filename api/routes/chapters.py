@@ -1,6 +1,7 @@
 import time
 import logging
 from flask import request, g
+from typing import List, Dict
 
 # Import necessary services, utils, and decorators
 from ..utils.responses import success_response, error_response
@@ -11,6 +12,37 @@ from ..utils.transcript import format_transcript_for_model
 from ..utils.decorators import token_required
 from ..services import credits_service
 from ..utils.versioning import VersionedBlueprint
+
+
+def parse_chapters_text(chapters_text: str) -> tuple[List[Dict[str, str]], str]:
+    """
+    Parse the raw chapters text into a structured format for the frontend.
+
+    Args:
+        chapters_text: Raw chapters text from OpenAI
+
+    Returns:
+        Tuple of (parsed_chapters, formatted_text)
+    """
+    parsed_chapters = []
+    formatted_text = chapters_text
+
+    # Parse each line of the chapters text
+    for line in chapters_text.strip().split('\n'):
+        if not line.strip():
+            continue
+
+        # Extract time and title
+        parts = line.split(' ', 1)
+        if len(parts) == 2:
+            time = parts[0].strip()
+            title = parts[1].strip()
+            parsed_chapters.append({
+                'time': time,
+                'title': title
+            })
+
+    return parsed_chapters, formatted_text
 
 # Create a versioned blueprint
 chapters_bp = VersionedBlueprint('chapters', __name__, url_prefix='/chapters')
@@ -55,13 +87,18 @@ async def generate_chapters():
     # --- End Credit Check ---
 
     # Check cache first (still useful to avoid re-generation even if credits are checked)
-    cached_chapters = get_from_cache(video_id)
-    if cached_chapters:
+    cached_chapters_text = get_from_cache(video_id)
+    if cached_chapters_text:
         logging.info(f"[CHAPTERS] Returning cached chapters for {video_id} (User: {user_id})")
+
+        # Parse the cached chapters text into the format expected by the frontend
+        parsed_chapters, formatted_text = parse_chapters_text(cached_chapters_text)
+
         # Note: We don't deduct credits if serving from cache
         return success_response({
             'videoId': video_id,
-            'chapters': cached_chapters,
+            'chapters': parsed_chapters,
+            'formatted_text': formatted_text,
             'fromCache': True
         })
 
@@ -133,10 +170,14 @@ async def generate_chapters():
     total_time = time.time() - total_start_time
     logging.info(f"[CHAPTERS] Total processing time for {video_id}: {total_time:.2f}s (User: {user_id})")
 
+    # Parse the chapters text into the format expected by the frontend
+    parsed_chapters, formatted_text = parse_chapters_text(chapters)
+
     # Prepare response using helper
     return success_response({
         'videoId': video_id,
-        'chapters': chapters,
+        'chapters': parsed_chapters,
+        'formatted_text': formatted_text,
         'fromCache': False
     })
 
