@@ -22,6 +22,9 @@ async def generate_chapters():
     """
     Generate chapters for a YouTube video, requiring authentication and credits.
     """
+    # Start timing the entire operation
+    total_start_time = time.time()
+
     # Get user_id from the decorator via Flask's g context
     user_id = getattr(g, 'current_user_id', None)
     if not user_id:
@@ -37,22 +40,24 @@ async def generate_chapters():
     if not video_id:
         return error_response('Missing video_id parameter', 400)
 
+    logging.info(f"[CHAPTERS] Generate request received for video {video_id} from user {user_id}")
+
     # --- Credit Check ---
     try:
         has_credits = await credits_service.has_sufficient_credits(user_id)
         if not has_credits:
-            logging.warning(f"User {user_id} attempted generation with insufficient credits for video {video_id}.")
+            logging.warning(f"[CHAPTERS] User {user_id} attempted generation with insufficient credits for video {video_id}.")
             # 402 Payment Required is appropriate here
             return error_response('Insufficient credits to generate chapters.', 402)
     except Exception as e:
-        logging.error(f"Error checking credits for user {user_id}: {e}")
+        logging.error(f"[CHAPTERS] Error checking credits for user {user_id}: {e}")
         return error_response("Failed to verify credit balance.", 500)
     # --- End Credit Check ---
 
     # Check cache first (still useful to avoid re-generation even if credits are checked)
     cached_chapters = get_from_cache(video_id)
     if cached_chapters:
-        logging.info(f"Returning cached chapters for {video_id} (User: {user_id})")
+        logging.info(f"[CHAPTERS] Returning cached chapters for {video_id} (User: {user_id})")
         # Note: We don't deduct credits if serving from cache
         return success_response({
             'videoId': video_id,
@@ -60,66 +65,70 @@ async def generate_chapters():
             'fromCache': True
         })
 
-    # Get transcript - using a timeout to avoid Vercel function timeouts
+    # Get transcript - using a reduced timeout to avoid Vercel function timeouts
     start_time_transcript = time.time()
-    # Increased timeout limit for fetching transcript
-    timeout_limit = 45 # Increased from 20
-    logging.info(f"Attempting to fetch transcript for {video_id} with timeout {timeout_limit}s (User: {user_id})")
+    # Reduced timeout limit to ensure we have time for OpenAI call
+    timeout_limit = 25 # Reduced from 45 to leave more time for OpenAI
+    logging.info(f"[CHAPTERS] Fetching transcript for {video_id} with timeout {timeout_limit}s (User: {user_id})")
     transcript_data = fetch_transcript(video_id, timeout_limit)
 
     if not transcript_data:
-        logging.error(f"Failed to fetch transcript for {video_id} after {time.time() - start_time_transcript:.2f} seconds (User: {user_id})")
+        logging.error(f"[CHAPTERS] Failed to fetch transcript for {video_id} after {time.time() - start_time_transcript:.2f} seconds (User: {user_id})")
         return error_response('Failed to fetch transcript after multiple attempts', 500)
 
     elapsed_time_transcript = time.time() - start_time_transcript
-    logging.info(f"Successfully retrieved transcript for {video_id} with {len(transcript_data)} entries in {elapsed_time_transcript:.2f} seconds (User: {user_id})")
+    logging.info(f"[CHAPTERS] Retrieved transcript for {video_id} with {len(transcript_data)} entries in {elapsed_time_transcript:.2f}s (User: {user_id})")
 
-    # Calculate video duration
-    if not transcript_data: # Should not happen due to check above, but defensive coding
-         return error_response('Transcript data is empty after successful fetch.', 500)
+    # Check if we're approaching Vercel's timeout limit
+    elapsed_so_far = time.time() - total_start_time
+    if elapsed_so_far > 40:  # If we've already used 40 seconds of our 60 second limit
+        logging.warning(f"[CHAPTERS] Approaching timeout limit ({elapsed_so_far:.2f}s elapsed). Returning error to avoid Vercel timeout.")
+        return error_response('Processing taking too long. Please try again.', 503)
+
+    # Format transcript for OpenAI - streamlined
+    formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
+    logging.info(f"[CHAPTERS] Formatted transcript ({transcript_length} lines) for {video_id}")
+
+    # Calculate video duration from the last transcript entry
     last_entry = transcript_data[-1]
     video_duration_seconds = last_entry['start'] + last_entry['duration']
     video_duration_minutes = video_duration_seconds / 60
 
-    # Format transcript for OpenAI
-    start_time_format = time.time()
-    formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
-    logging.info(f"Formatted transcript ({transcript_length} lines) for {video_id} in {time.time() - start_time_format:.2f}s (User: {user_id})")
-
-    # Create prompt
-    system_prompt = create_chapter_prompt(video_duration_minutes)
-
-    # Generate chapters with OpenAI
+    # Generate chapters with OpenAI - the function now handles prompt creation internally
     start_time_openai = time.time()
-    logging.info(f"Calling OpenAI to generate chapters for {video_id} (User: {user_id})")
-    chapters = generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
+    logging.info(f"[CHAPTERS] Calling OpenAI to generate chapters for {video_id} (User: {user_id})")
+
+    # We're passing the formatted transcript directly to OpenAI
+    chapters = generate_chapters_with_openai(None, video_id, formatted_transcript)
+
     openai_duration = time.time() - start_time_openai
-    logging.info(f"OpenAI call for {video_id} completed in {openai_duration:.2f}s (User: {user_id})")
+    logging.info(f"[CHAPTERS] OpenAI call completed in {openai_duration:.2f}s (User: {user_id})")
 
     if not chapters:
-        logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user_id})")
+        logging.error(f"[CHAPTERS] Failed to generate chapters with OpenAI for {video_id} (User: {user_id})")
         return error_response('Failed to generate chapters with OpenAI', 500)
-    
+
     # Count chapters
     chapter_count = len(chapters.strip().split("\n"))
-    logging.info(f"Generated {chapter_count} chapters for {video_id} (User: {user_id})")
+    logging.info(f"[CHAPTERS] Generated {chapter_count} chapters for {video_id} (User: {user_id})")
 
     # --- Credit Deduction ---
     try:
-        start_time_deduct = time.time()
         deduction_successful = await credits_service.deduct_credits(user_id)
         if not deduction_successful:
-            logging.error(f"Failed to deduct credits for user {user_id} after successful generation for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
+            logging.error(f"[CHAPTERS] Failed to deduct credits for user {user_id} after successful generation")
         else:
-             logging.info(f"Successfully deducted 1 credit from user {user_id} for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
+             logging.info(f"[CHAPTERS] Successfully deducted 1 credit from user {user_id} for video {video_id}")
     except Exception as e:
-        logging.error(f"Exception during credit deduction for user {user_id} video {video_id}: {e}")
+        logging.error(f"[CHAPTERS] Exception during credit deduction for user {user_id}: {e}")
     # --- End Credit Deduction ---
 
     # Add to cache
-    start_time_cache = time.time()
     add_to_cache(video_id, chapters)
-    logging.info(f"Added chapters for {video_id} to cache in {time.time() - start_time_cache:.2f}s (User: {user_id})")
+
+    # Log total time
+    total_time = time.time() - total_start_time
+    logging.info(f"[CHAPTERS] Total processing time for {video_id}: {total_time:.2f}s (User: {user_id})")
 
     # Prepare response using helper
     return success_response({

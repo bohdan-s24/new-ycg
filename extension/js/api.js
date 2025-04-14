@@ -782,17 +782,60 @@ class ApiService {
    * @returns {Promise<Object>} The generated chapters
    */
   async generateChapters(videoId, videoTitle) {
-    return this.request(
-      this.API.CHAPTERS.GENERATE,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          video_id: videoId,
-          video_title: videoTitle,
-        }),
-      },
-      true,
-    )
+    // Add retry logic specifically for chapter generation
+    const maxRetries = 2
+    const baseDelay = 2000 // 2 seconds
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[API] Chapter generation attempt ${attempt}/${maxRetries}`)
+
+        // Use a longer timeout for chapter generation (45 seconds)
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => {
+          console.log('[API] Chapter generation request timed out after 45 seconds')
+          controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
+        }, 45000) // 45 second timeout
+
+        const result = await this.request(
+          this.API.CHAPTERS.GENERATE,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              video_id: videoId,
+              video_title: videoTitle,
+            }),
+            signal: controller.signal,
+          },
+          true, // Requires authentication
+          45000, // Pass timeout to underlying request function as well
+          true  // Try to refresh token if needed
+        )
+
+        clearTimeout(timeoutId)
+        return result
+
+      } catch (error) {
+        console.error(`[API] Chapter generation attempt ${attempt} failed:`, error)
+
+        // If this is the last attempt, throw the error
+        if (attempt === maxRetries) {
+          throw error
+        }
+
+        // If the error is a timeout or network error, retry
+        const errorType = this.classifyError(error)
+        if (errorType !== 'timeout' && errorType !== 'network') {
+          // Don't retry for other types of errors
+          throw error
+        }
+
+        // Wait before retrying with exponential backoff
+        const delay = baseDelay * Math.pow(2, attempt - 1)
+        console.log(`[API] Retrying chapter generation in ${delay}ms...`)
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+    }
   }
 
   /**
