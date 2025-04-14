@@ -2,6 +2,7 @@
 
 import logging
 import re
+import time
 from typing import Optional, Tuple
 import asyncio
 from functools import wraps
@@ -108,9 +109,11 @@ async def get_redis_connection() -> UpstashRedisAsync:
     """
     global redis_async_client
     if redis_async_client is None:
+        t_conn_start = time.time()
+        logging.info("[REDIS_CONN] Attempting to establish new Redis connection.")
         # Validate configuration
         if not Config.REDIS_URL:
-            logging.error("REDIS_URL is not configured in environment variables.")
+            logging.error("[REDIS_CONN] REDIS_URL is not configured.")
             raise ConfigurationError("REDIS_URL", "Redis URL not configured")
 
         # Get token from config
@@ -123,29 +126,34 @@ async def get_redis_connection() -> UpstashRedisAsync:
             # If no token is provided but we extracted a password, use it as the token
             if not rest_token and password:
                 rest_token = password
-                logging.info("Using password from Redis URL as REST API token")
+                logging.info("[REDIS_CONN] Using password from Redis URL as REST API token")
 
             if not rest_token:
-                logging.error("KV_REST_API_TOKEN is not configured and could not extract password from URL")
+                logging.error("[REDIS_CONN] KV_REST_API_TOKEN is not configured and could not extract password.")
                 raise ConfigurationError("KV_REST_API_TOKEN", "Redis token not configured")
 
-            logging.info(f"Connecting to Redis with URL: {redis_url[:20]}... (truncated)")
+            logging.info(f"[REDIS_CONN] Connecting to Redis with URL: {redis_url[:20]}... (truncated)")
 
             # Connect using the Upstash Redis client
             redis_async_client = UpstashRedisAsync(url=redis_url, token=rest_token)
 
             # Test connection
+            t_ping_start = time.time()
             await redis_async_client.ping()
-            logging.info("Successfully connected to Upstash Redis.")
+            conn_duration = time.time() - t_conn_start
+            ping_duration = time.time() - t_ping_start
+            logging.info(f"[REDIS_CONN] Successfully connected and pinged Upstash Redis. Total time: {conn_duration:.4f}s (Ping time: {ping_duration:.4f}s)")
 
         except ConfigurationError:
-            # Re-raise configuration errors
-            raise
+            raise # Re-raise configuration errors
         except Exception as e:
             # Wrap other exceptions in our custom exception
-            logging.error(f"Failed to connect to Redis: {str(e)}")
-            redis_async_client = None
+            conn_duration = time.time() - t_conn_start
+            logging.error(f"[REDIS_CONN] Failed to connect to Redis after {conn_duration:.4f}s: {str(e)}")
+            redis_async_client = None # Reset client on failure
             raise RedisConnectionError(original_error=e)
+    else:
+        logging.debug("[REDIS_CONN] Reusing existing Redis connection.")
 
     return redis_async_client
 
@@ -165,18 +173,29 @@ async def redis_operation(operation_name: str, operation_func, *args, **kwargs):
         RedisConnectionError: If connection to Redis fails
         RedisOperationError: If the operation fails
     """
+    op_start_time = time.time()
+    logging.debug(f"[REDIS_OP] Starting operation '{operation_name}'.")
     try:
         # Get Redis connection
+        t_get_conn_start = time.time()
         redis = await get_redis_connection()
+        logging.debug(f"[REDIS_OP] '{operation_name}' - Got Redis connection in {time.time() - t_get_conn_start:.4f}s")
 
         # Execute the operation
-        return await operation_func(redis, *args, **kwargs)
+        t_exec_start = time.time()
+        result = await operation_func(redis, *args, **kwargs)
+        op_duration = time.time() - op_start_time
+        exec_duration = time.time() - t_exec_start
+        logging.info(f"[REDIS_OP] Operation '{operation_name}' successful. Total time: {op_duration:.4f}s (Execution: {exec_duration:.4f}s)")
+        return result
     except RedisConnectionError:
-        # Re-raise connection errors
+        op_duration = time.time() - op_start_time
+        logging.error(f"[REDIS_OP] '{operation_name}' failed due to connection error after {op_duration:.4f}s")
         raise
     except Exception as e:
         # Wrap other exceptions
-        logging.error(f"Redis operation '{operation_name}' failed: {str(e)}")
+        op_duration = time.time() - op_start_time
+        logging.error(f"[REDIS_OP] '{operation_name}' failed: {str(e)}. Total time: {op_duration:.4f}s")
         raise RedisOperationError(operation_name, original_error=e)
 
 # Redis connection management notes:

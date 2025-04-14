@@ -61,52 +61,66 @@ async def generate_chapters():
         })
 
     # Get transcript - using a timeout to avoid Vercel function timeouts
-    start_time = time.time()
-    timeout_limit = 20  # seconds - leave room for the rest of processing
+    start_time_transcript = time.time()
+    # Increased timeout limit for fetching transcript
+    timeout_limit = 45 # Increased from 20
+    logging.info(f"Attempting to fetch transcript for {video_id} with timeout {timeout_limit}s (User: {user_id})")
     transcript_data = fetch_transcript(video_id, timeout_limit)
 
     if not transcript_data:
+        logging.error(f"Failed to fetch transcript for {video_id} after {time.time() - start_time_transcript:.2f} seconds (User: {user_id})")
         return error_response('Failed to fetch transcript after multiple attempts', 500)
 
-    elapsed_time = time.time() - start_time
-    logging.info(f"Successfully retrieved transcript for {video_id} with {len(transcript_data)} entries in {elapsed_time:.2f} seconds (User: {user_id})")
+    elapsed_time_transcript = time.time() - start_time_transcript
+    logging.info(f"Successfully retrieved transcript for {video_id} with {len(transcript_data)} entries in {elapsed_time_transcript:.2f} seconds (User: {user_id})")
 
     # Calculate video duration
+    if not transcript_data: # Should not happen due to check above, but defensive coding
+         return error_response('Transcript data is empty after successful fetch.', 500)
     last_entry = transcript_data[-1]
     video_duration_seconds = last_entry['start'] + last_entry['duration']
     video_duration_minutes = video_duration_seconds / 60
 
     # Format transcript for OpenAI
+    start_time_format = time.time()
     formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
-    logging.info(f"Prepared transcript format with {transcript_length} lines for {video_id} (User: {user_id})")
+    logging.info(f"Formatted transcript ({transcript_length} lines) for {video_id} in {time.time() - start_time_format:.2f}s (User: {user_id})")
 
     # Create prompt
     system_prompt = create_chapter_prompt(video_duration_minutes)
 
     # Generate chapters with OpenAI
+    start_time_openai = time.time()
+    logging.info(f"Calling OpenAI to generate chapters for {video_id} (User: {user_id})")
     chapters = generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
+    openai_duration = time.time() - start_time_openai
+    logging.info(f"OpenAI call for {video_id} completed in {openai_duration:.2f}s (User: {user_id})")
+
     if not chapters:
+        logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user_id})")
         return error_response('Failed to generate chapters with OpenAI', 500)
 
     # Count chapters
-    chapter_count = len(chapters.strip().split("\n"))
+    chapter_count = len(chapters.strip().split("
+"))
     logging.info(f"Generated {chapter_count} chapters for {video_id} (User: {user_id})")
 
     # --- Credit Deduction ---
     try:
+        start_time_deduct = time.time()
         deduction_successful = await credits_service.deduct_credits(user_id)
         if not deduction_successful:
-            # Log the error, but still return chapters since generation succeeded.
-            # Consider how to handle this case - maybe flag for review?
-            logging.error(f"Failed to deduct credits for user {user_id} after successful generation for video {video_id}.")
+            logging.error(f"Failed to deduct credits for user {user_id} after successful generation for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
         else:
-             logging.info(f"Successfully deducted 1 credit from user {user_id} for video {video_id}.")
+             logging.info(f"Successfully deducted 1 credit from user {user_id} for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
     except Exception as e:
         logging.error(f"Exception during credit deduction for user {user_id} video {video_id}: {e}")
     # --- End Credit Deduction ---
 
     # Add to cache
+    start_time_cache = time.time()
     add_to_cache(video_id, chapters)
+    logging.info(f"Added chapters for {video_id} to cache in {time.time() - start_time_cache:.2f}s (User: {user_id})")
 
     # Prepare response using helper
     return success_response({

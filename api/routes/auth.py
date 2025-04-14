@@ -1,6 +1,7 @@
+import time
+import logging
 from flask import request, current_app
 from datetime import timedelta
-import logging
 
 # Import services and utilities
 from ..config import Config
@@ -224,39 +225,54 @@ async def verify_token():
     Expects JSON payload: {"token": "jwt_token_here"}
     Returns: {"valid": true/false}
     """
+    verify_start_time = time.time()
+    logging.info(f"[VERIFY_TOKEN] Request received.")
+
     # Validate request format
     if not request.is_json:
+        logging.error("[VERIFY_TOKEN] Request is not JSON")
         return error_response("Request must be JSON", 400)
 
     try:
         data = request.get_json()
         token = data.get('token')
-
         if not token:
+            logging.error("[VERIFY_TOKEN] Missing token in request")
             return error_response("Missing token in request", 400)
     except Exception as e:
-        logging.error(f"Error parsing request data: {str(e)}")
+        logging.error(f"[VERIFY_TOKEN] Error parsing request data: {str(e)}")
         return error_response("Invalid request format", 400)
 
     # Verify the token
     try:
-        # Validate the token
+        # Validate the token syntax and expiry
+        logging.info("[VERIFY_TOKEN] Starting token validation.")
+        t_validate_start = time.time()
         await auth_service.validate_token(token)
+        logging.info(f"[VERIFY_TOKEN] Token syntax/expiry validated in {time.time() - t_validate_start:.4f}s")
 
-        # Get the user
+        # Get the user associated with the token
+        logging.info("[VERIFY_TOKEN] Starting user lookup.")
+        t_get_user_start = time.time()
         user = await auth_service.get_current_user(token)
+        logging.info(f"[VERIFY_TOKEN] User lookup completed in {time.time() - t_get_user_start:.4f}s")
 
         # Token is valid and user exists
+        total_duration = time.time() - verify_start_time
+        logging.info(f"[VERIFY_TOKEN] Verification successful. Total time: {total_duration:.4f}s")
         return success_response({
             "valid": True,
             "user_id": user.id,
             "email": user.email
         })
-    except AuthenticationError:
-        # Token is invalid
+    except AuthenticationError as e:
+        total_duration = time.time() - verify_start_time
+        logging.warning(f"[VERIFY_TOKEN] AuthenticationError: {str(e)}. Total time: {total_duration:.4f}s")
+        # Token is invalid or expired
         return success_response({"valid": False})
     except Exception as e:
-        logging.error(f"Unexpected error verifying token: {str(e)}")
+        total_duration = time.time() - verify_start_time
+        logging.error(f"[VERIFY_TOKEN] Unexpected error verifying token: {str(e)}. Total time: {total_duration:.4f}s")
         return success_response({"valid": False})
 
 
@@ -268,24 +284,33 @@ async def get_user_info():
     Returns information about the authenticated user.
     Requires a valid JWT token in the Authorization header.
     """
+    user_info_start_time = time.time()
+    logging.info("[USER_INFO] Request received.")
+
     try:
-        # Get the token from the request
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return error_response("Missing or invalid Authorization header", 401)
+        # Get the token from the request (already done by token_required)
+        # The decorator adds user_id to g.current_user_id
+        user_id = getattr(g, 'current_user_id', None)
+        if not user_id:
+            logging.error("[USER_INFO] User ID not found in g context after token_required.")
+            return error_response("Authentication context error.", 500)
 
-        token = auth_header.split(' ')[1]
+        logging.info(f"[USER_INFO] User ID from token: {user_id}")
 
-        # Get the user from the token
-        user = await auth_service.get_current_user(token)
+        # Get the user from the ID
+        t_get_user_start = time.time()
+        user = await user_service.get_user_by_id(user_id)
+        logging.info(f"[USER_INFO] User lookup by ID completed in {time.time() - t_get_user_start:.4f}s")
         if not user:
             return error_response("User not found", 404)
 
         # Get user's credit balance
+        t_credits_start = time.time()
         try:
             credits = await credits_service.get_credit_balance(user.id)
+            logging.info(f"[USER_INFO] Credit balance fetched in {time.time() - t_credits_start:.4f}s")
         except Exception as e:
-            logging.error(f"Error fetching credit balance for user {user.id}: {e}")
+            logging.error(f"[USER_INFO] Error fetching credit balance for user {user.id}: {e}")
             credits = 0  # Default to 0 if there's an error
 
         # Create user info response
@@ -299,12 +324,16 @@ async def get_user_info():
             "created_at": user.created_at.isoformat() if user.created_at else None
         }
 
+        total_duration = time.time() - user_info_start_time
+        logging.info(f"[USER_INFO] Successfully retrieved user info. Total time: {total_duration:.4f}s")
         return success_response(user_info)
     except AuthenticationError as e:
-        logging.error(f"Authentication error: {str(e)}")
+        total_duration = time.time() - user_info_start_time
+        logging.error(f"[USER_INFO] Authentication error: {str(e)}. Total time: {total_duration:.4f}s")
         return error_response("Authentication error", 401)
     except Exception as e:
-        logging.error(f"Error getting user info: {str(e)}")
+        total_duration = time.time() - user_info_start_time
+        logging.error(f"[USER_INFO] Error getting user info: {str(e)}. Total time: {total_duration:.4f}s")
         return error_response("Error retrieving user information", 500)
 
 
