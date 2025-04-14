@@ -94,12 +94,15 @@ async def generate_chapters():
     video_duration_seconds = last_entry['start'] + last_entry['duration']
     video_duration_minutes = video_duration_seconds / 60
 
-    # Generate chapters with OpenAI - the function now handles prompt creation internally
+    # Generate chapters with OpenAI - create a prompt based on the video duration
     start_time_openai = time.time()
     logging.info(f"[CHAPTERS] Calling OpenAI to generate chapters for {video_id} (User: {user_id})")
 
-    # We're passing the formatted transcript directly to OpenAI
-    chapters = generate_chapters_with_openai(None, video_id, formatted_transcript)
+    # Create a system prompt based on the video duration
+    system_prompt = create_chapter_prompt(video_duration_minutes)
+
+    # Pass both the system prompt and formatted transcript to OpenAI
+    chapters = generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
 
     openai_duration = time.time() - start_time_openai
     logging.info(f"[CHAPTERS] OpenAI call completed in {openai_duration:.2f}s (User: {user_id})")

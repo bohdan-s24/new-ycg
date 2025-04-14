@@ -138,22 +138,33 @@ def generate_chapters_with_openai(system_prompt: str, video_id: str, formatted_t
 
     if transcript_lines:
         try:
-            last_timestamp_str = transcript_lines[-1].split(':', 1)[0]
-            # Handle HH:MM:SS or MM:SS formats
-            if last_timestamp_str.count(':') == 2:  # HH:MM:SS
-                h, m, s = map(int, last_timestamp_str.split(':'))
-                last_timestamp_seconds = h * 3600 + m * 60 + s
-            else:  # MM:SS
-                m, s = map(int, last_timestamp_str.split(':'))
-                last_timestamp_seconds = m * 60 + s
+            # Find the last line with a timestamp
+            for line in reversed(transcript_lines):
+                if ' - ' in line:  # Look for the timestamp separator
+                    parts = line.split(' - ', 1)
+                    if len(parts) == 2:
+                        timestamp_str = parts[0].strip()
+                        # Handle HH:MM:SS or MM:SS formats
+                        if timestamp_str.count(':') == 2:  # HH:MM:SS
+                            h, m, s = map(int, timestamp_str.split(':'))
+                            last_timestamp_seconds = h * 3600 + m * 60 + s
+                        else:  # MM:SS
+                            m, s = map(int, timestamp_str.split(':'))
+                            last_timestamp_seconds = m * 60 + s
 
-            video_duration_minutes = last_timestamp_seconds / 60
-            print(f"Estimated video duration from transcript: {video_duration_minutes:.2f} minutes")
+                        video_duration_minutes = last_timestamp_seconds / 60
+                        print(f"Estimated video duration from transcript: {video_duration_minutes:.2f} minutes")
+                        break
 
-            # Update system prompt with the actual video duration
-            system_prompt = create_chapter_prompt(video_duration_minutes)
+            if video_duration_minutes is None:
+                # Fallback: use a default duration if we couldn't extract it
+                video_duration_minutes = 10.0  # Default to 10 minutes
+                print(f"Using default video duration: {video_duration_minutes:.2f} minutes")
         except Exception as e:
             print(f"Could not extract duration from transcript: {e}")
+            # Fallback to a default duration
+            video_duration_minutes = 10.0
+            print(f"Using default video duration after error: {video_duration_minutes:.2f} minutes")
 
     # Prepare the user content prompt
     user_content = f"Generate chapters for this video transcript:\n\n{formatted_transcript}"
@@ -162,6 +173,12 @@ def generate_chapters_with_openai(system_prompt: str, video_id: str, formatted_t
     for model in Config.OPENAI_MODELS:
         try:
             print(f"Trying to generate chapters with {model}")
+
+            # Make sure we have a valid system prompt
+            if system_prompt is None:
+                # Create a default system prompt if none was provided
+                system_prompt = create_chapter_prompt(video_duration_minutes or 10.0)  # Default to 10 minutes if unknown
+                print(f"Created default system prompt for video duration: {video_duration_minutes or 10.0} minutes")
 
             response = openai_client.chat.completions.create(
                 model=model,
