@@ -624,12 +624,12 @@ class ApiService {
       try {
         console.log(`[API] Login attempt ${attempt}/${maxRetries}`)
 
-        // Use a longer timeout for login requests
+        // Use a longer timeout for login requests (Increased to 30 seconds)
         const controller = new AbortController()
         const timeoutId = setTimeout(() => {
-          console.log('[API] Login request timed out after 20 seconds')
+          console.log('[API] Login request timed out after 30 seconds')
           controller.abort(new DOMException('Login request timed out', 'TimeoutError'))
-        }, 20000) // 20 second timeout
+        }, 30000) // 30 second timeout
 
         const result = await this.request(
           this.API.AUTH.LOGIN_GOOGLE,
@@ -642,7 +642,7 @@ class ApiService {
             signal: controller.signal,
           },
           false, // Not requiring auth for this request
-          20000, // 20 second timeout
+          30000, // Pass timeout to underlying request function as well
           false  // Don't try to refresh token for this request
         )
 
