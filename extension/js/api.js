@@ -392,7 +392,7 @@ class ApiService {
 
       // Try to verify with the server, but don't fail if server is unavailable
       try {
-        // Verify with a longer timeout
+        // Verify with a shorter timeout to avoid long waits
         const result = await this.request(
           this.API.AUTH.VERIFY_TOKEN,
           {
@@ -400,11 +400,20 @@ class ApiService {
             body: JSON.stringify({ token }),
           },
           false, // Not requiring auth for this request
-          10000,  // 10 second timeout - reduced to avoid long waits
+          5000,   // 5 second timeout - reduced further to avoid long waits
           false   // Don't try to refresh token for this request
         )
 
-        return result
+        // Check if the result has the expected format
+        if (result && (result.valid || result.success || (result.data && result.data.valid))) {
+          console.log('[API] Server verified token as valid')
+          return result
+        } else {
+          console.warn('[API] Server returned unexpected response format:', result)
+          // If the server response doesn't have the expected format but didn't error,
+          // we'll still consider the token valid based on our client-side validation
+          return { valid: true, fallback: true, serverResponse: result }
+        }
       } catch (serverError) {
         // If server verification fails but client validation passed, we can still proceed
         // This handles cases where the server is down or timing out

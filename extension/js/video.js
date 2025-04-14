@@ -61,6 +61,9 @@ class VideoService {
         return
       }
 
+      // Variable to store video response
+      let videoResponse = null;
+
       // Send message to content script with timeout
       try {
         // Create a promise that will reject after a timeout
@@ -84,16 +87,27 @@ class VideoService {
         })
 
         // Race the message against the timeout
-        const response = await Promise.race([messagePromise, timeoutPromise])
+        videoResponse = await Promise.race([messagePromise, timeoutPromise])
 
-        if (!response || !response.success) {
-          const error = response?.error || "Failed to get video information"
+        if (!videoResponse || !videoResponse.success) {
+          const error = videoResponse?.error || "Failed to get video information"
           this.store.dispatch("video", {
             type: "SET_VIDEO_ERROR",
             payload: { error },
           })
           return
         }
+
+        // Update video info in store
+        this.store.dispatch("video", {
+          type: "SET_VIDEO_INFO",
+          payload: {
+            id: videoResponse.videoId,
+            title: videoResponse.videoTitle,
+          },
+        })
+
+        console.log("[Video] Video found:", videoResponse.videoId, videoResponse.videoTitle)
       } catch (timeoutError) {
         console.error("[Video] Content script communication error:", timeoutError)
         this.store.dispatch("video", {
@@ -102,17 +116,6 @@ class VideoService {
         })
         return
       }
-
-      // Update video info in store
-      this.store.dispatch("video", {
-        type: "SET_VIDEO_INFO",
-        payload: {
-          id: response.videoId,
-          title: response.videoTitle,
-        },
-      })
-
-      console.log("[Video] Video found:", response.videoId, response.videoTitle)
     } catch (error) {
       console.error("[Video] Error checking for video:", error)
 

@@ -60,7 +60,13 @@ async function initAuth() {
           console.log("[AUTH-DEBUG] Token verification response:", result)
 
           // Check if the result is valid or if we're using fallback validation
-          if (result && (result.valid || result.fallback)) {
+          // Handle both direct response format and nested data format
+          const isValid =
+            (result && (result.valid || result.fallback)) || // Direct format
+            (result && result.data && (result.data.valid || result.fallback)) || // Nested format
+            (result && result.success === true); // Success format
+
+          if (isValid) {
             console.log(result.fallback
               ? "[Auth] Token is valid (using client-side validation due to server unavailability)"
               : "[Auth] Token is valid")
