@@ -1,11 +1,11 @@
 import time
 import logging
-from flask import request, current_app
+from flask import request, current_app, g
 from datetime import timedelta
 
 # Import services and utilities
 from ..config import Config
-from ..services import auth_service, credits_service
+from ..services import auth_service, credits_service, user_service
 from ..models.user import UserCreate, UserLogin
 from ..utils.responses import success_response, error_response
 from ..utils.decorators import token_required

@@ -508,12 +508,39 @@ class ApiService {
       clearInterval(this.tokenRefreshInterval)
     }
 
-    // Set up a new interval to check token every minute
+    // Get current token
+    const token = this.getToken()
+    if (!token) {
+      console.log('[API] No token available, not setting up refresh monitoring')
+      return
+    }
+
+    // Set up a new interval to check token every 30 seconds
     this.tokenRefreshInterval = setInterval(() => {
+      // Check if we still have a token before attempting refresh
+      if (!this.getToken()) {
+        console.log('[API] No token found during refresh check, clearing interval')
+        clearInterval(this.tokenRefreshInterval)
+        this.tokenRefreshInterval = null
+        return
+      }
+
       this.checkAndRefreshTokenIfNeeded().catch(error => {
         console.error('[API] Background token refresh failed:', error)
+
+        // If we get an authentication error, the token might be invalid
+        // Check if the error indicates an invalid token
+        if (error.message && (
+            error.message.includes('invalid token') ||
+            error.message.includes('expired token') ||
+            error.message.includes('unauthorized')
+          )) {
+          console.log('[API] Token appears to be invalid, clearing refresh interval')
+          clearInterval(this.tokenRefreshInterval)
+          this.tokenRefreshInterval = null
+        }
       })
-    }, 60000) // Check every minute
+    }, 30000) // Check every 30 seconds
 
     console.log('[API] Token refresh monitoring started')
   }
@@ -526,15 +553,73 @@ class ApiService {
     // Get current token
     const token = this.getToken()
 
-    // If no token or not about to expire, do nothing
-    if (!token || !this.isTokenExpiredOrExpiringSoon(token)) {
+    // If no token, do nothing
+    if (!token) {
+      console.log('[API] No token available to check for refresh')
       return
     }
 
-    console.log('[API] Token is expiring soon, refreshing...')
+    try {
+      // Check if token is expired or expiring soon
+      const tokenStatus = this.checkTokenStatus(token)
 
-    // Refresh the token
-    await this.refreshToken()
+      if (tokenStatus.expired) {
+        console.log('[API] Token has expired, refreshing...')
+        await this.refreshToken()
+      } else if (tokenStatus.expiringSoon) {
+        console.log(`[API] Token is expiring soon (${tokenStatus.minutesRemaining.toFixed(1)} minutes left), refreshing...`)
+        await this.refreshToken()
+      } else {
+        console.log(`[API] Token is valid for ${tokenStatus.minutesRemaining.toFixed(1)} more minutes, no refresh needed`)
+      }
+    } catch (error) {
+      console.error('[API] Error checking token status:', error)
+      // If we can't parse the token, try to refresh it anyway
+      if (error.message && error.message.includes('parse')) {
+        console.log('[API] Could not parse token, attempting refresh anyway')
+        await this.refreshToken()
+      } else {
+        throw error
+      }
+    }
+  }
+
+  /**
+   * Check the status of a JWT token
+   * @param {string} token - The JWT token to check
+   * @returns {Object} Object with expired, expiringSoon, and minutesRemaining properties
+   */
+  checkTokenStatus(token) {
+    try {
+      // Parse the token
+      const parts = token.split('.')
+      if (parts.length !== 3) {
+        throw new Error('Invalid token format')
+      }
+
+      // Decode the payload
+      const payload = JSON.parse(atob(parts[1]))
+
+      // Check if token has expiration
+      if (!payload.exp) {
+        return { expired: false, expiringSoon: false, minutesRemaining: Infinity }
+      }
+
+      // Calculate time remaining
+      const expirationTime = payload.exp * 1000 // Convert to milliseconds
+      const currentTime = Date.now()
+      const timeRemaining = expirationTime - currentTime
+      const minutesRemaining = timeRemaining / (1000 * 60)
+
+      // Check if expired or expiring soon
+      const expired = timeRemaining <= 0
+      const expiringSoon = !expired && minutesRemaining < 10 // Less than 10 minutes remaining
+
+      return { expired, expiringSoon, minutesRemaining }
+    } catch (error) {
+      console.error('[API] Error parsing token:', error)
+      throw new Error('Could not parse token: ' + error.message)
+    }
   }
 
   /**
