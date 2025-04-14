@@ -100,9 +100,9 @@ async def generate_chapters():
         logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user_id})")
         return error_response('Failed to generate chapters with OpenAI', 500)
 
-    # Count chapters
-    chapter_count = len(chapters.strip().split("
-"))
+    # Count chapters (Corrected syntax)
+    chapter_count = len(chapters.strip().split('
+'))
     logging.info(f"Generated {chapter_count} chapters for {video_id} (User: {user_id})")
 
     # --- Credit Deduction ---
