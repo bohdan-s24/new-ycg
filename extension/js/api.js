@@ -56,6 +56,8 @@ class ApiService {
       // Chapters endpoints
       CHAPTERS: {
         GENERATE: `${config.API_BASE_URL}/v1/chapters/generate`,
+        SUBMIT_JOB: `${config.API_BASE_URL}/v1/chapters/submit-job`,
+        JOB_STATUS: `${config.API_BASE_URL}/v1/chapters/job-status`,
       },
 
       // Credits endpoints
@@ -788,20 +790,23 @@ class ApiService {
     // Add retry logic specifically for chapter generation
     const maxRetries = 2
     const baseDelay = 2000 // 2 seconds
+    const maxPollAttempts = 10 // Maximum number of polling attempts
+    const pollInterval = 3000 // 3 seconds between polls
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`[API] Chapter generation attempt ${attempt}/${maxRetries}`)
 
-        // Use a longer timeout for chapter generation (45 seconds)
+        // Use a shorter timeout for job submission (15 seconds)
         const controller = new AbortController()
         const timeoutId = setTimeout(() => {
-          console.log('[API] Chapter generation request timed out after 45 seconds')
+          console.log('[API] Chapter job submission timed out after 15 seconds')
           controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
-        }, 45000) // 45 second timeout
+        }, 15000) // 15 second timeout
 
-        const result = await this.request(
-          this.API.CHAPTERS.GENERATE,
+        // Step 1: Submit the job
+        const jobResult = await this.request(
+          this.API.CHAPTERS.GENERATE, // We'll keep using the same endpoint for backward compatibility
           {
             method: "POST",
             body: JSON.stringify({
@@ -811,12 +816,80 @@ class ApiService {
             signal: controller.signal,
           },
           true, // Requires authentication
-          45000, // Pass timeout to underlying request function as well
+          15000, // Pass timeout to underlying request function as well
           true  // Try to refresh token if needed
         )
 
         clearTimeout(timeoutId)
-        return result
+
+        // Check if we got a direct result (from cache or quick generation)
+        if (jobResult.data && jobResult.data.chapters) {
+          console.log('[API] Received chapters directly from initial request')
+          return jobResult
+        }
+
+        // Check if we got a job ID
+        if (jobResult.data && jobResult.data.job_id) {
+          const jobId = jobResult.data.job_id
+          console.log(`[API] Received job ID: ${jobId}, polling for results...`)
+
+          // Step 2: Poll for results
+          for (let pollAttempt = 1; pollAttempt <= maxPollAttempts; pollAttempt++) {
+            console.log(`[API] Polling for job results, attempt ${pollAttempt}/${maxPollAttempts}`)
+
+            // Wait between polling attempts
+            if (pollAttempt > 1) {
+              await new Promise(resolve => setTimeout(resolve, pollInterval))
+            }
+
+            try {
+              const statusResult = await this.request(
+                `${this.API.CHAPTERS.JOB_STATUS}/${jobId}`,
+                { method: "GET" },
+                true, // Requires authentication
+                10000, // 10 second timeout for polling
+                true  // Try to refresh token if needed
+              )
+
+              // Check job status
+              if (statusResult.data.status === 'completed' && statusResult.data.chapters) {
+                console.log('[API] Job completed successfully')
+                return {
+                  data: {
+                    videoId: statusResult.data.video_id,
+                    chapters: statusResult.data.chapters,
+                    formatted_text: statusResult.data.formatted_text,
+                    fromCache: false
+                  },
+                  success: true
+                }
+              } else if (statusResult.data.status === 'failed') {
+                console.error('[API] Job failed:', statusResult.data.error)
+                throw new Error(statusResult.data.error || 'Job failed')
+              } else if (pollAttempt === maxPollAttempts) {
+                console.error('[API] Max polling attempts reached, job still processing')
+                throw new Error('Chapter generation is taking too long. Please try again later.')
+              }
+
+              // If we get here, the job is still processing, continue polling
+              console.log(`[API] Job status: ${statusResult.data.status}, continuing to poll...`)
+
+            } catch (pollError) {
+              console.error(`[API] Error polling for job status:`, pollError)
+              if (pollAttempt === maxPollAttempts) {
+                throw pollError
+              }
+              // Continue polling on error
+            }
+          }
+
+          // If we get here, we've exceeded the maximum polling attempts
+          throw new Error('Timed out waiting for chapter generation to complete')
+        }
+
+        // If we get here, we didn't get a job ID or direct result
+        console.error('[API] Unexpected response format:', jobResult)
+        throw new Error('Unexpected response format from server')
 
       } catch (error) {
         console.error(`[API] Chapter generation attempt ${attempt} failed:`, error)
