@@ -14,15 +14,15 @@ from api.routes.credits import credits_bp
 from api.routes.health import health_bp
 from api.routes.payment import payment_bp
 
-app = Sanic("new-ygc")
-Extend(app)  # Enables asgi property, among other features
+sanic_app = Sanic("new-ygc")
+Extend(sanic_app)  # Enables asgi property, among other features
 
 # Register blueprints
-app.blueprint(auth_bp)
-app.blueprint(chapters_bp)
-app.blueprint(credits_bp)
-app.blueprint(health_bp)
-app.blueprint(payment_bp)
+sanic_app.blueprint(auth_bp)
+sanic_app.blueprint(chapters_bp)
+sanic_app.blueprint(credits_bp)
+sanic_app.blueprint(health_bp)
+sanic_app.blueprint(payment_bp)
 
 # Note: Do NOT call app.run() here for Vercel/ASGI deployment.
-asgi = app.asgi  # Vercel will look for 'asgi' or 'app'
+app = sanic_app.asgi  # Export as 'app' for Vercel ASGI compatibility
