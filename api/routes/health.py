@@ -6,7 +6,6 @@ from fastapi.responses import JSONResponse
 import logging
 import os
 from ..utils.db import redis_operation
-import requests
 import asyncio
 
 router = APIRouter()
@@ -54,35 +53,31 @@ def debug_redis():
         }, status_code=500)
 
 @router.get("/connectivity")
-def connectivity_check():
-    """Check connectivity to external services"""
+async def connectivity_check():
+    """Check connectivity to external services (async, uses httpx.AsyncClient)"""
+    import httpx
+    direct_connection_success = False
+    proxy_connection_success = None
     try:
-        direct_connection_success = False
-        try:
-            with requests.Session() as test_session:
-                test_session.proxies.clear()
-                response = test_session.get("https://www.youtube.com", timeout=5)
-                direct_connection_success = response.status_code == 200
-        except Exception as e:
-            logging.error(f"Direct connection test failed: {e}")
-            direct_connection_success = False
-        proxy_connection_success = None
-        if os.environ.get("HTTPS_PROXY"):
-            try:
-                with requests.Session() as test_session:
-                    response = test_session.get("https://www.youtube.com", timeout=5)
-                    proxy_connection_success = response.status_code == 200
-            except Exception as e:
-                logging.error(f"Proxy connection test failed: {e}")
-                proxy_connection_success = False
-        return JSONResponse(content={
-            'status': 'API is operational',
-            'version': '1.0.0',
-            'config': {
-                'direct_connection_success': direct_connection_success,
-                'proxy_connection_success': proxy_connection_success
-            }
-        })
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get("https://www.youtube.com")
+            direct_connection_success = response.status_code == 200
     except Exception as e:
-        logging.error(f"Error in connectivity check: {str(e)}")
-        return JSONResponse(content={'error': f"Error checking connectivity: {str(e)}"}, status_code=500)
+        logging.error(f"Direct connection test failed: {e}")
+        direct_connection_success = False
+    if os.environ.get("HTTPS_PROXY"):
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.get("https://www.youtube.com")
+                proxy_connection_success = response.status_code == 200
+        except Exception as e:
+            logging.error(f"Proxy connection test failed: {e}")
+            proxy_connection_success = False
+    return JSONResponse(content={
+        'status': 'API is operational',
+        'version': '1.0.0',
+        'config': {
+            'direct_connection_success': direct_connection_success,
+            'proxy_connection_success': proxy_connection_success
+        }
+    })

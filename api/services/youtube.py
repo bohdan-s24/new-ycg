@@ -4,6 +4,8 @@ YouTube transcript fetching services
 import json
 import time
 import traceback
+import asyncio
+import httpx
 import requests
 from typing import List, Dict, Any, Optional, Callable
 
@@ -90,15 +92,15 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Di
             # Continue to the next attempt
             continue
 
-    # If we get here, try the requests-based approach as a last resort
+    # If we get here, try the httpx-based approach as a last resort
     if time_left():
         try:
-            print("Trying requests-based transcript fetching as fallback")
+            print("Trying httpx-based transcript fetching as fallback")
             proxy_dict = Config.get_proxy_dict() if Config.get_proxy_dict() else None
             transcript_data = fetch_transcript_with_requests(video_id, proxy_dict=proxy_dict)
             return transcript_data
         except Exception as e:
-            print(f"Requests-based fallback also failed: {e}")
+            print(f"httpx-based fallback also failed: {e}")
     
     print(f"Failed to fetch transcript for {video_id} after all attempts")
     return None
@@ -106,97 +108,60 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Di
 
 def fetch_transcript_with_requests(video_id: str, proxy_dict: Optional[Dict[str, str]] = None, timeout: int = 10) -> List[Dict[str, Any]]:
     """
-    Fetch YouTube transcript using requests library with proxy support
-    
-    Args:
-        video_id: YouTube video ID
-        proxy_dict: Proxy configuration for requests
-        timeout: Request timeout in seconds
-        
-    Returns:
-        List of transcript entries or raises an exception if failed
+    Fetch YouTube transcript using httpx.AsyncClient with proxy support (async replacement for requests)
     """
-    print(f"Attempting to fetch transcript for {video_id} using requests with proxies: {bool(proxy_dict)}")
-    
-    # Create a session for this request
-    session = requests.Session()
-    if proxy_dict:
-        session.proxies.update(proxy_dict)
-    
-    # First get the video page to extract available captions
-    video_url = f"https://www.youtube.com/watch?v={video_id}"
+    async def _fetch():
+        print(f"Attempting to fetch transcript for {video_id} using httpx with proxies: {bool(proxy_dict)}")
+        proxies = proxy_dict if proxy_dict else None
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        async with httpx.AsyncClient(proxies=proxies, timeout=timeout) as client:
+            print(f"Fetching video page with proxies: {bool(proxy_dict)}")
+            response = await client.get(video_url)
+            response.raise_for_status()
+            html = response.text
+            start_marker = 'ytInitialPlayerResponse = '
+            end_marker = '};'
+            start_idx = html.find(start_marker)
+            if start_idx == -1:
+                raise Exception("Could not find player response in page")
+            start_idx += len(start_marker)
+            end_idx = html.find(end_marker, start_idx) + 1
+            player_response_json = html[start_idx:end_idx]
+            player_response = json.loads(player_response_json)
+            captions_data = player_response.get('captions', {}).get('playerCaptionsTracklistRenderer', {}).get('captionTracks', [])
+            if not captions_data:
+                raise Exception("No captions found for this video")
+            caption_url = None
+            for track in captions_data:
+                if track.get('languageCode') in Config.TRANSCRIPT_LANGUAGES:
+                    caption_url = track.get('baseUrl')
+                    break
+            if not caption_url and captions_data:
+                caption_url = captions_data[0].get('baseUrl')
+            if not caption_url:
+                raise Exception("No valid caption URL found")
+            caption_url += "&fmt=json3"
+            print(f"Fetching captions from {caption_url}")
+            captions_response = await client.get(caption_url)
+            captions_response.raise_for_status()
+            captions_data = captions_response.json()
+            transcript = []
+            for event in captions_data.get('events', []):
+                if 'segs' not in event or 'tStartMs' not in event:
+                    continue
+                text = ''.join(seg.get('utf8', '') for seg in event.get('segs', []))
+                if not text.strip():
+                    continue
+                transcript.append({
+                    'text': text.strip(),
+                    'start': event.get('tStartMs') / 1000,
+                    'duration': event.get('dDurationMs', 0) / 1000
+                })
+            print(f"Successfully fetched transcript with {len(transcript)} entries using httpx")
+            return transcript
     try:
-        print(f"Fetching video page with proxies: {bool(proxy_dict)}")
-        response = session.get(video_url, timeout=timeout)
-        response.raise_for_status()
-        
-        # Find the captions URL in the page
-        html = response.text
-        
-        # Extract ytInitialPlayerResponse JSON
-        start_marker = 'ytInitialPlayerResponse = '
-        end_marker = '};'
-        
-        start_idx = html.find(start_marker)
-        if start_idx == -1:
-            raise Exception("Could not find player response in page")
-        
-        start_idx += len(start_marker)
-        end_idx = html.find(end_marker, start_idx) + 1
-        
-        player_response_json = html[start_idx:end_idx]
-        player_response = json.loads(player_response_json)
-        
-        # Find caption tracks
-        captions_data = player_response.get('captions', {}).get('playerCaptionsTracklistRenderer', {}).get('captionTracks', [])
-        
-        if not captions_data:
-            raise Exception("No captions found for this video")
-        
-        # Try to find English captions
-        caption_url = None
-        for track in captions_data:
-            if track.get('languageCode') in Config.TRANSCRIPT_LANGUAGES:
-                caption_url = track.get('baseUrl')
-                break
-        
-        # If no English captions, use the first available
-        if not caption_url and captions_data:
-            caption_url = captions_data[0].get('baseUrl')
-        
-        if not caption_url:
-            raise Exception("No valid caption URL found")
-        
-        # Add format parameter for JSON
-        caption_url += "&fmt=json3"
-        
-        # Fetch the captions
-        print(f"Fetching captions from {caption_url}")
-        captions_response = session.get(caption_url, timeout=timeout)
-        captions_response.raise_for_status()
-        
-        captions_data = captions_response.json()
-        
-        # Process the transcript
-        transcript = []
-        for event in captions_data.get('events', []):
-            if 'segs' not in event or 'tStartMs' not in event:
-                continue
-                
-            text = ''.join(seg.get('utf8', '') for seg in event.get('segs', []))
-            if not text.strip():
-                continue
-                
-            transcript.append({
-                'text': text.strip(),
-                'start': event.get('tStartMs') / 1000,
-                'duration': event.get('dDurationMs', 0) / 1000
-            })
-        
-        print(f"Successfully fetched transcript with {len(transcript)} entries using requests")
-        return transcript
-        
+        return asyncio.run(_fetch())
     except Exception as e:
-        print(f"Error fetching transcript with requests: {e}")
+        print(f"Error fetching transcript with httpx: {e}")
         traceback.print_exc()
-        raise Exception(f"Failed to fetch transcript with requests: {str(e)}")
+        raise Exception(f"Failed to fetch transcript with httpx: {str(e)}")
