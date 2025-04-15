@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from api.routes.health import router as health_router
+from api.routes.chapters import router as chapters_router
 
 app = FastAPI()
 
-@app.get("/health")
-def health():
-    return JSONResponse(content={"status": "ok"})
+app.include_router(health_router)
+app.include_router(chapters_router)
 
 @app.get('/')
 @app.get('/<path:path>')
