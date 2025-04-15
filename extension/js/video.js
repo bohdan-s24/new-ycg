@@ -21,10 +21,26 @@ class VideoService {
   init() {
     console.log("[Video] Initializing video service")
 
-    // Check for video when popup is opened
-    this.checkForVideo()
+    // Only check for video if user is logged in
+    if (this.isUserLoggedIn()) {
+      console.log("[Video] User is logged in, checking for video")
+      this.checkForVideo()
+    } else {
+      console.log("[Video] User is not logged in, skipping video check")
+    }
 
     console.log("[Video] Video service initialized")
+  }
+
+  /**
+   * Check if the user is logged in
+   * @returns {boolean} Whether the user is logged in
+   */
+  isUserLoggedIn() {
+    if (!this.store) return false
+
+    const state = this.store.getState()
+    return state && state.auth && state.auth.isAuthenticated && state.auth.token
   }
 
   /**

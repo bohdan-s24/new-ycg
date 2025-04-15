@@ -603,6 +603,7 @@ class ApiService {
       console.error('[API] Error extracting user info from token:', tokenError)
       return null
     }
+  }
 
   /**
    * Setup token refresh monitoring

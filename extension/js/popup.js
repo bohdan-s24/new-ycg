@@ -17,7 +17,9 @@ document.addEventListener("DOMContentLoaded", () => {
       ui: !!window.YCG_UI,
     })
 
-    return window.YCG_STORE && window.YCG_API && window.YCG_VIDEO && window.YCG_UI
+    // We only require the store and UI to be available
+    // API and video services are optional and can be handled gracefully if missing
+    return window.YCG_STORE && window.YCG_UI
   }
 
   // Try to initialize with increasing delays
@@ -67,32 +69,44 @@ async function init() {
     ui: !!ui
   })
 
-  // Initialize video service if available
-  if (video) {
-    console.log("[POPUP-DEBUG] Initializing video service")
+  // Check if user is logged in before initializing video service
+  const isUserLoggedIn = store && store.getState().auth && store.getState().auth.isAuthenticated
+
+  // Initialize video service if available and user is logged in
+  if (video && isUserLoggedIn) {
+    console.log("[POPUP-DEBUG] User is logged in, initializing video service")
     video.init()
+  } else if (video && !isUserLoggedIn) {
+    console.log("[POPUP-DEBUG] User is not logged in, skipping video service initialization")
   } else {
-    console.error("[POPUP-DEBUG] Video service not available")
+    console.warn("[POPUP-DEBUG] Video service not available")
   }
 
-  // Check API availability
+  // Check API availability only if API service is available
   if (api) {
     try {
       console.log("[POPUP-DEBUG] Checking API availability")
-      const isApiAvailable = await api.ping()
+      const isApiAvailable = await api.ping().catch(error => {
+        console.warn("[POPUP-DEBUG] API ping failed:", error)
+        return false
+      })
+
       console.log("[POPUP-DEBUG] API availability check result:", isApiAvailable)
 
       if (!isApiAvailable) {
-        console.error("[POPUP-DEBUG] API is not available")
+        console.warn("[POPUP-DEBUG] API is not available")
         if (ui) {
-          ui.showNotification("API is not available. Please try again later.", "error")
+          // Only show notification if user is logged in, as API is not needed for login screen
+          if (isUserLoggedIn) {
+            ui.showNotification("Server is not available. Some features may be limited.", "warning")
+          }
         }
       }
     } catch (error) {
-      console.error("[POPUP-DEBUG] Error checking API availability:", error)
+      console.warn("[POPUP-DEBUG] Error checking API availability:", error)
     }
   } else {
-    console.error("[POPUP-DEBUG] API service not available")
+    console.warn("[POPUP-DEBUG] API service not available, continuing with limited functionality")
   }
 
   // Set up event listeners for popup-specific functionality

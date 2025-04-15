@@ -8,28 +8,33 @@
 document.addEventListener("DOMContentLoaded", () => {
   console.log("[AUTH-DEBUG] DOM content loaded, checking for store and API")
 
-  // Wait for the store and API to be initialized
-  if (window.YCG_STORE && window.YCG_API) {
-    console.log("[AUTH-DEBUG] Store and API available, initializing auth")
-    initAuth()
-  } else {
-    console.error("[Auth] Failed to initialize auth: YCG_STORE or YCG_API not available")
-    console.log(
-      "[AUTH-DEBUG] Available globals:",
-      Object.keys(window).filter((key) => key.startsWith("YCG_")),
-    )
+  // Try to initialize with increasing delays
+  const tryInit = (attempt = 1, maxAttempts = 5) => {
+    console.log(`[AUTH-DEBUG] Auth initialization attempt ${attempt}/${maxAttempts}`)
 
-    // Try again after a short delay
-    setTimeout(() => {
-      console.log("[AUTH-DEBUG] Retrying auth initialization after delay")
-      if (window.YCG_STORE && window.YCG_API) {
-        console.log("[AUTH-DEBUG] Store and API now available, initializing auth")
-        initAuth()
-      } else {
-        console.error("[Auth] Still failed to initialize auth after retry")
-      }
-    }, 500)
+    // Check if store is available (API is optional)
+    if (window.YCG_STORE) {
+      console.log("[AUTH-DEBUG] Store available, initializing auth")
+      // Initialize with whatever services are available
+      initAuth()
+      return
+    }
+
+    if (attempt < maxAttempts) {
+      const delay = 100 * Math.pow(2, attempt - 1) // Exponential backoff
+      console.log(`[AUTH-DEBUG] Services not ready, retrying auth init in ${delay}ms`)
+      setTimeout(() => tryInit(attempt + 1, maxAttempts), delay)
+    } else {
+      console.error("[AUTH-DEBUG] Failed to initialize auth after multiple attempts")
+      console.log(
+        "[AUTH-DEBUG] Available globals:",
+        Object.keys(window).filter((key) => key.startsWith("YCG_")),
+      )
+    }
   }
+
+  // Start initialization attempts
+  tryInit()
 })
 
 /**
@@ -41,6 +46,14 @@ async function initAuth() {
   // Get references to the store and API
   const store = window.YCG_STORE
   const api = window.YCG_API
+
+  // Check if API is available
+  if (!api) {
+    console.warn("[Auth] API service not available, limited functionality")
+    // Initialize Google Sign-In even without API
+    initGoogleSignIn()
+    return
+  }
 
   // Load state from storage
   const loadSuccess = await store.loadFromStorage()
@@ -71,7 +84,6 @@ async function initAuth() {
       console.log("[Auth] Token is valid based on local validation")
 
       // Try to verify with server, but don't fail if server is unavailable
-      let serverVerificationSuccess = false;
       try {
         // Verify token with server with a short timeout
         console.log("[AUTH-DEBUG] Sending token verification request")
@@ -92,7 +104,6 @@ async function initAuth() {
           console.log(result.fallback || (result.data && result.data.fallback)
             ? "[Auth] Token is valid (using client-side validation due to server unavailability)"
             : "[Auth] Token is valid according to server")
-          serverVerificationSuccess = true;
         } else {
           console.log("[Auth] Token is invalid according to server")
           throw new Error("Invalid token according to server")
@@ -252,11 +263,21 @@ async function handleGoogleSignIn() {
   console.log("[AUTH-DEBUG] Store available:", !!store)
   console.log("[AUTH-DEBUG] API available:", !!api)
 
-  if (!store || !api) {
-    console.error("[Auth] Store or API not available")
+  if (!store) {
+    console.error("[Auth] Store not available")
 
     if (window.YCG_UI) {
       window.YCG_UI.showNotification("Authentication service not available", "error")
+    }
+    return
+  }
+
+  // If API is not available, show a message
+  if (!api) {
+    console.warn("[Auth] API not available, showing message to user")
+
+    if (window.YCG_UI) {
+      window.YCG_UI.showNotification("Server is not available. Please try again later.", "error")
     }
     return
   }
