@@ -8,11 +8,13 @@ from api.routes.payment import router as payment_router
 
 app = FastAPI()
 
-app.include_router(health_router)
-app.include_router(chapters_router)
-app.include_router(auth_router, prefix="/auth")
-app.include_router(credits_router, prefix="/credits")
-app.include_router(payment_router, prefix="/payment")
+api_prefix = "/v1"
+
+app.include_router(health_router, prefix=api_prefix)
+app.include_router(chapters_router, prefix=api_prefix)
+app.include_router(auth_router, prefix=f"{api_prefix}/auth")
+app.include_router(credits_router, prefix=f"{api_prefix}/credits")
+app.include_router(payment_router, prefix=f"{api_prefix}/payment")
 
 @app.get('/')
 @app.get('/<path:path>')
