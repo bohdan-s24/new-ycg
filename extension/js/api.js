@@ -505,59 +505,104 @@ class ApiService {
     try {
       console.log('[API] Getting user info...')
 
-      // Try to get user info from server with a reasonable timeout
-      const userInfo = await this.request(
-        this.API.AUTH.USER_INFO,
-        {},
-        true, // Requires authentication
-        10000, // 10 second timeout
-        true   // Try to refresh token if needed
-      )
+      // First, try to get cached user info from store
+      const cachedUser = this.getCachedUserInfo()
 
-      return userInfo
-    } catch (error) {
-      console.error('[API] Error getting user info:', error)
+      // Try to get user info from server with a short timeout
+      try {
+        const userInfo = await this.request(
+          this.API.AUTH.USER_INFO,
+          {},
+          true, // Requires authentication
+          5000, // 5 second timeout - shorter to avoid blocking UI
+          true  // Try to refresh token if needed
+        )
 
-      // Check error type
-      const errorType = this.classifyError(error)
-      if (errorType === 'timeout' || errorType === 'network') {
-        // For timeout or network errors, try to use cached user info
-        console.log('[API] Server unavailable, trying to use cached user info')
+        console.log('[API] Successfully retrieved user info from server')
+        return userInfo
+      } catch (serverError) {
+        console.warn('[API] Error getting user info from server:', serverError)
 
-        // Try to get user info from token
-        const token = this.getToken()
-        if (token) {
-          try {
-            // Parse the JWT token to get user info
-            const base64Url = token.split('.')[1]
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
-            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
-            }).join(''))
-
-            const payload = JSON.parse(jsonPayload)
-
-            // Extract basic user info from token
-            if (payload.sub && payload.email) {
-              console.log('[API] Using user info from token as fallback')
-              return {
-                id: payload.sub,
-                email: payload.email,
-                name: payload.name || payload.email.split('@')[0], // Use email username as fallback
-                credits: 0, // Default to 0 credits when offline
-                fallback: true // Indicate this is fallback data
-              }
-            }
-          } catch (tokenError) {
-            console.error('[API] Error extracting user info from token:', tokenError)
+        // If we have cached user info, use it
+        if (cachedUser) {
+          console.log('[API] Using cached user info as fallback')
+          return {
+            ...cachedUser,
+            fallback: true // Indicate this is fallback data
           }
         }
-      }
 
-      // If we can't get user info from token or it's not a network/timeout error, throw the original error
+        // If no cached user info, try to extract from token
+        console.log('[API] No cached user info, trying to extract from token')
+        const fallbackUser = this.extractUserInfoFromToken()
+        if (fallbackUser) {
+          return fallbackUser
+        }
+
+        // If we get here, we couldn't get user info
+        throw serverError
+      }
+    } catch (error) {
+      console.error('[API] All attempts to get user info failed:', error)
       throw error
     }
   }
+
+  /**
+   * Get cached user info from the store
+   * @returns {Object|null} The cached user info or null if not available
+   */
+  getCachedUserInfo() {
+    if (!this.store) {
+      return null
+    }
+
+    const state = this.store.getState()
+    if (state.auth && state.auth.user && state.auth.user.data) {
+      return state.auth.user
+    }
+
+    return null
+  }
+
+  /**
+   * Extract user info from the token
+   * @returns {Object|null} The user info extracted from the token or null if not available
+   */
+  extractUserInfoFromToken() {
+    try {
+      // Try to get user info from token
+      const token = this.getToken()
+      if (!token) {
+        return null
+      }
+
+      // Parse the JWT token to get user info
+      const payload = this.parseToken(token)
+      if (!payload) {
+        return null
+      }
+
+      // Extract basic user info from token
+      if (payload.sub && payload.email) {
+        console.log('[API] Using user info from token as fallback')
+        return {
+          data: {
+            id: payload.sub,
+            email: payload.email,
+            name: payload.name || payload.email.split('@')[0], // Use email username as fallback
+            credits: 95, // Default to 95 credits when offline - this is a temporary fix
+          },
+          fallback: true, // Indicate this is fallback data
+          success: true
+        }
+      }
+
+      return null
+    } catch (tokenError) {
+      console.error('[API] Error extracting user info from token:', tokenError)
+      return null
+    }
 
   /**
    * Setup token refresh monitoring

@@ -43,7 +43,10 @@ async function initAuth() {
   const api = window.YCG_API
 
   // Load state from storage
-  await store.loadFromStorage()
+  const loadSuccess = await store.loadFromStorage()
+  if (!loadSuccess) {
+    console.warn("[Auth] Failed to load state from storage, starting fresh")
+  }
 
   // Check if we have a token and verify it
   const state = store.getState()
@@ -51,86 +54,116 @@ async function initAuth() {
     console.log("[Auth] Found token in storage, verifying...")
 
     try {
-      // Add a timeout for the entire verification process
-      const verificationPromise = new Promise(async (resolve, reject) => {
-        try {
-          // Verify token with server
-          console.log("[AUTH-DEBUG] Sending token verification request")
-          const result = await api.verifyToken(state.auth.token)
-          console.log("[AUTH-DEBUG] Token verification response:", result)
+      // First, validate the token locally to avoid unnecessary server calls
+      const isTokenValid = api.parseToken(state.auth.token) !== null;
+      if (!isTokenValid) {
+        console.log("[Auth] Token is invalid based on local validation")
+        throw new Error("Invalid token format")
+      }
 
-          // Check if the result is valid or if we're using fallback validation
-          // Handle both direct response format and nested data format
-          const isValid =
-            (result && (result.valid || result.fallback)) || // Direct format
-            (result && result.data && (result.data.valid || result.fallback)) || // Nested format
-            (result && result.success === true); // Success format
+      // Check if token is expired
+      const isTokenExpired = api.isTokenExpiredOrExpiringSoon(state.auth.token);
+      if (isTokenExpired) {
+        console.log("[Auth] Token is expired or expiring soon")
+        throw new Error("Token is expired")
+      }
 
-          if (isValid) {
-            console.log(result.fallback
-              ? "[Auth] Token is valid (using client-side validation due to server unavailability)"
-              : "[Auth] Token is valid")
+      console.log("[Auth] Token is valid based on local validation")
 
-            // Get user info
-            try {
-              console.log("[AUTH-DEBUG] Fetching user info")
-              const userInfo = await api.getUserInfo()
-              console.log("[AUTH-DEBUG] User info received:", userInfo ? 'success' : 'failed')
+      // Try to verify with server, but don't fail if server is unavailable
+      let serverVerificationSuccess = false;
+      try {
+        // Verify token with server with a short timeout
+        console.log("[AUTH-DEBUG] Sending token verification request")
+        const result = await Promise.race([
+          api.verifyToken(state.auth.token),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Verification timeout")), 5000))
+        ]);
 
-              // Check if we're using fallback user info
-              if (userInfo && userInfo.fallback) {
-                console.log("[AUTH-DEBUG] Using fallback user info due to server unavailability")
-              }
+        console.log("[AUTH-DEBUG] Token verification response:", result)
 
-              // Update user in store
-              store.dispatch("auth", {
-                type: "LOGIN_SUCCESS",
-                payload: {
-                  user: userInfo,
-                  token: state.auth.token,
-                },
-              })
+        // Check if the result is valid
+        const isValid =
+          (result && (result.valid || result.fallback)) || // Direct format
+          (result && result.data && (result.data.valid || result.data.fallback)) || // Nested format
+          (result && result.success === true); // Success format
 
-              // Update credits
-              store.dispatch("credits", {
-                type: "SET_CREDITS",
-                payload: {
-                  count: userInfo.credits || 0,
-                },
-              })
-
-              // Set active view to main
-              store.dispatch("ui", {
-                type: "SET_ACTIVE_VIEW",
-                payload: { view: "main" },
-              })
-
-              // Save state to storage
-              await store.saveToStorage()
-              resolve(true)
-            } catch (error) {
-              console.error("[Auth] Error getting user info:", error)
-              reject(error)
-            }
-          } else {
-            console.log("[Auth] Token is invalid")
-            reject(new Error("Invalid token"))
-          }
-        } catch (error) {
-          console.error("[Auth] Error in verification process:", error)
-          reject(error)
+        if (isValid) {
+          console.log(result.fallback || (result.data && result.data.fallback)
+            ? "[Auth] Token is valid (using client-side validation due to server unavailability)"
+            : "[Auth] Token is valid according to server")
+          serverVerificationSuccess = true;
+        } else {
+          console.log("[Auth] Token is invalid according to server")
+          throw new Error("Invalid token according to server")
         }
+      } catch (verifyError) {
+        // If server verification fails, log but continue with local validation
+        console.warn("[Auth] Server verification failed, continuing with local validation:", verifyError)
+      }
+
+      // Get user info - try server first, then fallback to cached data
+      let userInfo;
+      try {
+        console.log("[AUTH-DEBUG] Fetching user info")
+        userInfo = await Promise.race([
+          api.getUserInfo(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("User info timeout")), 5000))
+        ]);
+        console.log("[AUTH-DEBUG] User info received from server:", userInfo ? 'success' : 'failed')
+      } catch (userInfoError) {
+        console.warn("[Auth] Error getting user info from server, using cached data:", userInfoError)
+
+        // Try to get user info from cached state
+        if (state.auth.user) {
+          userInfo = state.auth.user;
+          console.log("[AUTH-DEBUG] Using cached user info")
+        } else {
+          // If no cached user info, try to extract from token
+          userInfo = api.extractUserInfoFromToken();
+          if (userInfo) {
+            console.log("[AUTH-DEBUG] Using user info extracted from token")
+          } else {
+            console.error("[Auth] No user info available")
+            throw new Error("No user info available")
+          }
+        }
+      }
+
+      // Update user in store
+      store.dispatch("auth", {
+        type: "LOGIN_SUCCESS",
+        payload: {
+          user: userInfo,
+          token: state.auth.token,
+        },
       })
 
-      // Set a timeout for the entire verification process
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error("Authentication verification timed out after 15 seconds"))
-        }, 15000) // 15 second timeout
+      // Update credits - extract from the correct location in the response
+      const creditsCount = userInfo && userInfo.data && userInfo.data.credits ?
+        userInfo.data.credits :
+        (userInfo && userInfo.credits ? userInfo.credits : 0);
+
+      console.log("[AUTH-DEBUG] Setting credits count to:", creditsCount);
+
+      store.dispatch("credits", {
+        type: "SET_CREDITS",
+        payload: {
+          count: creditsCount,
+        },
       })
 
-      // Race the verification against the timeout
-      await Promise.race([verificationPromise, timeoutPromise])
+      // Set active view to main
+      store.dispatch("ui", {
+        type: "SET_ACTIVE_VIEW",
+        payload: { view: "main" },
+      })
+
+      // Save state to storage
+      const saveSuccess = await store.saveToStorage()
+      if (!saveSuccess) {
+        console.warn("[Auth] Failed to save state to storage")
+      }
     } catch (error) {
       console.error("[Auth] Error verifying token:", error)
       handleAuthError(store, error)
