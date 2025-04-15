@@ -21,7 +21,7 @@ async def startup():
     if not redis_url:
         raise RuntimeError("REDIS_URL environment variable is required for rate limiting.")
     from redis.asyncio import from_url as redis_from_url
-    redis = redis_from_url(redis_url, encoding="utf-8", decode_responses=True)
+    redis = await redis_from_url(redis_url, encoding="utf-8", decode_responses=True)
     await FastAPILimiter.init(redis)
 
 app.include_router(health_router, prefix=api_prefix)
