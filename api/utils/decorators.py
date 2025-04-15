@@ -1,57 +1,38 @@
-from sanic.request import Request
-from sanic.response import json
-
-from sanic import exceptions as sanic_exceptions
-
-from functools import wraps
+from fastapi import Request, HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import logging
-
 from ..services import auth_service
-from ..utils.responses import error_response
 from ..utils.exceptions import AuthenticationError
+from ..utils.responses import error_response
+from functools import wraps
 
 
-def token_required(f):
+# Use FastAPI's HTTPBearer for extracting the token
+bearer_scheme = HTTPBearer()
+
+async def token_required_fastapi(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+) -> str:
     """
-    Decorator to ensure a valid JWT token is present and load the user.
-    Injects the user object into Sanic's `request.ctx` context.
+    FastAPI dependency to ensure a valid JWT token is present and load the user.
+    Returns the user_id for use in endpoints.
     """
-    @wraps(f)
-    async def decorated_function(request: Request, *args, **kwargs):
-        token = None
-        # Check for Authorization header
-        if 'authorization' in request.headers:
-            auth_header = request.headers['authorization']
-            try:
-                # Expecting "Bearer <token>"
-                token_type, token = auth_header.split()
-                if token_type.lower() != 'bearer':
-                    token = None  # Invalid type
-                    logging.warning("Invalid token type in Authorization header.")
-            except ValueError:
-                # Header format is wrong
-                token = None
-                logging.warning("Malformed Authorization header.")
-
-        if not token:
-            return error_response('Token is missing or invalid format!', 401)
-
-        try:
-            # Validate token and get user
-            user = await auth_service.get_current_user(token)
-
-            # Store user info in Sanic's request.ctx for access in the route
-            request.ctx.current_user = user
-            request.ctx.current_user_id = user.id
-            request.ctx.current_user_email = user.email
-
-        except AuthenticationError as e:
-            logging.error(f"Authentication error: {str(e)}")
-            return error_response(str(e), 401)
-        except Exception as e:
-            logging.error(f"Unexpected error during token validation: {str(e)}")
-            return error_response('Token validation failed!', 401)
-
-        return await f(request, *args, **kwargs)  # Call the original async route function
-
-    return decorated_function
+    token = credentials.credentials
+    try:
+        user = await auth_service.get_current_user(token)
+        # You can return the user object or just the user_id as needed
+        return user.id
+    except AuthenticationError as e:
+        logging.error(f"Authentication error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        logging.error(f"Unexpected error during token validation: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token validation failed!",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
