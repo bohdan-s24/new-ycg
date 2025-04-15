@@ -1,9 +1,9 @@
-from sanic.response import json
-from typing import Tuple, Dict, Any, Optional
+from fastapi.responses import JSONResponse
+from typing import Dict, Any, Optional
 
-def create_error_response(message: str, status_code: int = 500, extra_data: Optional[Dict[str, Any]] = None) -> Tuple[Any, int]:
+def create_error_response(message: str, status_code: int = 500, extra_data: Optional[Dict[str, Any]] = None) -> JSONResponse:
     """
-    Standardized error response helper for Sanic
+    Standardized error response helper for FastAPI
     
     Args:
         message: Error message
@@ -11,7 +11,7 @@ def create_error_response(message: str, status_code: int = 500, extra_data: Opti
         extra_data: Additional data to include in the response
         
     Returns:
-        Sanic response with CORS headers and status code
+        FastAPI JSONResponse with status code
     """
     response_data = {
         'success': False,
@@ -20,23 +20,19 @@ def create_error_response(message: str, status_code: int = 500, extra_data: Opti
     if extra_data:
         response_data.update(extra_data)
     
-    return json(response_data, status=status_code, headers={
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type,Accept',
-        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    }), status_code
+    return JSONResponse(content=response_data, status_code=status_code)
 
 
-def success_response(data: Dict[str, Any] = None, status_code: int = 200) -> Tuple[Any, int]:
+def success_response(data: Dict[str, Any] = None, status_code: int = 200) -> JSONResponse:
     """
-    Standardized success response helper for Sanic
+    Standardized success response helper for FastAPI
     
     Args:
         data: Data to include in the response
         status_code: HTTP status code
         
     Returns:
-        Sanic response with CORS headers and status code
+        FastAPI JSONResponse with status code
     """
     if data is None:
         data = {}
@@ -46,14 +42,10 @@ def success_response(data: Dict[str, Any] = None, status_code: int = 200) -> Tup
         'data': data
     }
     
-    return json(response_data, status=status_code, headers={
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type,Accept',
-        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-    }), status_code
+    return JSONResponse(content=response_data, status_code=status_code)
 
 
-def error_response(message: str, status_code: int = 500, extra_data: Optional[Dict[str, Any]] = None) -> Tuple[Any, int]:
+def error_response(message: str, status_code: int = 500, extra_data: Optional[Dict[str, Any]] = None) -> JSONResponse:
     """
     Alias for create_error_response for consistency with success_response
     """
