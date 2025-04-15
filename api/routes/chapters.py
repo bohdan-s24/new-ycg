@@ -14,7 +14,7 @@ from ..utils.decorators import token_required_fastapi
 router = APIRouter()
 
 class GenerateChaptersRequest(BaseModel):
-    video_id: constr(min_length=8, max_length=16, regex=r"^[\w-]{8,16}$")
+    video_id: constr(min_length=8, max_length=16, pattern=r"^[\w-]{8,16}$")
 
 @router.post("/chapters/generate")
 async def generate_chapters(body: GenerateChaptersRequest, user_id: str = Depends(token_required_fastapi)):
