@@ -4,19 +4,20 @@ OpenAI API integration service
 import traceback
 import os
 from typing import Dict, Any, Optional, List
-from openai import OpenAI
-
+from openai import OpenAI, AsyncOpenAI
 from api.config import Config
 
 
-# Initialize OpenAI client
+# Initialize OpenAI clients
 openai_client = None
+async_openai_client = None
 if Config.OPENAI_API_KEY:
     try:
         openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
-        print("OpenAI client configured")
+        async_openai_client = AsyncOpenAI(api_key=Config.OPENAI_API_KEY)
+        print("OpenAI clients configured")
     except Exception as e:
-        print(f"ERROR configuring OpenAI client: {e}")
+        print(f"ERROR configuring OpenAI clients: {e}")
         traceback.print_exc()
 else:
     print("Warning: OpenAI API key not found in environment variables")
@@ -85,7 +86,7 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
     return system_prompt
 
 
-def generate_chapters_with_openai(system_prompt: str, video_id: str, formatted_transcript: str) -> Optional[str]:
+async def generate_chapters_with_openai(system_prompt: str, video_id: str, formatted_transcript: str, timeout: int = 30) -> Optional[str]:
     """
     Generate chapters using OpenAI with better timestamp distribution.
     
@@ -93,39 +94,42 @@ def generate_chapters_with_openai(system_prompt: str, video_id: str, formatted_t
         system_prompt: System prompt for the OpenAI API
         video_id: YouTube video ID
         formatted_transcript: Formatted transcript text
+        timeout: Timeout for the OpenAI API call in seconds
         
     Returns:
         Generated chapters or None if all models fail
     """
-    if not openai_client:
-        print("OpenAI client not configured, cannot generate chapters")
+    if not async_openai_client:
+        print("OpenAI async client not configured, cannot generate chapters")
         return None
     
     print(f"Generating chapters for {video_id}")
     
-    for model in Config.OPENAI_MODELS:
+    models_to_try = [
+        "gpt-4o",
+        "gpt-4-turbo",
+        "gpt-3.5-turbo-0125",
+        "gpt-3.5-turbo"
+    ]
+    
+    for model in models_to_try:
         try:
-            print(f"Trying to generate chapters with {model}")
+            print(f"Trying model: {model}")
             
-            response = openai_client.chat.completions.create(
+            response = await async_openai_client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": formatted_transcript}
                 ],
-                temperature=0.9,
-                max_tokens=2000
+                timeout=timeout
             )
             
-            chapters = response.choices[0].message.content
-            
-            # Validate chapters format
-            chapter_lines = chapters.strip().split("\n")
-            if len(chapter_lines) < 3:
-                print(f"WARNING: Generated only {len(chapter_lines)} chapters, which is too few")
+            chapters = response.choices[0].message.content.strip()
+            chapter_lines = chapters.splitlines()
+            if not chapter_lines or len(chapter_lines) < 2:
+                print("Not enough chapters, trying another model")
                 continue
-                
-            # Check if first chapter starts at 00:00
             if not chapter_lines[0].startswith("00:00"):
                 print("WARNING: First chapter doesn't start at 00:00, trying another model")
                 continue

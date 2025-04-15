@@ -139,19 +139,20 @@ async def add_transaction(user_id: str, amount: int, type: str, description: str
     except Exception as e:
         logging.error(f"Failed to log transaction for user {user_id}: {e}")
 
-async def get_transactions(user_id: str, limit: int = 50) -> list:
-    """Retrieves the latest transactions for a user."""
+async def get_transactions(user_id: str, offset: int = 0, limit: int = 20):
+    """Retrieves the paginated transactions for a user."""
     key = f"{TRANSACTION_LOG_KEY_PREFIX}{user_id}"
 
-    async def _get_transactions(redis, _, limit):
-        # LRANGE 0 to limit-1 gets the first 'limit' items (most recent due to LPUSH)
-        transactions_json = await redis.lrange(key, 0, limit - 1)
-        # Parse JSON
+    async def _get_transactions(redis, _, offset, limit):
+        start = offset
+        end = offset + limit - 1
+        transactions_json = await redis.lrange(key, start, end)
         transactions = [json.loads(t) for t in transactions_json]
-        return transactions
+        total = await redis.llen(key)
+        return transactions, total
 
     try:
-        return await redis_operation("get_transactions", _get_transactions, user_id, limit)
+        return await redis_operation("get_transactions", _get_transactions, user_id, offset, limit)
     except Exception as e:
         logging.error(f"Failed to retrieve transactions for user {user_id}: {e}")
-        return []
+        return [], 0

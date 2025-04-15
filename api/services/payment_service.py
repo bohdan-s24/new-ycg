@@ -64,7 +64,7 @@ async def get_payment_plans() -> List[Dict[str, Any]]:
     await initialize_payment_plans()
     return DEFAULT_PLANS
 
-async def create_checkout_session(user_id: str, plan_id: str, success_url: str, cancel_url: str) -> Optional[Dict[str, Any]]:
+async def create_checkout_session(user_id: str, plan_id: str, success_url: str, cancel_url: str, timeout: int = 30) -> Optional[Dict[str, Any]]:
     """
     Create a Stripe checkout session for a specific plan.
     
@@ -73,6 +73,7 @@ async def create_checkout_session(user_id: str, plan_id: str, success_url: str, 
         plan_id: The ID of the plan being purchased
         success_url: URL to redirect to on successful payment
         cancel_url: URL to redirect to if payment is cancelled
+        timeout: Timeout for the Stripe API call in seconds
         
     Returns:
         Dictionary with checkout session details or None if error
@@ -83,36 +84,39 @@ async def create_checkout_session(user_id: str, plan_id: str, success_url: str, 
         plan = next((p for p in plans if p["id"] == plan_id), None)
         
         if not plan:
-            logging.error(f"Plan with ID {plan_id} not found")
+            logging.error(f"Plan {plan_id} not found")
             return None
             
-        # Create a Stripe checkout session
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[
-                {
-                    "price_data": {
-                        "currency": "usd",
-                        "product_data": {
-                            "name": f"{plan['name']} - {plan['credits']} Credits",
-                            "description": plan["description"],
+        # Stripe API call with timeout
+        import asyncio
+        async def create_session():
+            return stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=[
+                    {
+                        "price_data": {
+                            "currency": "usd",
+                            "product_data": {
+                                "name": f"{plan['name']} - {plan['credits']} Credits",
+                                "description": plan["description"],
+                            },
+                            "unit_amount": int(plan["price"] * 100),  # Convert to cents
                         },
-                        "unit_amount": int(plan["price"] * 100),  # Convert to cents
-                    },
-                    "quantity": 1,
+                        "quantity": 1,
+                    }
+                ],
+                mode="payment",
+                success_url=success_url,
+                cancel_url=cancel_url,
+                metadata={
+                    "user_id": user_id,
+                    "plan_id": plan_id,
+                    "credits": plan["credits"]
                 }
-            ],
-            mode="payment",
-            success_url=success_url,
-            cancel_url=cancel_url,
-            metadata={
-                "user_id": user_id,
-                "plan_id": plan_id,
-                "credits": plan["credits"]
-            }
-        )
+            )
+        session = await asyncio.wait_for(create_session(), timeout=timeout)
         
-        # Store the session in Redis for verification later
+        # Store session info in Redis
         r = await get_redis_connection()
         session_data = {
             "id": session.id,
@@ -129,6 +133,9 @@ async def create_checkout_session(user_id: str, plan_id: str, success_url: str, 
             "id": session.id,
             "url": session.url
         }
+    except asyncio.TimeoutError:
+        logging.error("Stripe checkout session creation timed out")
+        return None
     except Exception as e:
         logging.error(f"Error creating checkout session: {e}")
         return None
