@@ -1,9 +1,13 @@
-from sanic import Sanic
-from sanic.response import json
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
-app = Sanic("test")
+app = FastAPI()
 
-@app.route('/')
-@app.route('/<path:path>')
-async def index(request, path=""):
-    return json({'hello': path})
+@app.get("/health")
+def health():
+    return JSONResponse(content={"status": "ok"})
+
+@app.get('/')
+@app.get('/<path:path>')
+async def index(path=""):
+    return JSONResponse(content={'hello': path})
