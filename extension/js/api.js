@@ -25,6 +25,7 @@ class ApiService {
     this.isRefreshing = false
     this.refreshPromise = null
     this.tokenRefreshInterval = null
+    this.authStateListener = null
     this.tokenRefreshBuffer = 5 * 60 * 1000 // Refresh token 5 minutes before expiry
     this.lastRefreshAttempt = 0 // Timestamp of last refresh attempt
     this.minRefreshInterval = 60 * 1000 // Minimum 1 minute between refresh attempts
@@ -620,26 +621,74 @@ class ApiService {
     // Clear any existing interval
     if (this.tokenRefreshInterval) {
       clearInterval(this.tokenRefreshInterval)
+      this.tokenRefreshInterval = null
+      console.log('[API] Cleared existing token refresh interval')
     }
 
-    // Set up a new interval to check token every 5 minutes
-    // This is a good balance between keeping the token fresh and not making too many requests
+    // Immediately check if token needs refresh
+    console.log('[API] Performing initial token check')
+    this.checkAndRefreshTokenIfNeeded()
+      .then(() => console.log('[API] Initial token check completed'))
+      .catch(error => console.warn('[API] Initial token check failed:', error))
+
+    // Set up a new interval to check token every 3 minutes
+    // More frequent checks to ensure token stays fresh
+    const checkInterval = 3 * 60 * 1000 // 3 minutes
     this.tokenRefreshInterval = setInterval(() => {
+      console.log('[API] Running scheduled token refresh check')
+
+      // Get the current token again in case it changed
+      const currentToken = this.getToken()
+      if (!currentToken) {
+        console.log('[API] No token available during scheduled check, stopping monitoring')
+        clearInterval(this.tokenRefreshInterval)
+        this.tokenRefreshInterval = null
+        return
+      }
+
       this.checkAndRefreshTokenIfNeeded().catch(error => {
         console.error('[API] Background token refresh failed:', error)
 
-        // If the error is critical, clear the interval to prevent further failures
+        // Only stop monitoring for specific critical errors
+        // For other errors, keep trying
         if (error.message && (
-            error.message.includes('Invalid token') ||
-            error.message.includes('No token available'))) {
+            error.message.includes('Invalid token format') ||
+            error.message.includes('No token available to check'))) {
           console.log('[API] Critical token error, stopping refresh monitoring')
           clearInterval(this.tokenRefreshInterval)
           this.tokenRefreshInterval = null
+        } else {
+          console.log('[API] Non-critical token error, will retry at next interval')
         }
       })
-    }, 5 * 60 * 1000) // Check every 5 minutes
+    }, checkInterval)
 
-    console.log('[API] Token refresh monitoring started')
+    console.log(`[API] Token refresh monitoring started with ${checkInterval/1000}s interval`)
+
+    // Also set up a listener for auth state changes
+    if (this.store) {
+      // Remove any existing listener
+      if (this.authStateListener) {
+        this.store.unsubscribe(this.authStateListener)
+      }
+
+      // Set up new listener
+      this.authStateListener = () => {
+        const state = this.store.getState()
+        const isAuthenticated = state && state.auth && state.auth.isAuthenticated
+
+        if (!isAuthenticated && this.tokenRefreshInterval) {
+          console.log('[API] User logged out, stopping token refresh monitoring')
+          clearInterval(this.tokenRefreshInterval)
+          this.tokenRefreshInterval = null
+        } else if (isAuthenticated && !this.tokenRefreshInterval) {
+          console.log('[API] User logged in, starting token refresh monitoring')
+          this.setupTokenRefreshMonitoring()
+        }
+      }
+
+      this.store.subscribe(this.authStateListener)
+    }
   }
 
   /**

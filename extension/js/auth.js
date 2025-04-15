@@ -396,6 +396,12 @@ async function handleGoogleSignIn() {
     if (window.YCG_UI) {
       window.YCG_UI.updateUI(store.getState())
     }
+
+    // Explicitly check for videos after login
+    if (window.YCG_VIDEO) {
+      console.log("[AUTH-DEBUG] Explicitly checking for videos after login")
+      window.YCG_VIDEO.checkForVideo()
+    }
   } catch (error) {
     console.error("[AUTH-DEBUG] Error during Google Sign-In:", error)
     console.log("[AUTH-DEBUG] Error details:", error)

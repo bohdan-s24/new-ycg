@@ -13,13 +13,26 @@ class VideoService {
     this.store = window.YCG_STORE
     this.lastCheckTime = 0
     this.checkInterval = 1000 // 1 second
+    this.isInitialized = false
+    this.authStateListener = this.handleAuthStateChange.bind(this)
   }
 
   /**
    * Initialize the video service
    */
   init() {
+    if (this.isInitialized) {
+      console.log("[Video] Video service already initialized")
+      return
+    }
+
     console.log("[Video] Initializing video service")
+
+    // Set up auth state change listener
+    if (this.store) {
+      console.log("[Video] Setting up auth state change listener")
+      this.store.subscribe(this.authStateListener)
+    }
 
     // Only check for video if user is logged in
     if (this.isUserLoggedIn()) {
@@ -29,7 +42,26 @@ class VideoService {
       console.log("[Video] User is not logged in, skipping video check")
     }
 
+    this.isInitialized = true
     console.log("[Video] Video service initialized")
+  }
+
+  /**
+   * Handle auth state changes
+   */
+  handleAuthStateChange() {
+    if (!this.store) return
+
+    const state = this.store.getState()
+    const isLoggedIn = state && state.auth && state.auth.isAuthenticated && state.auth.token
+
+    // Check for video when user logs in
+    if (isLoggedIn) {
+      console.log("[Video] Auth state changed: User is logged in, checking for video")
+      this.checkForVideo()
+    } else {
+      console.log("[Video] Auth state changed: User is not logged in")
+    }
   }
 
   /**

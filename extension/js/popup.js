@@ -69,15 +69,15 @@ async function init() {
     ui: !!ui
   })
 
-  // Check if user is logged in before initializing video service
+  // Check if user is logged in (for logging purposes)
   const isUserLoggedIn = store && store.getState().auth && store.getState().auth.isAuthenticated
+  console.log("[POPUP-DEBUG] User login status:", isUserLoggedIn ? "logged in" : "not logged in")
 
-  // Initialize video service if available and user is logged in
-  if (video && isUserLoggedIn) {
-    console.log("[POPUP-DEBUG] User is logged in, initializing video service")
+  // Always initialize video service if available
+  // The video service will internally decide whether to check for videos based on login state
+  if (video) {
+    console.log("[POPUP-DEBUG] Initializing video service")
     video.init()
-  } else if (video && !isUserLoggedIn) {
-    console.log("[POPUP-DEBUG] User is not logged in, skipping video service initialization")
   } else {
     console.warn("[POPUP-DEBUG] Video service not available")
   }
