@@ -8,7 +8,6 @@ from api.routes.auth import router as auth_router
 from api.routes.credits import router as credits_router
 from api.routes.payment import router as payment_router
 from api.errors import register_exception_handlers
-import aioredis
 import os
 
 app = FastAPI()
@@ -21,7 +20,8 @@ async def startup():
     redis_url = os.environ.get("REDIS_URL")
     if not redis_url:
         raise RuntimeError("REDIS_URL environment variable is required for rate limiting.")
-    redis = await aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+    from redis.asyncio import from_url as redis_from_url
+    redis = redis_from_url(redis_url, encoding="utf-8", decode_responses=True)
     await FastAPILimiter.init(redis)
 
 app.include_router(health_router, prefix=api_prefix)
