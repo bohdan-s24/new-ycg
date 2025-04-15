@@ -14,14 +14,20 @@ class ApiService {
     this.API = this.initApiEndpoints()
 
     this.store = window.YCG_STORE
-    this.retryCount = 0
-    this.maxRetries = 3
-    this.retryDelay = 1000 // 1 second
 
-    // Token refresh state
+    // Request settings
+    this.retryCount = 0
+    this.maxRetries = 5 // Increased from 3
+    this.retryDelay = 2000 // Increased from 1 second to 2 seconds
+    this.timeout = 30000 // 30 seconds default timeout
+
+    // Token refresh settings
     this.isRefreshing = false
     this.refreshPromise = null
     this.tokenRefreshInterval = null
+    this.tokenRefreshBuffer = 5 * 60 * 1000 // Refresh token 5 minutes before expiry
+    this.lastRefreshAttempt = 0 // Timestamp of last refresh attempt
+    this.minRefreshInterval = 60 * 1000 // Minimum 1 minute between refresh attempts
 
     // Start token refresh monitoring if we have a token
     this.setupTokenRefreshMonitoring()
@@ -56,8 +62,6 @@ class ApiService {
       // Chapters endpoints
       CHAPTERS: {
         GENERATE: `${config.API_BASE_URL}/v1/chapters/generate`,
-        SUBMIT_JOB: `${config.API_BASE_URL}/v1/chapters/submit-job`,
-        JOB_STATUS: `${config.API_BASE_URL}/v1/chapters/job-status`,
       },
 
       // Credits endpoints
@@ -143,10 +147,16 @@ class ApiService {
     try {
       console.log(`[API] ${mergedOptions.method} request to ${url}`)
 
+      // Use the class timeout if none is provided
+      if (!timeout) {
+        timeout = this.timeout
+      }
+
       // Add timeout if not already set
       let timeoutId
+      let controller
       if (!mergedOptions.signal) {
-        const controller = new AbortController()
+        controller = new AbortController()
         timeoutId = setTimeout(() => {
           console.log(`[API] Request timeout after ${timeout}ms for ${url}`)
           controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
@@ -191,6 +201,11 @@ class ApiService {
       console.log(`[API] Response data:`, data)
       return data
     } catch (error) {
+      // Clear the timeout if we set one
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+
       // Classify and handle the error
       const errorType = this.classifyError(error)
       console.error(`[API] ${errorType} error in ${url}:`, error)
@@ -198,13 +213,29 @@ class ApiService {
       // Handle based on error type
       switch (errorType) {
         case 'timeout':
+          // For timeout errors, we'll retry with a longer timeout
+          if (this.retryCount < this.maxRetries) {
+            this.retryCount++
+            console.log(`[API] Retrying timed out request (${this.retryCount}/${this.maxRetries})...`)
+
+            // Wait before retrying with exponential backoff
+            const delay = this.retryDelay * Math.pow(2, this.retryCount - 1)
+            console.log(`[API] Waiting ${delay}ms before retry`)
+            await new Promise((resolve) => setTimeout(resolve, delay))
+
+            // Retry with a longer timeout
+            const longerTimeout = timeout * 1.5 // Increase timeout by 50%
+            return this.request(url, options, requiresAuth, longerTimeout, false) // Don't try to refresh token on retry
+          }
+          // Reset retry count if we're not retrying
+          this.retryCount = 0
           throw new Error(`Request timed out: ${error.message || 'The operation took too long to complete'}`)
 
         case 'network':
           // Retry logic for network errors
           if (this.retryCount < this.maxRetries) {
             this.retryCount++
-            console.log(`[API] Retrying request (${this.retryCount}/${this.maxRetries})...`)
+            console.log(`[API] Retrying network request (${this.retryCount}/${this.maxRetries})...`)
 
             // Wait before retrying with exponential backoff
             const delay = this.retryDelay * Math.pow(2, this.retryCount - 1)
@@ -300,6 +331,34 @@ class ApiService {
   }
 
   /**
+   * Parse a JWT token and return its payload
+   * @param {string} token - The token to parse
+   * @returns {Object|null} - The parsed token payload or null if invalid
+   */
+  parseToken(token) {
+    if (!token) return null
+
+    try {
+      // Parse the JWT token
+      const base64Url = token.split('.')[1]
+      if (!base64Url) {
+        console.error('[API] Invalid token format: missing payload segment')
+        return null
+      }
+
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+      }).join(''))
+
+      return JSON.parse(jsonPayload)
+    } catch (error) {
+      console.error('[API] Error parsing token:', error)
+      return null
+    }
+  }
+
+  /**
    * Check if a token is expired or about to expire
    * @param {string} token - The JWT token to check
    * @returns {boolean} Whether the token is expired or will expire soon
@@ -308,14 +367,9 @@ class ApiService {
     if (!token) return true
 
     try {
-      // Parse the JWT token
-      const base64Url = token.split('.')[1]
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
-      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
-      }).join(''))
-
-      const payload = JSON.parse(jsonPayload)
+      // Use the parseToken method to get the payload
+      const payload = this.parseToken(token)
+      if (!payload) return true
 
       // Check if token has expiration
       if (!payload.exp) return false
@@ -323,12 +377,17 @@ class ApiService {
       // Get current time in seconds
       const currentTime = Math.floor(Date.now() / 1000)
 
-      // Check if token is expired or will expire in the next 5 minutes
+      // Check if token is expired or will expire soon
       const expiresIn = payload.exp - currentTime
-      const isExpiringSoon = expiresIn < 300 // 5 minutes in seconds
+
+      // Use the tokenRefreshBuffer for determining when a token is expiring soon
+      // Default to 5 minutes if not set
+      const bufferInSeconds = this.tokenRefreshBuffer ? this.tokenRefreshBuffer / 1000 : 300
+      const isExpiringSoon = expiresIn < bufferInSeconds
 
       if (isExpiringSoon) {
-        console.log(`[API] Token will expire in ${expiresIn} seconds`)
+        const minutesLeft = Math.floor(expiresIn / 60)
+        console.log(`[API] Token will expire in ${minutesLeft} minutes (${expiresIn} seconds)`)
       }
 
       return isExpiringSoon
@@ -394,15 +453,12 @@ class ApiService {
 
       // Try to verify with the server, but don't fail if server is unavailable
       try {
-        // Use lightweight verification to avoid database lookups and timeouts
+        // Verify with a shorter timeout to avoid long waits
         const result = await this.request(
           this.API.AUTH.VERIFY_TOKEN,
           {
             method: "POST",
-            body: JSON.stringify({
-              token,
-              lightweight: true // Request lightweight verification to avoid timeouts
-            }),
+            body: JSON.stringify({ token }),
           },
           false, // Not requiring auth for this request
           5000,   // 5 second timeout - reduced further to avoid long waits
@@ -508,44 +564,34 @@ class ApiService {
    * This sets up a periodic check to refresh the token before it expires
    */
   setupTokenRefreshMonitoring() {
-    // Clear any existing interval
-    if (this.tokenRefreshInterval) {
-      clearInterval(this.tokenRefreshInterval)
-    }
-
-    // Get current token
+    // Get the token
     const token = this.getToken()
     if (!token) {
       console.log('[API] No token available, not setting up refresh monitoring')
       return
     }
 
-    // Set up a new interval to check token every 30 seconds
-    this.tokenRefreshInterval = setInterval(() => {
-      // Check if we still have a token before attempting refresh
-      if (!this.getToken()) {
-        console.log('[API] No token found during refresh check, clearing interval')
-        clearInterval(this.tokenRefreshInterval)
-        this.tokenRefreshInterval = null
-        return
-      }
+    // Clear any existing interval
+    if (this.tokenRefreshInterval) {
+      clearInterval(this.tokenRefreshInterval)
+    }
 
+    // Set up a new interval to check token every 5 minutes
+    // This is a good balance between keeping the token fresh and not making too many requests
+    this.tokenRefreshInterval = setInterval(() => {
       this.checkAndRefreshTokenIfNeeded().catch(error => {
         console.error('[API] Background token refresh failed:', error)
 
-        // If we get an authentication error, the token might be invalid
-        // Check if the error indicates an invalid token
+        // If the error is critical, clear the interval to prevent further failures
         if (error.message && (
-            error.message.includes('invalid token') ||
-            error.message.includes('expired token') ||
-            error.message.includes('unauthorized')
-          )) {
-          console.log('[API] Token appears to be invalid, clearing refresh interval')
+            error.message.includes('Invalid token') ||
+            error.message.includes('No token available'))) {
+          console.log('[API] Critical token error, stopping refresh monitoring')
           clearInterval(this.tokenRefreshInterval)
           this.tokenRefreshInterval = null
         }
       })
-    }, 30000) // Check every 30 seconds
+    }, 5 * 60 * 1000) // Check every 5 minutes
 
     console.log('[API] Token refresh monitoring started')
   }
@@ -557,73 +603,39 @@ class ApiService {
   async checkAndRefreshTokenIfNeeded() {
     // Get current token
     const token = this.getToken()
-
-    // If no token, do nothing
     if (!token) {
-      console.log('[API] No token available to check for refresh')
-      return
+      throw new Error('No token available to check')
     }
 
     try {
-      // Check if token is expired or expiring soon
-      const tokenStatus = this.checkTokenStatus(token)
+      // Check if token is valid and parse expiration time
+      const tokenData = this.parseToken(token)
+      if (!tokenData || !tokenData.exp) {
+        throw new Error('Invalid token format or missing expiration')
+      }
 
-      if (tokenStatus.expired) {
-        console.log('[API] Token has expired, refreshing...')
+      // Calculate time until expiration
+      const now = Math.floor(Date.now() / 1000)
+      const timeUntilExpiry = tokenData.exp - now
+      const minutesUntilExpiry = Math.floor(timeUntilExpiry / 60)
+
+      // Log token expiration status
+      console.log(`[API] Token is valid for ${minutesUntilExpiry} more minutes`)
+
+      // If token is expired, throw error
+      if (timeUntilExpiry <= 0) {
+        throw new Error('Token is expired')
+      }
+
+      // If token is about to expire (within our buffer time), refresh it
+      const bufferInSeconds = this.tokenRefreshBuffer / 1000
+      if (timeUntilExpiry <= bufferInSeconds) {
+        console.log(`[API] Token will expire in ${minutesUntilExpiry} minutes, refreshing...`)
         await this.refreshToken()
-      } else if (tokenStatus.expiringSoon) {
-        console.log(`[API] Token is expiring soon (${tokenStatus.minutesRemaining.toFixed(1)} minutes left), refreshing...`)
-        await this.refreshToken()
-      } else {
-        console.log(`[API] Token is valid for ${tokenStatus.minutesRemaining.toFixed(1)} more minutes, no refresh needed`)
       }
     } catch (error) {
-      console.error('[API] Error checking token status:', error)
-      // If we can't parse the token, try to refresh it anyway
-      if (error.message && error.message.includes('parse')) {
-        console.log('[API] Could not parse token, attempting refresh anyway')
-        await this.refreshToken()
-      } else {
-        throw error
-      }
-    }
-  }
-
-  /**
-   * Check the status of a JWT token
-   * @param {string} token - The JWT token to check
-   * @returns {Object} Object with expired, expiringSoon, and minutesRemaining properties
-   */
-  checkTokenStatus(token) {
-    try {
-      // Parse the token
-      const parts = token.split('.')
-      if (parts.length !== 3) {
-        throw new Error('Invalid token format')
-      }
-
-      // Decode the payload
-      const payload = JSON.parse(atob(parts[1]))
-
-      // Check if token has expiration
-      if (!payload.exp) {
-        return { expired: false, expiringSoon: false, minutesRemaining: Infinity }
-      }
-
-      // Calculate time remaining
-      const expirationTime = payload.exp * 1000 // Convert to milliseconds
-      const currentTime = Date.now()
-      const timeRemaining = expirationTime - currentTime
-      const minutesRemaining = timeRemaining / (1000 * 60)
-
-      // Check if expired or expiring soon
-      const expired = timeRemaining <= 0
-      const expiringSoon = !expired && minutesRemaining < 10 // Less than 10 minutes remaining
-
-      return { expired, expiringSoon, minutesRemaining }
-    } catch (error) {
-      console.error('[API] Error parsing token:', error)
-      throw new Error('Could not parse token: ' + error.message)
+      console.error('[API] Error checking token:', error)
+      throw error
     }
   }
 
@@ -632,6 +644,16 @@ class ApiService {
    * @returns {Promise<string>} The new token
    */
   async refreshToken() {
+    // Check if we've attempted a refresh recently to prevent hammering the server
+    const now = Date.now()
+    if (now - this.lastRefreshAttempt < this.minRefreshInterval) {
+      console.log(`[API] Token refresh attempted too recently, skipping (min interval: ${this.minRefreshInterval/1000}s)`)
+      return null
+    }
+
+    // Update last refresh attempt timestamp
+    this.lastRefreshAttempt = now
+
     // If already refreshing, return the existing promise
     if (this.isRefreshing && this.refreshPromise) {
       console.log('[API] Token refresh already in progress, waiting...')
@@ -652,7 +674,19 @@ class ApiService {
           throw new Error('No token available to refresh')
         }
 
-        // Call refresh endpoint
+        // Validate token format before attempting refresh
+        try {
+          // Parse the JWT token to check if it's valid
+          const base64Url = currentToken.split('.')[1]
+          if (!base64Url) {
+            throw new Error('Invalid token format')
+          }
+        } catch (parseError) {
+          console.error('[API] Invalid token format, cannot refresh:', parseError)
+          throw new Error('Invalid token format, cannot refresh')
+        }
+
+        // Call refresh endpoint with increased timeout
         const result = await this.request(
           this.API.AUTH.REFRESH_TOKEN,
           {
@@ -660,7 +694,7 @@ class ApiService {
             body: JSON.stringify({ token: currentToken }),
           },
           false, // Not requiring auth for this request
-          20000, // 20 second timeout
+          30000, // 30 second timeout - increased from 20s
           false  // Don't try to refresh token for this request
         )
 
@@ -714,12 +748,12 @@ class ApiService {
       try {
         console.log(`[API] Login attempt ${attempt}/${maxRetries}`)
 
-        // Use a longer timeout for login requests (Increased to 30 seconds)
+        // Use a longer timeout for login requests
         const controller = new AbortController()
         const timeoutId = setTimeout(() => {
-          console.log('[API] Login request timed out after 30 seconds')
+          console.log('[API] Login request timed out after 20 seconds')
           controller.abort(new DOMException('Login request timed out', 'TimeoutError'))
-        }, 30000) // 30 second timeout
+        }, 20000) // 20 second timeout
 
         const result = await this.request(
           this.API.AUTH.LOGIN_GOOGLE,
@@ -732,7 +766,7 @@ class ApiService {
             signal: controller.signal,
           },
           false, // Not requiring auth for this request
-          30000, // Pass timeout to underlying request function as well
+          20000, // 20 second timeout
           false  // Don't try to refresh token for this request
         )
 
@@ -787,131 +821,17 @@ class ApiService {
    * @returns {Promise<Object>} The generated chapters
    */
   async generateChapters(videoId, videoTitle) {
-    // Add retry logic specifically for chapter generation
-    const maxRetries = 2
-    const baseDelay = 2000 // 2 seconds
-    const maxPollAttempts = 10 // Maximum number of polling attempts
-    const pollInterval = 3000 // 3 seconds between polls
-
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`[API] Chapter generation attempt ${attempt}/${maxRetries}`)
-
-        // Use a shorter timeout for job submission (15 seconds)
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => {
-          console.log('[API] Chapter job submission timed out after 15 seconds')
-          controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
-        }, 15000) // 15 second timeout
-
-        // Step 1: Submit the job
-        const jobResult = await this.request(
-          this.API.CHAPTERS.GENERATE, // We'll keep using the same endpoint for backward compatibility
-          {
-            method: "POST",
-            body: JSON.stringify({
-              video_id: videoId,
-              video_title: videoTitle,
-            }),
-            signal: controller.signal,
-          },
-          true, // Requires authentication
-          15000, // Pass timeout to underlying request function as well
-          true  // Try to refresh token if needed
-        )
-
-        clearTimeout(timeoutId)
-
-        // Check if we got a direct result (from cache or quick generation)
-        if (jobResult.data && jobResult.data.chapters) {
-          console.log('[API] Received chapters directly from initial request')
-          return jobResult
-        }
-
-        // Check if we got a job ID
-        if (jobResult.data && jobResult.data.job_id) {
-          const jobId = jobResult.data.job_id
-          console.log(`[API] Received job ID: ${jobId}, polling for results...`)
-
-          // Step 2: Poll for results
-          for (let pollAttempt = 1; pollAttempt <= maxPollAttempts; pollAttempt++) {
-            console.log(`[API] Polling for job results, attempt ${pollAttempt}/${maxPollAttempts}`)
-
-            // Wait between polling attempts
-            if (pollAttempt > 1) {
-              await new Promise(resolve => setTimeout(resolve, pollInterval))
-            }
-
-            try {
-              const statusResult = await this.request(
-                `${this.API.CHAPTERS.JOB_STATUS}/${jobId}`,
-                { method: "GET" },
-                true, // Requires authentication
-                10000, // 10 second timeout for polling
-                true  // Try to refresh token if needed
-              )
-
-              // Check job status
-              if (statusResult.data.status === 'completed' && statusResult.data.chapters) {
-                console.log('[API] Job completed successfully')
-                return {
-                  data: {
-                    videoId: statusResult.data.video_id,
-                    chapters: statusResult.data.chapters,
-                    formatted_text: statusResult.data.formatted_text,
-                    fromCache: false
-                  },
-                  success: true
-                }
-              } else if (statusResult.data.status === 'failed') {
-                console.error('[API] Job failed:', statusResult.data.error)
-                throw new Error(statusResult.data.error || 'Job failed')
-              } else if (pollAttempt === maxPollAttempts) {
-                console.error('[API] Max polling attempts reached, job still processing')
-                throw new Error('Chapter generation is taking too long. Please try again later.')
-              }
-
-              // If we get here, the job is still processing, continue polling
-              console.log(`[API] Job status: ${statusResult.data.status}, continuing to poll...`)
-
-            } catch (pollError) {
-              console.error(`[API] Error polling for job status:`, pollError)
-              if (pollAttempt === maxPollAttempts) {
-                throw pollError
-              }
-              // Continue polling on error
-            }
-          }
-
-          // If we get here, we've exceeded the maximum polling attempts
-          throw new Error('Timed out waiting for chapter generation to complete')
-        }
-
-        // If we get here, we didn't get a job ID or direct result
-        console.error('[API] Unexpected response format:', jobResult)
-        throw new Error('Unexpected response format from server')
-
-      } catch (error) {
-        console.error(`[API] Chapter generation attempt ${attempt} failed:`, error)
-
-        // If this is the last attempt, throw the error
-        if (attempt === maxRetries) {
-          throw error
-        }
-
-        // If the error is a timeout or network error, retry
-        const errorType = this.classifyError(error)
-        if (errorType !== 'timeout' && errorType !== 'network') {
-          // Don't retry for other types of errors
-          throw error
-        }
-
-        // Wait before retrying with exponential backoff
-        const delay = baseDelay * Math.pow(2, attempt - 1)
-        console.log(`[API] Retrying chapter generation in ${delay}ms...`)
-        await new Promise((resolve) => setTimeout(resolve, delay))
-      }
-    }
+    return this.request(
+      this.API.CHAPTERS.GENERATE,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          video_id: videoId,
+          video_title: videoTitle,
+        }),
+      },
+      true,
+    )
   }
 
   /**

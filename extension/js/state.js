@@ -87,7 +87,7 @@ class Store {
 
     const currentSliceState = this.state[sliceName]
     console.log(`[STORE-DEBUG] Current state for ${sliceName}:`, currentSliceState)
-    
+
     const newSliceState = this.reducers[sliceName](currentSliceState, action)
     console.log(`[STORE-DEBUG] New state for ${sliceName}:`, newSliceState)
 
@@ -135,6 +135,7 @@ class Store {
 
   /**
    * Save the state to chrome.storage.local
+   * @returns {Promise<boolean>} Whether the save was successful
    */
   async saveToStorage() {
     try {
@@ -150,29 +151,76 @@ class Store {
           credits: {
             count: this.state.credits.count,
           },
+          // Add a timestamp for verification
+          timestamp: Date.now()
         }
 
+        // Save the state
         await chrome.storage.local.set({ ycg_state: persistentState })
-        console.log("[Store] State saved to storage")
+
+        // Verify the save was successful
+        try {
+          const result = await chrome.storage.local.get("ycg_state")
+          const savedState = result.ycg_state
+
+          if (!savedState || savedState.timestamp !== persistentState.timestamp) {
+            console.error("[Store] State verification failed after save")
+            return false
+          }
+
+          console.log("[Store] State saved and verified in storage")
+          return true
+        } catch (verifyError) {
+          console.error("[Store] Error verifying saved state:", verifyError)
+          return false
+        }
       } else {
         console.warn("[Store] chrome.storage.local is not available. State not saved.")
+        return false
       }
     } catch (error) {
       console.error("[Store] Error saving state to storage:", error)
+      return false
     }
   }
 
   /**
    * Load the state from chrome.storage.local
+   * @returns {Promise<boolean>} Whether the load was successful
    */
   async loadFromStorage() {
     try {
       // Check if chrome is defined (running in extension context)
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        console.log("[STORE-DEBUG] Attempting to load state from storage")
         const result = await chrome.storage.local.get("ycg_state")
         const savedState = result.ycg_state
 
         if (savedState) {
+          // Validate the saved state
+          if (!this.isValidState(savedState)) {
+            console.error("[Store] Invalid state format in storage, clearing")
+            await chrome.storage.local.remove("ycg_state")
+            return false
+          }
+
+          // Check token expiration if present
+          if (savedState.auth && savedState.auth.token) {
+            try {
+              const isExpired = this.isTokenExpired(savedState.auth.token)
+              if (isExpired) {
+                console.log("[Store] Stored token is expired, clearing auth state")
+                savedState.auth.isAuthenticated = false
+                savedState.auth.token = null
+              }
+            } catch (tokenError) {
+              console.error("[Store] Error checking token expiration:", tokenError)
+              // If we can't validate the token, clear it
+              savedState.auth.isAuthenticated = false
+              savedState.auth.token = null
+            }
+          }
+
           // Merge saved state with initial state
           this.state = {
             ...this.state,
@@ -188,12 +236,66 @@ class Store {
 
           console.log("[Store] State loaded from storage")
           this.notifyListeners()
+          return true
+        } else {
+          console.log("[Store] No saved state found in storage")
+          return false
         }
       } else {
         console.warn("[Store] chrome.storage.local is not available. State not loaded.")
+        return false
       }
     } catch (error) {
       console.error("[Store] Error loading state from storage:", error)
+      return false
+    }
+  }
+
+  /**
+   * Check if a state object has valid format
+   * @param {Object} state - The state to validate
+   * @returns {boolean} - Whether the state is valid
+   */
+  isValidState(state) {
+    // Basic structure validation
+    if (!state || typeof state !== 'object') return false
+
+    // Check auth state
+    if (!state.auth || typeof state.auth !== 'object') return false
+
+    // Check credits state
+    if (!state.credits || typeof state.credits !== 'object') return false
+
+    return true
+  }
+
+  /**
+   * Check if a token is expired
+   * @param {string} token - The JWT token to check
+   * @returns {boolean} - Whether the token is expired
+   */
+  isTokenExpired(token) {
+    try {
+      // Parse the JWT token
+      const base64Url = token.split('.')[1]
+      if (!base64Url) return true
+
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+      }).join(''))
+
+      const payload = JSON.parse(jsonPayload)
+
+      // Check if token has expiration
+      if (!payload.exp) return false
+
+      // Check if token is expired
+      const currentTime = Math.floor(Date.now() / 1000)
+      return currentTime > payload.exp
+    } catch (error) {
+      console.error('[Store] Error checking token expiration:', error)
+      return true // Assume expired if we can't parse it
     }
   }
 }
@@ -202,7 +304,7 @@ class Store {
 const authReducer = (state, action) => {
   console.log("[STORE-DEBUG] Auth reducer called with action:", action.type)
   console.log("[STORE-DEBUG] Current auth state:", state)
-  
+
   switch (action.type) {
     case "LOGIN_START":
       const loginStartState = {
@@ -212,7 +314,7 @@ const authReducer = (state, action) => {
       }
       console.log("[STORE-DEBUG] New auth state after LOGIN_START:", loginStartState)
       return loginStartState
-      
+
     case "LOGIN_SUCCESS":
       const loginSuccessState = {
         ...state,
@@ -224,7 +326,7 @@ const authReducer = (state, action) => {
       }
       console.log("[STORE-DEBUG] New auth state after LOGIN_SUCCESS:", loginSuccessState)
       return loginSuccessState
-      
+
     case "LOGIN_FAILURE":
       const loginFailureState = {
         ...state,
@@ -237,7 +339,7 @@ const authReducer = (state, action) => {
       console.log("[STORE-DEBUG] New auth state after LOGIN_FAILURE:", loginFailureState)
       console.log("[STORE-DEBUG] Error:", action.payload.error)
       return loginFailureState
-      
+
     case "LOGOUT":
       const logoutState = {
         ...state,
@@ -249,7 +351,7 @@ const authReducer = (state, action) => {
       }
       console.log("[STORE-DEBUG] New auth state after LOGOUT:", logoutState)
       return logoutState
-      
+
     case "UPDATE_USER":
       const updateUserState = {
         ...state,
@@ -260,7 +362,7 @@ const authReducer = (state, action) => {
       }
       console.log("[STORE-DEBUG] New auth state after UPDATE_USER:", updateUserState)
       return updateUserState
-      
+
     default:
       return state
   }
@@ -371,7 +473,7 @@ const creditsReducer = (state, action) => {
 const uiReducer = (state, action) => {
   console.log("[STORE-DEBUG] UI reducer called with action:", action.type)
   console.log("[STORE-DEBUG] Current UI state:", state)
-  
+
   switch (action.type) {
     case "SET_ACTIVE_VIEW":
       const setActiveViewState = {
@@ -381,7 +483,7 @@ const uiReducer = (state, action) => {
       console.log("[STORE-DEBUG] New UI state after SET_ACTIVE_VIEW:", setActiveViewState)
       console.log("[STORE-DEBUG] Active view changed to:", action.payload.view)
       return setActiveViewState
-      
+
     case "TOGGLE_MENU":
       return {
         ...state,

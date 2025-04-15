@@ -26,6 +26,19 @@ class Config:
     OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
 
+    # Timeout settings
+    REDIS_TIMEOUT = 30  # seconds
+    API_TIMEOUT = 30    # seconds
+    REQUEST_TIMEOUT = 30  # seconds
+
+    # Connection pooling
+    REDIS_POOL_SIZE = 10
+    REDIS_MAX_CONNECTIONS = 20
+
+    # Rate limiting
+    RATE_LIMIT_REQUESTS = 100
+    RATE_LIMIT_WINDOW = 60  # seconds
+
     # Credit plans
     FREE_CREDITS = 3
     BASIC_PLAN_CREDITS = 10
