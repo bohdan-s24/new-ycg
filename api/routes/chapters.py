@@ -1,7 +1,8 @@
 import time
 import logging
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, constr
 from ..utils.responses import success_response, error_response
 from ..utils.cache import get_from_cache, add_to_cache
 from ..services.youtube import fetch_transcript
@@ -12,30 +13,21 @@ from ..utils.decorators import token_required_fastapi
 
 router = APIRouter()
 
+class GenerateChaptersRequest(BaseModel):
+    video_id: constr(min_length=8, max_length=16, regex=r"^[\w-]{8,16}$")
+
 @router.post("/chapters/generate")
-async def generate_chapters(request: Request, user_id: str = Depends(token_required_fastapi)):
+async def generate_chapters(body: GenerateChaptersRequest, user_id: str = Depends(token_required_fastapi)):
     """
     Generate chapters for a YouTube video, requiring authentication and credits.
     """
-    try:
-        data = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Request must be JSON")
-
-    video_id = data.get('video_id')
-    if not video_id:
-        raise HTTPException(status_code=400, detail="Missing video_id parameter")
+    video_id = body.video_id
 
     # --- Credit Check ---
-    try:
-        has_credits = await credits_service.has_sufficient_credits(user_id)
-        if not has_credits:
-            logging.warning(f"User {user_id} attempted generation with insufficient credits for video {video_id}.")
-            raise HTTPException(status_code=402, detail="Insufficient credits to generate chapters.")
-    except Exception as e:
-        logging.error(f"Error checking credits for user {user_id}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to verify credit balance.")
-    # --- End Credit Check ---
+    has_credits = await credits_service.has_sufficient_credits(user_id)
+    if not has_credits:
+        logging.warning(f"User {user_id} attempted generation with insufficient credits for video {video_id}.")
+        raise HTTPException(status_code=402, detail="Insufficient credits to generate chapters.")
 
     # Check cache first
     cached_chapters = get_from_cache(video_id)

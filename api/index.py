@@ -5,8 +5,10 @@ from api.routes.chapters import router as chapters_router
 from api.routes.auth import router as auth_router
 from api.routes.credits import router as credits_router
 from api.routes.payment import router as payment_router
+from api.errors import register_exception_handlers
 
 app = FastAPI()
+register_exception_handlers(app)
 
 api_prefix = "/v1"
 

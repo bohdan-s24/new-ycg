@@ -12,21 +12,13 @@ async def get_balance(user_id: str = Depends(token_required_fastapi)):
     """
     Retrieves the credit balance for the authenticated user.
     """
-    try:
-        balance = await credits_service.get_credit_balance(user_id)
-        return success_response({"balance": balance})
-    except Exception as e:
-        logging.error(f"Error retrieving balance for user {user_id}: {e}")
-        return error_response("Failed to retrieve credit balance.", 500)
+    balance = await credits_service.get_credit_balance(user_id)
+    return success_response({"balance": balance})
 
 @router.get('/transactions')
 async def get_transaction_history(user_id: str = Depends(token_required_fastapi)):
     """
     Retrieves the transaction history for the authenticated user.
     """
-    try:
-        transactions = await credits_service.get_transactions(user_id)
-        return success_response({"transactions": transactions})
-    except Exception as e:
-        logging.error(f"Error retrieving transactions for user {user_id}: {e}")
-        return error_response("Failed to retrieve transaction history.", 500)
+    transactions = await credits_service.get_transactions(user_id)
+    return success_response({"transactions": transactions})

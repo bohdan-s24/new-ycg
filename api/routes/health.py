@@ -37,20 +37,12 @@ def debug_redis():
     async def _test_redis(redis):
         await redis.set("debug_test", "ok")
         return await redis.get("debug_test")
-    try:
-        test_value = asyncio.run(redis_operation("debug_test", _test_redis, None))
-        return JSONResponse(content={
-            'redis_connected': True,
-            'test_value': test_value,
-            'environment': env_vars
-        })
-    except Exception as e:
-        logging.error(f"Redis debug test failed: {str(e)}")
-        return JSONResponse(content={
-            'error': f"Redis connection failed: {str(e)}",
-            'redis_connected': False,
-            'environment': env_vars
-        }, status_code=500)
+    test_value = asyncio.run(redis_operation("debug_test", _test_redis, None))
+    return JSONResponse(content={
+        'redis_connected': True,
+        'test_value': test_value,
+        'environment': env_vars
+    })
 
 @router.get("/connectivity")
 async def connectivity_check():

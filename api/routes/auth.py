@@ -6,8 +6,16 @@ from ..models.user import UserCreate, UserLogin
 from ..utils.responses import success_response, error_response
 from ..utils.decorators import token_required_fastapi
 from ..utils.exceptions import AuthenticationError, ValidationError
+from pydantic import BaseModel
 
 router = APIRouter()
+
+class GoogleLoginData(BaseModel):
+    token: str
+    platform: str = 'web'
+
+class VerifyTokenData(BaseModel):
+    token: str
 
 @router.get('/debug')
 def auth_debug():
@@ -19,42 +27,26 @@ def auth_debug():
     })
 
 @router.post('/register')
-async def register_user(request: Request):
-    if not request.json():
-        return error_response("Request must be JSON", 400)
-    data = await request.json()
-    try:
-        user_data = UserCreate(**data)
-    except Exception as e: 
-        logging.error(f"Registration validation error: {e}")
-        return error_response(f"Invalid registration data: {e}", 400)
-
+async def register_user(user_data: UserCreate):
     existing_user = await auth_service.get_user_by_email(user_data.email)
     if existing_user:
-        return error_response("Email already registered", 409) 
+        return error_response("Email already registered", 409)
 
     new_user = await auth_service.create_user(user_data)
     if not new_user:
-         logging.error(f"Failed to create user for email: {user_data.email}")
-         return error_response("Could not create user.", 500)
+        logging.error(f"Failed to create user for email: {user_data.email}")
+        return error_response("Could not create user.", 500)
 
     try:
         await credits_service.initialize_credits(new_user.id)
     except Exception as e:
         logging.error(f"Failed to initialize credits for user {new_user.id}: {e}")
 
-    user_dict = new_user.dict(exclude={'password_hash', 'google_id'}) 
+    user_dict = new_user.dict(exclude={'password_hash', 'google_id'})
     return success_response(user_dict, 201)
 
 @router.post('/login')
-async def login_for_access_token(request: Request):
-    try:
-        data = await request.json()
-        login_data = UserLogin(**data)
-    except Exception as e:
-        logging.error(f"Login validation error: {e}")
-        return error_response(f"Invalid login data: {e}", 400)
-
+async def login_for_access_token(login_data: UserLogin):
     user = await auth_service.authenticate_user(login_data.email, login_data.password)
     if not user:
         return error_response("Incorrect email or password", 401)
@@ -66,59 +58,24 @@ async def login_for_access_token(request: Request):
     return success_response({"access_token": access_token, "token_type": "bearer"})
 
 @router.post('/login/google')
-async def login_via_google(request: Request):
+async def login_via_google(data: GoogleLoginData):
     logging.info("Google login request received at /auth/login/google endpoint")
     logging.info(f"Processing login request with router: {router.prefix}")
-
-    try:
-        data = await request.json()
-        logging.info(f"Request data: {data}")
-
-        google_token = data.get('token')
-        platform = data.get('platform', 'web')
-
-        if not google_token:
-            logging.error("Missing Google token in request")
-            return error_response("Missing Google token in request", 400)
-
-        logging.info(f"Processing Google login with platform: {platform}")
-
-        if platform != "chrome_extension":
-            logging.warning(f"Received Google login request with unsupported platform: {platform}")
-            return error_response("Only Chrome extension login is supported.", 400)
-    except Exception as e:
-        logging.error(f"Error parsing request data: {str(e)}")
-        return error_response("Invalid request format", 400)
-
-    try:
-        logging.info("Verifying Google OAuth token from Chrome extension...")
-        # Step 1: Verify Google OAuth token and get user info
-        google_user_info = await auth_service.verify_google_oauth_token(google_token)
-        # Step 2: Get or create user in DB
-        user, is_new_user = await auth_service.get_or_create_google_user(google_user_info)
-        logging.info(f"Google OAuth token verification successful: {google_user_info.get('email') if google_user_info else 'No user info'}")
-
-        if not user:
-            logging.error("Failed to verify Google token - no user info returned")
-            return error_response("Invalid or expired Google token", 401)
-    except AuthenticationError as e:
-        logging.error(f"Authentication error verifying Google token: {str(e)}")
-        return error_response(str(e), 401)
-    except Exception as e:
-        logging.error(f"Unexpected error verifying Google OAuth token: {str(e)}")
-        return error_response(f"Error verifying Google token: {str(e)}", 500)
-
-    try:
-        login_result = await auth_service.login_user(user)
-        login_result["new_user"] = is_new_user
-        logging.info(f"Google login successful for user: {user.email}")
-        return success_response(login_result)
-    except AuthenticationError as e:
-        logging.error(f"Authentication error during login: {str(e)}")
-        return error_response(str(e), 401)
-    except Exception as e:
-        logging.error(f"Unexpected error during login process: {str(e)}")
-        return error_response(f"Error during login process: {str(e)}", 500)
+    if data.platform != "chrome_extension":
+        logging.warning(f"Received Google login request with unsupported platform: {data.platform}")
+        return error_response("Only Chrome extension login is supported.", 400)
+    logging.info(f"Processing Google login with platform: {data.platform}")
+    logging.info("Verifying Google OAuth token from Chrome extension...")
+    google_user_info = await auth_service.verify_google_oauth_token(data.token)
+    user, is_new_user = await auth_service.get_or_create_google_user(google_user_info)
+    logging.info(f"Google OAuth token verification successful: {google_user_info.get('email') if google_user_info else 'No user info'}")
+    if not user:
+        logging.error("Failed to verify Google token - no user info returned")
+        return error_response("Invalid or expired Google token", 401)
+    login_result = await auth_service.login_user(user)
+    login_result["new_user"] = is_new_user
+    logging.info(f"Google login successful for user: {user.email}")
+    return success_response(login_result)
 
 @router.get('/user')
 async def get_user_info(user_id: str = Depends(token_required_fastapi)):
@@ -149,25 +106,10 @@ async def get_user_info(user_id: str = Depends(token_required_fastapi)):
         return error_response("Error retrieving user information", 500)
 
 @router.post('/verify')
-async def verify_token(request: Request):
-    if not request.json():
-        return error_response("Request must be JSON", 400)
-
+async def verify_token(data: VerifyTokenData):
     try:
-        data = await request.json()
-        token = data.get('token')
-
-        if not token:
-            return error_response("Missing token in request", 400)
-    except Exception as e:
-        logging.error(f"Error parsing request data: {str(e)}")
-        return error_response("Invalid request format", 400)
-
-    try:
-        await auth_service.validate_token(token)
-
-        user = await auth_service.get_current_user(token)
-
+        await auth_service.validate_token(data.token)
+        user = await auth_service.get_current_user(data.token)
         return success_response({
             "valid": True,
             "user_id": user.id,

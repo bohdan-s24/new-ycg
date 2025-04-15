@@ -30,23 +30,32 @@ A Chrome extension that automatically generates YouTube video chapters using AI,
 ## Technology Stack
 
 - **Frontend**: Chrome Extension with vanilla JavaScript + React web interface with Tailwind CSS
-- **Backend**: Python Flask API deployed on Vercel
-- **Database**: Redis (Upstash) for user data and credit management
+- **Backend**: Python FastAPI (fully async) deployed on Vercel (ASGI server)
+- **Database**: Redis (Upstash, async client) for user data and credit management
 - **Authentication**: JWT-based with Google OAuth integration
 - **Payments**: Stripe for secure payment processing
 - **Libraries**:
   - YouTube Transcript API (for transcript extraction)
   - OpenAI API (for intelligent chapter generation)
-  - Flask for API endpoints (with CORS support)
-  - Redis for data storage
-  - PyJWT and Google Auth for authentication
+  - FastAPI for API endpoints (async, with CORS support)
+  - httpx (async HTTP client for all external I/O)
+  - Upstash-redis (async Redis client)
+  - PyJWT, python-jose, and Google Auth for authentication
+
+## Backend Async Execution & Optimization
+
+- **All endpoints and service calls are fully async** (`async def` + `await`).
+- **All external I/O (HTTP, Redis, etc.) uses async libraries** (`httpx`, `upstash-redis`).
+- **No blocking sync libraries** (such as `requests`) are used in the backend.
+- **Deployment uses an ASGI server** (e.g., `uvicorn`) for true async support.
+- **Tested and profiled for high concurrency and low latency**.
 
 ## Development
 
 ### Setup Backend
 
 1. Install requirements:
-```
+```bash
 pip install -r requirements.txt
 ```
 
@@ -70,15 +79,19 @@ STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
 ```
 
 3. Run locally:
-```
-python main.py
+```bash
+uvicorn api.index:app --reload
 ```
 
-### Setup Extension
+### Deployment Notes
 
-1. Open Chrome and navigate to `chrome://extensions/`
-2. Enable "Developer mode" in the top right
-3. Click "Load unpacked" and select the `extension` folder
+- The backend is designed for ASGI servers (e.g., `uvicorn`, Vercel's Python builder).
+- All endpoints are async and non-blocking.
+- For local development, run:
+  ```bash
+  uvicorn api.index:app --reload
+  ```
+- For production (Vercel), deployment is automatic and uses ASGI by default.
 
 ## Deployment
 
@@ -163,4 +176,4 @@ If authentication is not working:
 This project is licensed under the MIT License.
 
 ## Latest Update
-Updated on April 7, 2025 with new monetization features, user authentication.
+Updated on April 16, 2025: Backend is now fully async, all blocking code removed, and optimized for concurrency and performance.
