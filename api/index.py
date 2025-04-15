@@ -22,6 +22,4 @@ app.blueprint(credits_bp)
 app.blueprint(health_bp)
 app.blueprint(payment_bp)
 
-# For local development (when run directly)
-if __name__ == "__main__":
-    app.run()
+# Note: Do NOT call app.run() here for Vercel/ASGI deployment.
