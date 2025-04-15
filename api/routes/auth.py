@@ -70,16 +70,12 @@ async def login_via_google(request: Request):
     logging.info("Google login request received at /auth/login/google endpoint")
     logging.info(f"Processing login request with router: {router.prefix}")
 
-    if not request.json():
-        logging.error("Request is not JSON")
-        return error_response("Request must be JSON", 400)
-
     try:
         data = await request.json()
         logging.info(f"Request data: {data}")
 
         google_token = data.get('token')
-        platform = data.get('platform', 'web')  
+        platform = data.get('platform', 'web')
 
         if not google_token:
             logging.error("Missing Google token in request")
@@ -96,8 +92,11 @@ async def login_via_google(request: Request):
 
     try:
         logging.info("Verifying Google OAuth token from Chrome extension...")
-        user, is_new_user = await auth_service.login_or_register_google_user(google_token, platform)
-        logging.info(f"Google OAuth token verification successful: {user.get('email') if user else 'No user info'}")
+        # Step 1: Verify Google OAuth token and get user info
+        google_user_info = await auth_service.verify_google_oauth_token(google_token)
+        # Step 2: Get or create user in DB
+        user, is_new_user = await auth_service.get_or_create_google_user(google_user_info)
+        logging.info(f"Google OAuth token verification successful: {google_user_info.get('email') if google_user_info else 'No user info'}")
 
         if not user:
             logging.error("Failed to verify Google token - no user info returned")
@@ -110,18 +109,6 @@ async def login_via_google(request: Request):
         return error_response(f"Error verifying Google token: {str(e)}", 500)
 
     try:
-        if isinstance(user, tuple) and len(user) == 2:
-            user, is_new_user = user
-            logging.info(f"User result: user={user.email}, is_new_user={is_new_user}")
-        else:
-            user = user
-            is_new_user = False
-            logging.info(f"User result: user={user.email if user else None}, is_new_user=False")
-
-        if not user:
-            logging.error(f"Failed to get or create user from Google info: {user.get('email')}")
-            return error_response("Failed to process Google sign-in", 500)
-
         login_result = await auth_service.login_user(user)
         login_result["new_user"] = is_new_user
         logging.info(f"Google login successful for user: {user.email}")
