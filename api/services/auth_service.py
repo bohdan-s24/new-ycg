@@ -218,3 +218,33 @@ async def get_current_user(token: str) -> User:
         total_duration = time.time() - get_user_start_time
         logging.error(f"[GET_CURRENT_USER] Unexpected error: {str(e)}. Total time: {total_duration:.4f}s")
         raise
+
+
+async def login_via_google(token: str, platform: str = 'web') -> Dict[str, Any]:
+    """
+    Orchestrates the Google OAuth login process, including token verification, user creation, login, and credit initialization error handling.
+    Args:
+        token: Google OAuth token
+        platform: Platform string (default 'web')
+    Returns:
+        Dictionary with login result and status flags
+    Raises:
+        AuthenticationError: If login fails for any reason
+    """
+    if platform != "chrome_extension":
+        raise AuthenticationError("Only Chrome extension login is supported.")
+    google_user_info = await verify_google_oauth_token(token)
+    user, is_new_user = await get_or_create_google_user(google_user_info)
+    if not user:
+        raise AuthenticationError("Invalid or expired Google token")
+    login_result = await login_user(user)
+    login_result["new_user"] = is_new_user
+    # Check if credits are initialized (for new users)
+    if is_new_user:
+        try:
+            from . import credits_service
+            await credits_service.initialize_credits(user.id)
+        except Exception as e:
+            login_result["credit_init_error"] = str(e)
+            login_result["credits"] = 0
+    return login_result

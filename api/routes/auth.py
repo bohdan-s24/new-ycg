@@ -61,33 +61,28 @@ async def login_for_access_token(login_data: UserLogin):
 async def login_via_google(data: GoogleLoginData):
     logging.info("Google login request received at /auth/login/google endpoint")
     logging.info(f"Processing login request with router: {router.prefix}")
-    if data.platform != "chrome_extension":
-        logging.warning(f"Received Google login request with unsupported platform: {data.platform}")
-        return error_response("Only Chrome extension login is supported.", 400)
-    logging.info(f"Processing Google login with platform: {data.platform}")
-    logging.info("Verifying Google OAuth token from Chrome extension...")
-    google_user_info = await auth_service.verify_google_oauth_token(data.token)
-    user, is_new_user = await auth_service.get_or_create_google_user(google_user_info)
-    logging.info(f"Google OAuth token verification successful: {google_user_info.get('email') if google_user_info else 'No user info'}")
-    if not user:
-        logging.error("Failed to verify Google token - no user info returned")
-        return error_response("Invalid or expired Google token", 401)
-    login_result = await auth_service.login_user(user)
-    login_result["new_user"] = is_new_user
-    logging.info(f"Google login successful for user: {user.email}")
-    return success_response(login_result)
+    try:
+        login_result = await auth_service.login_via_google(data.token, data.platform)
+        logging.info(f"Google login successful for user: {login_result.get('email', 'unknown')}")
+        return success_response(login_result)
+    except AuthenticationError as e:
+        logging.error(f"Google login failed: {str(e)}")
+        return error_response(str(e), 401)
+    except Exception as e:
+        logging.error(f"Unexpected error during Google login: {str(e)}")
+        return error_response("Internal server error", 500)
 
 @router.get('/user')
-async def get_user_info(user_id: str = Depends(token_required_fastapi)):
+async def get_user_info(user = Depends(token_required_fastapi)):
     try:
-        user = await auth_service.get_user_by_id(user_id)
+        # token_required_fastapi should return the user object (not just user_id)
         if not user:
             return error_response("User not found", 404)
         try:
             credits = await credits_service.get_credit_balance(user.id)
         except Exception as e:
             logging.error(f"Error fetching credit balance for user {user.id}: {e}")
-            credits = 0  
+            credits = 0
         user_info = {
             "id": user.id,
             "email": user.email,
@@ -116,10 +111,10 @@ async def verify_token(data: VerifyTokenData):
             "email": user.email
         })
     except AuthenticationError:
-        return success_response({"valid": False})
+        return error_response("Invalid or expired token", 401)
     except Exception as e:
         logging.error(f"Unexpected error verifying token: {str(e)}")
-        return success_response({"valid": False})
+        return error_response("Internal server error", 500)
 
 @router.get('/config')
 async def get_auth_config():
