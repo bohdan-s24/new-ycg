@@ -1,56 +1,39 @@
-import time
+from sanic import Blueprint
+from sanic.request import Request
+from sanic.response import json
 import logging
-import asyncio
-from flask import request, g
-from datetime import timedelta
 
 # Import services and utilities
 from ..config import Config
-from ..services import auth_service, credits_service, user_service
+from ..services import auth_service, credits_service
 from ..models.user import UserCreate, UserLogin
 from ..utils.responses import success_response, error_response
 from ..utils.decorators import token_required
 from ..utils.exceptions import AuthenticationError, ValidationError
-from ..utils.versioning import VersionedBlueprint
 
-# Create a versioned blueprint
-auth_bp = VersionedBlueprint('auth', __name__, url_prefix='/auth')
+# Create a Sanic blueprint
+auth_bp = Blueprint('auth', url_prefix='/auth')
 
 # Debug endpoint to check if auth blueprint is registered
-@auth_bp.route('/debug', methods=['GET'])
-def auth_debug():
+@auth_bp.route('/debug')
+async def auth_debug(request: Request):
     """Debug endpoint to verify auth blueprint is registered"""
     logging.info("Auth debug endpoint accessed")
-    from flask import current_app
-
-    # Get all routes from the Flask app that belong to this blueprint
-    blueprint_routes = []
-    for rule in current_app.url_map.iter_rules():
-        if rule.endpoint.startswith('auth.'):
-            blueprint_routes.append({
-                'endpoint': rule.endpoint,
-                'methods': [method for method in rule.methods if method not in ['HEAD', 'OPTIONS']],
-                'path': str(rule)
-            })
-
+    # Sanic does not have current_app.url_map, so just return static info
     return success_response({
         "status": "Auth blueprint is working",
-        "routes": blueprint_routes,
         "blueprint_name": auth_bp.name,
-        "url_prefix": auth_bp.url_prefix,
-        "total_routes": len(blueprint_routes)
+        "url_prefix": auth_bp.url_prefix
     })
 
 @auth_bp.route('/register', methods=['POST'])
-async def register_user():
+async def register_user(request: Request):
     """
     Registers a new user with email and password.
     """
-    if not request.is_json:
+    if not request.json:
         return error_response("Request must be JSON", 400)
-
-    data = request.get_json()
-
+    data = request.json
     try:
         # Validate input using Pydantic if preferred
         user_data = UserCreate(**data)
@@ -84,15 +67,15 @@ async def register_user():
     return success_response(user_dict, 201)
 
 @auth_bp.route('/login', methods=['POST'])
-async def login_for_access_token():
+async def login_for_access_token(request: Request):
     """
     Provides an access token for valid email/password credentials.
     Expects JSON payload with email and password.
     """
-    if not request.is_json:
+    if not request.json:
         return error_response("Request must be JSON", 400)
 
-    data = request.get_json()
+    data = request.json
 
     try:
         # Validate input using Pydantic if preferred
@@ -119,10 +102,9 @@ async def login_for_access_token():
 
     return success_response({"access_token": access_token, "token_type": "bearer"})
 
-
 # --- Google Sign-In (Chrome Extension OAuth Token only) ---
 @auth_bp.route('/login/google', methods=['POST'])
-async def login_via_google():
+async def login_via_google(request: Request):
     """
     Authenticates a user via a Google OAuth token from Chrome extension.
     Expects JSON payload: {"token": "google_token_here", "platform": "chrome_extension"}
@@ -132,13 +114,13 @@ async def login_via_google():
     logging.info(f"Processing login request with blueprint: {auth_bp.name}, prefix: {auth_bp.url_prefix}")
 
     # Validate request format
-    if not request.is_json:
+    if not request.json:
         logging.error("Request is not JSON")
         return error_response("Request must be JSON", 400)
 
     # Parse request data
     try:
-        data = request.get_json()
+        data = request.json
         logging.info(f"Request data: {data}")
 
         google_token = data.get('token')
@@ -161,10 +143,10 @@ async def login_via_google():
     # Verify Google OAuth token
     try:
         logging.info("Verifying Google OAuth token from Chrome extension...")
-        user_info = await auth_service.verify_google_oauth_token(google_token)
-        logging.info(f"Google OAuth token verification successful: {user_info.get('email') if user_info else 'No user info'}")
+        user, is_new_user = await auth_service.login_or_register_google_user(google_token, platform)
+        logging.info(f"Google OAuth token verification successful: {user.get('email') if user else 'No user info'}")
 
-        if not user_info:
+        if not user:
             logging.error("Failed to verify Google token - no user info returned")
             return error_response("Invalid or expired Google token", 401)
     except AuthenticationError as e:
@@ -174,25 +156,14 @@ async def login_via_google():
         logging.error(f"Unexpected error verifying Google OAuth token: {str(e)}")
         return error_response(f"Error verifying Google token: {str(e)}", 500)
 
-    # Get or create the user based on the verified Google info
-    try:
-        logging.info(f"Getting or creating user for Google ID: {user_info.get('sub')}")
-        user_result = await auth_service.get_or_create_google_user(user_info)
-    except ValidationError as e:
-        logging.error(f"Validation error creating user: {str(e)}")
-        return error_response(f"Invalid user data: {str(e)}", 400)
-    except Exception as e:
-        logging.error(f"Unexpected error creating user: {str(e)}")
-        return error_response(f"Error creating user: {str(e)}", 500)
-
     # Process the user result
     try:
         # Check if we got a tuple (user, is_new_user) or just a user object
-        if isinstance(user_result, tuple) and len(user_result) == 2:
-            user, is_new_user = user_result
+        if isinstance(user, tuple) and len(user) == 2:
+            user, is_new_user = user
             logging.info(f"User result: user={user.email}, is_new_user={is_new_user}")
         else:
-            user = user_result
+            user = user
             is_new_user = False
             logging.info(f"User result: user={user.email if user else None}, is_new_user=False")
 
@@ -220,149 +191,67 @@ async def login_via_google():
 
 # --- Token Verification Endpoint ---
 @auth_bp.route('/verify', methods=['POST'])
-async def verify_token():
+async def verify_token(request: Request):
     """
     Verifies if a token is valid.
     Expects JSON payload: {"token": "jwt_token_here"}
     Returns: {"valid": true/false}
     """
-    verify_start_time = time.time()
-    logging.info(f"[VERIFY_TOKEN] Request received.")
-
     # Validate request format
-    if not request.is_json:
-        logging.error("[VERIFY_TOKEN] Request is not JSON")
+    if not request.json:
         return error_response("Request must be JSON", 400)
 
     try:
-        data = request.get_json()
+        data = request.json
         token = data.get('token')
+
         if not token:
-            logging.error("[VERIFY_TOKEN] Missing token in request")
             return error_response("Missing token in request", 400)
     except Exception as e:
-        logging.error(f"[VERIFY_TOKEN] Error parsing request data: {str(e)}")
+        logging.error(f"Error parsing request data: {str(e)}")
         return error_response("Invalid request format", 400)
 
     # Verify the token
     try:
-        # First, just validate the token syntax and expiry without database lookup
-        # This is a fast operation that doesn't require database access
-        logging.info("[VERIFY_TOKEN] Starting token validation.")
-        t_validate_start = time.time()
-        payload = await auth_service.validate_token(token)
-        logging.info(f"[VERIFY_TOKEN] Token syntax/expiry validated in {time.time() - t_validate_start:.4f}s")
+        # Validate the token
+        await auth_service.validate_token(token)
 
-        # Extract user ID from token
-        user_id = payload.get("sub")
-        if not user_id:
-            logging.error("[VERIFY_TOKEN] Invalid token: missing user ID.")
-            return success_response({"valid": False})
+        # Get the user
+        user = await auth_service.get_current_user(token)
 
-        # For lightweight verification, we can return success here without database lookup
-        # This avoids the Redis timeouts that are causing 504 errors
-        # The frontend will still be able to use the token and will get proper validation
-        # when it makes actual API calls
-
-        # Check if client requested lightweight verification
-        lightweight = data.get('lightweight', False)
-        if lightweight:
-            total_duration = time.time() - verify_start_time
-            logging.info(f"[VERIFY_TOKEN] Lightweight verification successful. Total time: {total_duration:.4f}s")
-            return success_response({
-                "valid": True,
-                "user_id": user_id,
-                "lightweight": True
-            })
-
-        # For full verification, check if the user exists in the database
-        # This is optional and can be skipped if we're having timeout issues
-        try:
-            # Set a shorter timeout for the database operation
-            # If it takes too long, we'll still return success based on token validation
-            logging.info("[VERIFY_TOKEN] Starting user lookup.")
-            t_get_user_start = time.time()
-
-            # Use a timeout for the database operation
-            user = await asyncio.wait_for(
-                auth_service.get_user_by_id(user_id),
-                timeout=2.0  # 2 second timeout for database lookup
-            )
-
-            logging.info(f"[VERIFY_TOKEN] User lookup completed in {time.time() - t_get_user_start:.4f}s")
-
-            # Token is valid and user exists
-            total_duration = time.time() - verify_start_time
-            logging.info(f"[VERIFY_TOKEN] Full verification successful. Total time: {total_duration:.4f}s")
-            return success_response({
-                "valid": True,
-                "user_id": user_id,
-                "email": user.email if user else None
-            })
-        except asyncio.TimeoutError:
-            # If database lookup times out, still return success based on token validation
-            logging.warning(f"[VERIFY_TOKEN] Database lookup timed out, returning based on token validation only")
-            total_duration = time.time() - verify_start_time
-            return success_response({
-                "valid": True,
-                "user_id": user_id,
-                "fallback": True
-            })
-        except Exception as db_error:
-            # If database lookup fails for any other reason, still return success based on token validation
-            logging.warning(f"[VERIFY_TOKEN] Database lookup failed: {str(db_error)}, returning based on token validation only")
-            total_duration = time.time() - verify_start_time
-            return success_response({
-                "valid": True,
-                "user_id": user_id,
-                "fallback": True
-            })
-    except AuthenticationError as e:
-        total_duration = time.time() - verify_start_time
-        logging.warning(f"[VERIFY_TOKEN] AuthenticationError: {str(e)}. Total time: {total_duration:.4f}s")
-        # Token is invalid or expired
+        # Token is valid and user exists
+        return success_response({
+            "valid": True,
+            "user_id": user.id,
+            "email": user.email
+        })
+    except AuthenticationError:
+        # Token is invalid
         return success_response({"valid": False})
     except Exception as e:
-        total_duration = time.time() - verify_start_time
-        logging.error(f"[VERIFY_TOKEN] Unexpected error verifying token: {str(e)}. Total time: {total_duration:.4f}s")
+        logging.error(f"Unexpected error verifying token: {str(e)}")
         return success_response({"valid": False})
 
 
 # --- User Info Endpoint ---
-@auth_bp.route('/user', methods=['GET'])
+@auth_bp.route('/user')
 @token_required
-async def get_user_info():
+async def get_user_info(request: Request):
     """
     Returns information about the authenticated user.
     Requires a valid JWT token in the Authorization header.
     """
-    user_info_start_time = time.time()
-    logging.info("[USER_INFO] Request received.")
-
     try:
-        # Get the token from the request (already done by token_required)
-        # The decorator adds user_id to g.current_user_id
-        user_id = getattr(g, 'current_user_id', None)
-        if not user_id:
-            logging.error("[USER_INFO] User ID not found in g context after token_required.")
-            return error_response("Authentication context error.", 500)
-
-        logging.info(f"[USER_INFO] User ID from token: {user_id}")
-
-        # Get the user from the ID
-        t_get_user_start = time.time()
-        user = await user_service.get_user_by_id(user_id)
-        logging.info(f"[USER_INFO] User lookup by ID completed in {time.time() - t_get_user_start:.4f}s")
+        # Get the token from the request
+        user = request.ctx.current_user
         if not user:
             return error_response("User not found", 404)
 
         # Get user's credit balance
-        t_credits_start = time.time()
         try:
             credits = await credits_service.get_credit_balance(user.id)
-            logging.info(f"[USER_INFO] Credit balance fetched in {time.time() - t_credits_start:.4f}s")
         except Exception as e:
-            logging.error(f"[USER_INFO] Error fetching credit balance for user {user.id}: {e}")
+            logging.error(f"Error fetching credit balance for user {user.id}: {e}")
             credits = 0  # Default to 0 if there's an error
 
         # Create user info response
@@ -376,22 +265,18 @@ async def get_user_info():
             "created_at": user.created_at.isoformat() if user.created_at else None
         }
 
-        total_duration = time.time() - user_info_start_time
-        logging.info(f"[USER_INFO] Successfully retrieved user info. Total time: {total_duration:.4f}s")
         return success_response(user_info)
     except AuthenticationError as e:
-        total_duration = time.time() - user_info_start_time
-        logging.error(f"[USER_INFO] Authentication error: {str(e)}. Total time: {total_duration:.4f}s")
+        logging.error(f"Authentication error: {str(e)}")
         return error_response("Authentication error", 401)
     except Exception as e:
-        total_duration = time.time() - user_info_start_time
-        logging.error(f"[USER_INFO] Error getting user info: {str(e)}. Total time: {total_duration:.4f}s")
+        logging.error(f"Error getting user info: {str(e)}")
         return error_response("Error retrieving user information", 500)
 
 
 # --- Endpoint to provide Google Client ID to frontend/extension ---
-@auth_bp.route('/config', methods=['GET'])
-async def get_auth_config():
+@auth_bp.route('/config')
+async def get_auth_config(request: Request):
     """
     Provides necessary configuration for authentication to the frontend/extension.
     Currently returns the Google Client ID.

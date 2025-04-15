@@ -1,4 +1,5 @@
-from flask import request, g, current_app
+from sanic import Blueprint
+from sanic.request import Request
 import logging
 import stripe
 import json
@@ -7,13 +8,12 @@ from ..utils.responses import success_response, error_response
 from ..utils.decorators import token_required
 from ..services import payment_service
 from ..config import Config
-from ..utils.versioning import VersionedBlueprint
 
-# Create a versioned blueprint
-payment_bp = VersionedBlueprint('payment', __name__, url_prefix='/payment')
+# Create a Sanic blueprint
+payment_bp = Blueprint('payment', url_prefix='/payment')
 
-@payment_bp.route('/plans', methods=['GET'])
-async def get_plans():
+@payment_bp.route('/plans')
+async def get_plans(request: Request):
     """
     Get available payment plans.
     """
@@ -26,19 +26,16 @@ async def get_plans():
 
 @payment_bp.route('/checkout', methods=['POST'])
 @token_required
-async def create_checkout():
+async def create_checkout(request: Request):
     """
     Create a checkout session for a plan.
     Requires authentication.
     """
-    user_id = getattr(g, 'current_user_id', None)
+    user_id = getattr(request.ctx, 'current_user_id', None)
     if not user_id:
         return error_response("Authentication error.", 401)
 
-    if not request.is_json:
-        return error_response("Request must be JSON", 400)
-
-    data = request.get_json()
+    data = request.json
     plan_id = data.get('plan_id')
     success_url = data.get('success_url')
     cancel_url = data.get('cancel_url')
@@ -66,12 +63,12 @@ async def create_checkout():
         return error_response(f"Failed to create checkout session: {str(e)}", 500)
 
 @payment_bp.route('/webhook', methods=['POST'])
-async def webhook():
+async def webhook(request: Request):
     """
     Handle Stripe webhook events.
     """
-    payload = request.data
-    sig_header = request.headers.get('Stripe-Signature')
+    payload = request.body
+    sig_header = request.headers.get('stripe-signature')
 
     if not sig_header:
         return error_response("Missing Stripe signature", 400)
@@ -106,13 +103,13 @@ async def webhook():
     # Return a 200 response to acknowledge receipt of the event
     return success_response({"received": True})
 
-@payment_bp.route('/purchases', methods=['GET'])
+@payment_bp.route('/purchases')
 @token_required
-async def get_purchases():
+async def get_purchases(request: Request):
     """
     Get purchase history for the authenticated user.
     """
-    user_id = getattr(g, 'current_user_id', None)
+    user_id = getattr(request.ctx, 'current_user_id', None)
     if not user_id:
         return error_response("Authentication error.", 401)
 
