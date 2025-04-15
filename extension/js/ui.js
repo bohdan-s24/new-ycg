@@ -510,11 +510,32 @@ class UiManager {
    * @returns {string} The formatted HTML
    */
   formatChaptersHtml(chapters) {
-    if (!chapters || !chapters.chapters || chapters.chapters.length === 0) {
+    console.log('[UI-DEBUG] Formatting chapters:', chapters)
+
+    // Handle different response formats
+    if (!chapters) {
       return "<p>No chapters generated.</p>"
     }
 
-    const formattedChapters = chapters.chapters
+    // Check if we have a chapters array
+    const chaptersArray = chapters.chapters || []
+
+    // If we have no chapters but have formatted text, just show the text
+    if (chaptersArray.length === 0 && chapters.formatted_text) {
+      return `
+        <div class="chapters-text">
+          <pre>${chapters.formatted_text}</pre>
+        </div>
+      `
+    }
+
+    // If we have no chapters and no formatted text, show error
+    if (chaptersArray.length === 0 && !chapters.formatted_text) {
+      return "<p>No chapters generated.</p>"
+    }
+
+    // Format the chapters list
+    const formattedChapters = chaptersArray
       .map((chapter) => {
         return `<div class="chapter-item">
         <span class="chapter-time">${chapter.time}</span>
@@ -523,9 +544,10 @@ class UiManager {
       })
       .join("")
 
+    // Return both the formatted text and the chapters list
     return `
       <div class="chapters-text">
-        <pre>${chapters.formatted_text}</pre>
+        <pre>${chapters.formatted_text || ''}</pre>
       </div>
       <div class="chapters-list">
         ${formattedChapters}
@@ -561,8 +583,18 @@ class UiManager {
     this.store.dispatch("chapters", { type: "GENERATE_START" })
 
     try {
+      // Show a notification that generation is starting
+      this.showNotification("Generating chapters, please wait...", "info")
+
       // Generate chapters
+      console.log(`[UI] Generating chapters for video ${video.id}: ${video.title}`)
       const result = await this.api.generateChapters(video.id, video.title)
+      console.log(`[UI] Chapter generation result:`, result)
+
+      // Check if we have a valid response
+      if (!result || !result.data) {
+        throw new Error("Invalid response from server")
+      }
 
       // Dispatch generate success action
       this.store.dispatch("chapters", {
@@ -580,13 +612,23 @@ class UiManager {
     } catch (error) {
       console.error("[UI] Error generating chapters:", error)
 
+      // Get a user-friendly error message
+      let errorMessage = error.message || "Unknown error"
+
+      // Handle specific error types
+      if (errorMessage.includes("timeout") || errorMessage.includes("aborted")) {
+        errorMessage = "Request timed out. The server might be busy. Please try again later."
+      } else if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
+        errorMessage = "Network error. Please check your internet connection and try again."
+      }
+
       // Dispatch generate failure action
       this.store.dispatch("chapters", {
         type: "GENERATE_FAILURE",
-        payload: { error: error.message },
+        payload: { error: errorMessage },
       })
 
-      this.showNotification(`Error generating chapters: ${error.message}`, "error")
+      this.showNotification(`Error generating chapters: ${errorMessage}`, "error")
     }
   }
 

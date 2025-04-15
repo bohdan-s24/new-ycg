@@ -1,6 +1,7 @@
 import time
 import logging
-from flask import request, current_app, g
+import asyncio
+from flask import request, g
 from datetime import timedelta
 
 # Import services and utilities
@@ -245,26 +246,77 @@ async def verify_token():
 
     # Verify the token
     try:
-        # Validate the token syntax and expiry
+        # First, just validate the token syntax and expiry without database lookup
+        # This is a fast operation that doesn't require database access
         logging.info("[VERIFY_TOKEN] Starting token validation.")
         t_validate_start = time.time()
-        await auth_service.validate_token(token)
+        payload = await auth_service.validate_token(token)
         logging.info(f"[VERIFY_TOKEN] Token syntax/expiry validated in {time.time() - t_validate_start:.4f}s")
 
-        # Get the user associated with the token
-        logging.info("[VERIFY_TOKEN] Starting user lookup.")
-        t_get_user_start = time.time()
-        user = await auth_service.get_current_user(token)
-        logging.info(f"[VERIFY_TOKEN] User lookup completed in {time.time() - t_get_user_start:.4f}s")
+        # Extract user ID from token
+        user_id = payload.get("sub")
+        if not user_id:
+            logging.error("[VERIFY_TOKEN] Invalid token: missing user ID.")
+            return success_response({"valid": False})
 
-        # Token is valid and user exists
-        total_duration = time.time() - verify_start_time
-        logging.info(f"[VERIFY_TOKEN] Verification successful. Total time: {total_duration:.4f}s")
-        return success_response({
-            "valid": True,
-            "user_id": user.id,
-            "email": user.email
-        })
+        # For lightweight verification, we can return success here without database lookup
+        # This avoids the Redis timeouts that are causing 504 errors
+        # The frontend will still be able to use the token and will get proper validation
+        # when it makes actual API calls
+
+        # Check if client requested lightweight verification
+        lightweight = data.get('lightweight', False)
+        if lightweight:
+            total_duration = time.time() - verify_start_time
+            logging.info(f"[VERIFY_TOKEN] Lightweight verification successful. Total time: {total_duration:.4f}s")
+            return success_response({
+                "valid": True,
+                "user_id": user_id,
+                "lightweight": True
+            })
+
+        # For full verification, check if the user exists in the database
+        # This is optional and can be skipped if we're having timeout issues
+        try:
+            # Set a shorter timeout for the database operation
+            # If it takes too long, we'll still return success based on token validation
+            logging.info("[VERIFY_TOKEN] Starting user lookup.")
+            t_get_user_start = time.time()
+
+            # Use a timeout for the database operation
+            user = await asyncio.wait_for(
+                auth_service.get_user_by_id(user_id),
+                timeout=2.0  # 2 second timeout for database lookup
+            )
+
+            logging.info(f"[VERIFY_TOKEN] User lookup completed in {time.time() - t_get_user_start:.4f}s")
+
+            # Token is valid and user exists
+            total_duration = time.time() - verify_start_time
+            logging.info(f"[VERIFY_TOKEN] Full verification successful. Total time: {total_duration:.4f}s")
+            return success_response({
+                "valid": True,
+                "user_id": user_id,
+                "email": user.email if user else None
+            })
+        except asyncio.TimeoutError:
+            # If database lookup times out, still return success based on token validation
+            logging.warning(f"[VERIFY_TOKEN] Database lookup timed out, returning based on token validation only")
+            total_duration = time.time() - verify_start_time
+            return success_response({
+                "valid": True,
+                "user_id": user_id,
+                "fallback": True
+            })
+        except Exception as db_error:
+            # If database lookup fails for any other reason, still return success based on token validation
+            logging.warning(f"[VERIFY_TOKEN] Database lookup failed: {str(db_error)}, returning based on token validation only")
+            total_duration = time.time() - verify_start_time
+            return success_response({
+                "valid": True,
+                "user_id": user_id,
+                "fallback": True
+            })
     except AuthenticationError as e:
         total_duration = time.time() - verify_start_time
         logging.warning(f"[VERIFY_TOKEN] AuthenticationError: {str(e)}. Total time: {total_duration:.4f}s")

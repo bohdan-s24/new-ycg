@@ -170,6 +170,20 @@ async def validate_token(token: str) -> Dict[str, Any]:
         raise
 
 
+async def get_user_by_id(user_id: str) -> User:
+    """
+    Gets a user by ID directly from the user service.
+    This is a lightweight version of get_current_user that doesn't validate tokens.
+
+    Args:
+        user_id: The user ID to look up
+
+    Returns:
+        User object or None if not found
+    """
+    return await user_service.get_user_by_id(user_id)
+
+
 async def get_current_user(token: str) -> User:
     """
     Gets the current user from a token.

@@ -392,12 +392,15 @@ class ApiService {
 
       // Try to verify with the server, but don't fail if server is unavailable
       try {
-        // Verify with a shorter timeout to avoid long waits
+        // Use lightweight verification to avoid database lookups and timeouts
         const result = await this.request(
           this.API.AUTH.VERIFY_TOKEN,
           {
             method: "POST",
-            body: JSON.stringify({ token }),
+            body: JSON.stringify({
+              token,
+              lightweight: true // Request lightweight verification to avoid timeouts
+            }),
           },
           false, // Not requiring auth for this request
           5000,   // 5 second timeout - reduced further to avoid long waits
