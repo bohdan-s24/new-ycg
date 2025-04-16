@@ -82,7 +82,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user_id: str = Depend
 
         start_time_openai = time.time()
         logging.info(f"Calling OpenAI to generate chapters for {video_id} (User: {user_id})")
-        chapters = generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
+        chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         openai_duration = time.time() - start_time_openai
         logging.info(f"OpenAI call for {video_id} completed in {openai_duration:.2f}s (User: {user_id})")
 
