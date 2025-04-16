@@ -7,8 +7,13 @@ from ..utils.responses import success_response, error_response
 from ..utils.decorators import token_required_fastapi
 from ..utils.exceptions import AuthenticationError, ValidationError
 from pydantic import BaseModel
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi import Limiter
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
+router = limiter.exempt(router)
 
 class GoogleLoginData(BaseModel):
     token: str
@@ -46,7 +51,8 @@ async def register_user(user_data: UserCreate):
     return success_response(user_dict, 201)
 
 @router.post('/login')
-async def login_for_access_token(login_data: UserLogin):
+@limiter.limit("5/minute")
+async def login_for_access_token(request: Request, login_data: UserLogin):
     user = await auth_service.authenticate_user(login_data.email, login_data.password)
     if not user:
         return error_response("Incorrect email or password", 401)
@@ -58,7 +64,8 @@ async def login_for_access_token(login_data: UserLogin):
     return success_response({"access_token": access_token, "token_type": "bearer"})
 
 @router.post('/login/google')
-async def login_via_google(data: GoogleLoginData):
+@limiter.limit("5/minute")
+async def login_via_google(request: Request, data: GoogleLoginData):
     logging.info("Google login request received at /auth/login/google endpoint")
     logging.info(f"Processing login request with router: {router.prefix}")
     try:

@@ -7,8 +7,13 @@ from ..utils.responses import success_response, error_response
 from ..utils.decorators import token_required_fastapi
 from ..services import payment_service
 from ..config import Config
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi import Limiter
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
+router = limiter._rate_limit(router)
 
 class CheckoutRequest(BaseModel):
     plan_id: constr(min_length=3, max_length=32)
@@ -24,6 +29,7 @@ async def get_plans():
     return success_response({"plans": plans})
 
 @router.post('/checkout')
+@limiter.limit("10/minute")
 async def create_checkout(body: CheckoutRequest, user_id: str = Depends(token_required_fastapi)):
     """
     Create a checkout session for a plan.
@@ -70,6 +76,7 @@ async def webhook(request: Request):
     return success_response({"received": True})
 
 @router.get('/purchases')
+@limiter.limit("10/minute")
 async def get_purchases(user_id: str = Depends(token_required_fastapi)):
     """
     Get purchase history for the authenticated user.
