@@ -13,7 +13,6 @@ from slowapi import Limiter
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
-router = limiter._rate_limit(router)
 
 class CheckoutRequest(BaseModel):
     plan_id: constr(min_length=3, max_length=32)

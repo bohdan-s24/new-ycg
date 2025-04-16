@@ -10,7 +10,6 @@ from slowapi import Limiter
 # Create a router
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
-router = limiter._init_api_route(router)
 
 @router.get('/balance')
 @limiter.limit("5/minute")

@@ -13,7 +13,6 @@ from slowapi import Limiter
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
-router = limiter.exempt(router)
 
 class GoogleLoginData(BaseModel):
     token: str
