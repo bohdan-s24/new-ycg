@@ -17,8 +17,8 @@ register_exception_handlers(app)
 
 api_prefix = "/v1"
 
-# Set up SlowAPI Limiter
-limiter = Limiter(key_func=get_remote_address)
+# Set up SlowAPI Limiter with global rate limit
+limiter = Limiter(key_func=get_remote_address, default_limits=["5/minute"])
 app.state.limiter = limiter
 
 # Register SlowAPI exception handler
