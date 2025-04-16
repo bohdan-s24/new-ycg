@@ -28,7 +28,6 @@ async def get_plans():
     return success_response({"plans": plans})
 
 @router.post('/checkout')
-@limiter.limit("10/minute")
 async def create_checkout(body: CheckoutRequest, user_id: str = Depends(token_required_fastapi)):
     """
     Create a checkout session for a plan.
@@ -75,7 +74,6 @@ async def webhook(request: Request):
     return success_response({"received": True})
 
 @router.get('/purchases')
-@limiter.limit("10/minute")
 async def get_purchases(user_id: str = Depends(token_required_fastapi)):
     """
     Get purchase history for the authenticated user.

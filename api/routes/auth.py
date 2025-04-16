@@ -50,7 +50,6 @@ async def register_user(user_data: UserCreate):
     return success_response(user_dict, 201)
 
 @router.post('/login')
-@limiter.limit("5/minute")
 async def login_for_access_token(request: Request, login_data: UserLogin):
     user = await auth_service.authenticate_user(login_data.email, login_data.password)
     if not user:
@@ -63,7 +62,6 @@ async def login_for_access_token(request: Request, login_data: UserLogin):
     return success_response({"access_token": access_token, "token_type": "bearer"})
 
 @router.post('/login/google')
-@limiter.limit("5/minute")
 async def login_via_google(request: Request, data: GoogleLoginData):
     logging.info("Google login request received at /auth/login/google endpoint")
     logging.info(f"Processing login request with router: {router.prefix}")
