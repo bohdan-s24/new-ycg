@@ -12,16 +12,16 @@ bearer_scheme = HTTPBearer()
 
 async def token_required_fastapi(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
-) -> str:
+) -> object:
     """
     FastAPI dependency to ensure a valid JWT token is present and load the user.
-    Returns the user_id for use in endpoints.
+    Returns the user for use in endpoints.
     """
     token = credentials.credentials
     try:
         user = await auth_service.get_current_user(token)
         # You can return the user object or just the user_id as needed
-        return user.id
+        return user
     except AuthenticationError as e:
         logging.error(f"Authentication error: {str(e)}")
         raise HTTPException(

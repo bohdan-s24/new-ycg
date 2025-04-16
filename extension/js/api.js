@@ -107,6 +107,7 @@ class ApiService {
    * @returns {Promise<Object>} The response data
    */
   async request(url, options = {}, requiresAuth = false, timeout = 15000, shouldRefreshToken = true) {
+    let timeoutId = undefined;
     // Set default options
     const defaultOptions = {
       method: "GET",
@@ -154,7 +155,6 @@ class ApiService {
       }
 
       // Add timeout if not already set
-      let timeoutId
       let controller
       if (!mergedOptions.signal) {
         controller = new AbortController()
@@ -835,6 +835,7 @@ class ApiService {
    * @returns {Promise<Object>} The login result
    */
   async loginWithGoogle(googleToken) {
+    let timeoutId = undefined;
     // Add retry logic specifically for login
     const maxRetries = 3
     const baseDelay = 1000 // 1 second
@@ -845,7 +846,7 @@ class ApiService {
 
         // Use a longer timeout for login requests
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => {
+        timeoutId = setTimeout(() => {
           console.log('[API] Login request timed out after 20 seconds')
           controller.abort(new DOMException('Login request timed out', 'TimeoutError'))
         }, 20000) // 20 second timeout
