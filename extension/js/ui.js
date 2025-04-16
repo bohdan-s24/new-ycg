@@ -471,9 +471,12 @@ class UiManager {
 
       // Get current version
       const currentVersion = chapters.versions[chapters.currentVersionIndex]
+      console.log("[UI-DEBUG] Current chapter version:", currentVersion)
+      console.log("[UI-DEBUG] All chapter versions:", chapters.versions)
+      console.log("[UI-DEBUG] Current version index:", chapters.currentVersionIndex)
 
       // Update chapters content
-      if (chaptersContent && currentVersion) {
+      if (chaptersContent) {
         chaptersContent.innerHTML = this.formatChaptersHtml(currentVersion)
       }
 
