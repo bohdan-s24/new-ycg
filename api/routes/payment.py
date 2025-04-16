@@ -19,6 +19,9 @@ class CheckoutRequest(BaseModel):
     success_url: HttpUrl
     cancel_url: HttpUrl
 
+class User(BaseModel):
+    id: str
+
 @router.get('/plans')
 async def get_plans():
     """
@@ -28,13 +31,13 @@ async def get_plans():
     return success_response({"plans": plans})
 
 @router.post('/checkout')
-async def create_checkout(body: CheckoutRequest, user_id: str = Depends(token_required_fastapi)):
+async def create_checkout(body: CheckoutRequest, user: User = Depends(token_required_fastapi)):
     """
     Create a checkout session for a plan.
     Requires authentication.
     """
     checkout_session = await payment_service.create_checkout_session(
-        user_id,
+        user.id,
         body.plan_id,
         str(body.success_url),
         str(body.cancel_url)
@@ -74,9 +77,9 @@ async def webhook(request: Request):
     return success_response({"received": True})
 
 @router.get('/purchases')
-async def get_purchases(user_id: str = Depends(token_required_fastapi)):
+async def get_purchases(user: User = Depends(token_required_fastapi)):
     """
     Get purchase history for the authenticated user.
     """
-    purchases = await payment_service.get_user_purchases(user_id)
+    purchases = await payment_service.get_user_purchases(user.id)
     return success_response({"purchases": purchases})

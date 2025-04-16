@@ -29,28 +29,28 @@ class GenerateChaptersRequest(BaseModel):
     video_id: constr(min_length=8, max_length=16, pattern=r"^[\w-]{8,16}$")
 
 @router.post("/chapters/generate")
-async def generate_chapters(body: GenerateChaptersRequest, user_id: str = Depends(token_required_fastapi)):
+async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(token_required_fastapi)):
     """
     Generate chapters for a YouTube video, requiring authentication and credits.
     Implements distributed locking to prevent simultaneous generation.
     """
     video_id = body.video_id
-    lock_key = f"{LOCK_PREFIX}{video_id}:{user_id}"
+    lock_key = f"{LOCK_PREFIX}{video_id}:{user.id}"
     lock_acquired = await redis_operation("acquire_chapter_lock", acquire_chapter_lock, lock_key, LOCK_TTL_SECONDS)
     if not lock_acquired:
         logging.warning(f"Lock not acquired for {lock_key}: another generation in progress.")
         raise HTTPException(status_code=429, detail="Chapter generation already in progress. Please try again shortly.")
     try:
         # --- Credit Check ---
-        has_credits = await credits_service.has_sufficient_credits(user_id)
+        has_credits = await credits_service.has_sufficient_credits(user.id)
         if not has_credits:
-            logging.warning(f"User {user_id} attempted generation with insufficient credits for video {video_id}.")
+            logging.warning(f"User {user.id} attempted generation with insufficient credits for video {video_id}.")
             raise HTTPException(status_code=402, detail="Insufficient credits to generate chapters.")
 
         # Check cache first
         cached_chapters = get_from_cache(video_id)
         if cached_chapters:
-            logging.info(f"Returning cached chapters for {video_id} (User: {user_id})")
+            logging.info(f"Returning cached chapters for {video_id} (User: {user.id})")
             return JSONResponse(content={
                 'videoId': video_id,
                 'chapters': cached_chapters,
@@ -60,15 +60,15 @@ async def generate_chapters(body: GenerateChaptersRequest, user_id: str = Depend
         # Get transcript
         start_time_transcript = time.time()
         timeout_limit = 45
-        logging.info(f"Attempting to fetch transcript for {video_id} with timeout {timeout_limit}s (User: {user_id})")
+        logging.info(f"Attempting to fetch transcript for {video_id} with timeout {timeout_limit}s (User: {user.id})")
         transcript_data = fetch_transcript(video_id, timeout_limit)
 
         if not transcript_data:
-            logging.error(f"Failed to fetch transcript for {video_id} after {time.time() - start_time_transcript:.2f} seconds (User: {user_id})")
+            logging.error(f"Failed to fetch transcript for {video_id} after {time.time() - start_time_transcript:.2f} seconds (User: {user.id})")
             raise HTTPException(status_code=500, detail="Failed to fetch transcript after multiple attempts")
 
         elapsed_time_transcript = time.time() - start_time_transcript
-        logging.info(f"Successfully retrieved transcript for {video_id} with {len(transcript_data)} entries in {elapsed_time_transcript:.2f} seconds (User: {user_id})")
+        logging.info(f"Successfully retrieved transcript for {video_id} with {len(transcript_data)} entries in {elapsed_time_transcript:.2f} seconds (User: {user.id})")
 
         last_entry = transcript_data[-1]
         video_duration_seconds = last_entry['start'] + last_entry['duration']
@@ -76,38 +76,38 @@ async def generate_chapters(body: GenerateChaptersRequest, user_id: str = Depend
 
         start_time_format = time.time()
         formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
-        logging.info(f"Formatted transcript ({transcript_length} lines) for {video_id} in {time.time() - start_time_format:.2f}s (User: {user_id})")
+        logging.info(f"Formatted transcript ({transcript_length} lines) for {video_id} in {time.time() - start_time_format:.2f}s (User: {user.id})")
 
         system_prompt = create_chapter_prompt(video_duration_minutes)
 
         start_time_openai = time.time()
-        logging.info(f"Calling OpenAI to generate chapters for {video_id} (User: {user_id})")
+        logging.info(f"Calling OpenAI to generate chapters for {video_id} (User: {user.id})")
         chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         openai_duration = time.time() - start_time_openai
-        logging.info(f"OpenAI call for {video_id} completed in {openai_duration:.2f}s (User: {user_id})")
+        logging.info(f"OpenAI call for {video_id} completed in {openai_duration:.2f}s (User: {user.id})")
 
         if not chapters:
-            logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user_id})")
+            logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user.id})")
             raise HTTPException(status_code=500, detail="Failed to generate chapters with OpenAI")
 
         chapter_count = len(chapters.strip().split("\n"))
-        logging.info(f"Generated {chapter_count} chapters for {video_id} (User: {user_id})")
+        logging.info(f"Generated {chapter_count} chapters for {video_id} (User: {user.id})")
 
         # --- Credit Deduction ---
         try:
             start_time_deduct = time.time()
-            deduction_successful = await credits_service.deduct_credits(user_id)
+            deduction_successful = await credits_service.deduct_credits(user.id)
             if not deduction_successful:
-                logging.error(f"Failed to deduct credits for user {user_id} after successful generation for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
+                logging.error(f"Failed to deduct credits for user {user.id} after successful generation for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
             else:
-                logging.info(f"Successfully deducted 1 credit from user {user_id} for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
+                logging.info(f"Successfully deducted 1 credit from user {user.id} for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
         except Exception as e:
-            logging.error(f"Exception during credit deduction for user {user_id} video {video_id}: {e}")
+            logging.error(f"Exception during credit deduction for user {user.id} video {video_id}: {e}")
         # --- End Credit Deduction ---
 
         start_time_cache = time.time()
         add_to_cache(video_id, chapters)
-        logging.info(f"Added chapters for {video_id} to cache in {time.time() - start_time_cache:.2f}s (User: {user_id})")
+        logging.info(f"Added chapters for {video_id} to cache in {time.time() - start_time_cache:.2f}s (User: {user.id})")
 
         return JSONResponse(content={
             'videoId': video_id,
