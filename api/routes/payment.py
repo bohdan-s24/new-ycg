@@ -10,6 +10,7 @@ from ..config import Config
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi import Limiter
+from ..models.user import User
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -18,9 +19,6 @@ class CheckoutRequest(BaseModel):
     plan_id: constr(min_length=3, max_length=32)
     success_url: HttpUrl
     cancel_url: HttpUrl
-
-class User(BaseModel):
-    id: str
 
 @router.get('/plans')
 async def get_plans():

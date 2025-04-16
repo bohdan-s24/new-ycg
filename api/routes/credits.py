@@ -6,7 +6,7 @@ from ..utils.responses import success_response, error_response
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi import Limiter
-from ..models import User  # Assuming User model is defined in models.py
+from ..models.user import User
 
 # Create a router
 router = APIRouter()

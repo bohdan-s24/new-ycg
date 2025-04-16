@@ -11,6 +11,7 @@ from ..utils.transcript import format_transcript_for_model
 from ..services import credits_service
 from ..utils.decorators import token_required_fastapi
 from ..utils.db import redis_operation
+from ..models.user import User
 import asyncio
 
 LOCK_TTL_SECONDS = 120
