@@ -54,7 +54,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
             logging.info(f"Returning cached chapters for {video_id} (User: {user.id})")
             return JSONResponse(content={
                 'videoId': video_id,
-                'chapters': cached_chapters,
+                'formatted_text': cached_chapters,
                 'fromCache': True
             })
 
@@ -112,7 +112,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
 
         return JSONResponse(content={
             'videoId': video_id,
-            'chapters': chapters,
+            'formatted_text': chapters,
             'fromCache': False
         })
     finally:

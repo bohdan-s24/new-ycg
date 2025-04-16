@@ -510,25 +510,12 @@ class UiManager {
    * @returns {string} The formatted HTML
    */
   formatChaptersHtml(chapters) {
-    if (!chapters || !chapters.chapters || chapters.chapters.length === 0) {
+    if (!chapters || !chapters.formatted_text || chapters.formatted_text.trim().length === 0) {
       return "<p>No chapters generated.</p>"
     }
-
-    const formattedChapters = chapters.chapters
-      .map((chapter) => {
-        return `<div class="chapter-item">
-        <span class="chapter-time">${chapter.time}</span>
-        <span class="chapter-title">${chapter.title}</span>
-      </div>`
-      })
-      .join("")
-
     return `
       <div class="chapters-text">
         <pre>${chapters.formatted_text}</pre>
-      </div>
-      <div class="chapters-list">
-        ${formattedChapters}
       </div>
     `
   }
