@@ -38,6 +38,7 @@ async def get_credit_balance(user_id: str) -> int:
 
     async def _get_balance(redis, _):
         balance = await redis.get(key)
+        logging.info(f"[DEBUG] get_credit_balance: Redis key={key}, raw value={balance}")
         return int(balance) if balance is not None else 0
 
     return await redis_operation("get_credit_balance", _get_balance, user_id)
