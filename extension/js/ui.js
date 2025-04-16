@@ -516,11 +516,21 @@ class UiManager {
     if (!chapters || !chapters.formatted_text || chapters.formatted_text.trim().length === 0) {
       return "<p>No chapters generated.</p>"
     }
-    return `
+    // Optionally, render both a list and raw text if chapters.chapters is present
+    let html = ''
+    if (Array.isArray(chapters.chapters) && chapters.chapters.length > 0) {
+      html += '<ol class="chapter-list">'
+      for (const ch of chapters.chapters) {
+        html += `<li><strong>${ch.time}</strong> — ${ch.title}</li>`
+      }
+      html += '</ol>'
+    }
+    html += `
       <div class="chapters-text">
         <pre>${chapters.formatted_text}</pre>
       </div>
     `
+    return html
   }
 
   /**
@@ -708,6 +718,29 @@ class UiManager {
       console.log("[UI] Refreshing popup after logout")
       window.location.reload()
     }, 1000)
+  }
+
+  /**
+   * Fetch chapters for a video (add logging)
+   * @param {string} videoId - The YouTube video ID
+   */
+  async fetchChapters(videoId) {
+    console.log(`[UI-DEBUG] fetchChapters called for videoId: ${videoId}`)
+    try {
+      const result = await this.api.generateChapters(videoId)
+      console.log(`[UI-DEBUG] fetchChapters result:`, result)
+      if (result && result.data && result.data.formatted_text) {
+        this.store.dispatch("chapters", {
+          type: "GENERATE_SUCCESS",
+          payload: { chapters: result.data },
+        })
+      } else {
+        this.showNotification("No chapters found for this video.", "info")
+      }
+    } catch (error) {
+      console.error(`[UI-DEBUG] fetchChapters error:`, error)
+      this.showNotification("Failed to fetch chapters.", "error")
+    }
   }
 
   /**

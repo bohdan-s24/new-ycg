@@ -29,6 +29,19 @@ router = APIRouter()
 class GenerateChaptersRequest(BaseModel):
     video_id: constr(min_length=8, max_length=16, pattern=r"^[\w-]{8,16}$")
 
+# --- Add parse_chapters_text helper ---
+def parse_chapters_text(chapters_text: str):
+    parsed_chapters = []
+    formatted_text = chapters_text
+    for line in chapters_text.strip().split('\n'):
+        if not line.strip():
+            continue
+        parts = line.split(' ', 1)
+        if len(parts) == 2:
+            time, title = parts
+            parsed_chapters.append({'time': time.strip(), 'title': title.strip()})
+    return parsed_chapters, formatted_text
+
 @router.post("/chapters/generate")
 async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(token_required_fastapi)):
     """
@@ -37,6 +50,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
     """
     video_id = body.video_id
     lock_key = f"{LOCK_PREFIX}{video_id}:{user.id}"
+    logging.info(f"[CHAPTERS-DEBUG] generate_chapters called for video_id={video_id}, user_id={user.id}")
     lock_acquired = await redis_operation("acquire_chapter_lock", acquire_chapter_lock, lock_key, LOCK_TTL_SECONDS)
     if not lock_acquired:
         logging.warning(f"Lock not acquired for {lock_key}: another generation in progress.")
@@ -44,17 +58,22 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
     try:
         # --- Credit Check ---
         has_credits = await credits_service.has_sufficient_credits(user.id)
+        logging.info(f"[CHAPTERS-DEBUG] User {user.id} has credits: {has_credits}")
         if not has_credits:
             logging.warning(f"User {user.id} attempted generation with insufficient credits for video {video_id}.")
             raise HTTPException(status_code=402, detail="Insufficient credits to generate chapters.")
 
         # Check cache first
         cached_chapters = get_from_cache(video_id)
+        logging.info(f"[CHAPTERS-DEBUG] Cached chapters for {video_id}: {bool(cached_chapters)}")
         if cached_chapters:
             logging.info(f"Returning cached chapters for {video_id} (User: {user.id})")
+            logging.info(f"[CHAPTERS-DEBUG] Returning cached chapters: {repr(cached_chapters)[:200]}")
+            parsed_chapters, formatted_text = parse_chapters_text(cached_chapters)
             return JSONResponse(content={
                 'videoId': video_id,
-                'formatted_text': cached_chapters,
+                'chapters': parsed_chapters,
+                'formatted_text': formatted_text,
                 'fromCache': True
             })
 
@@ -63,6 +82,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
         timeout_limit = 45
         logging.info(f"Attempting to fetch transcript for {video_id} with timeout {timeout_limit}s (User: {user.id})")
         transcript_data = fetch_transcript(video_id, timeout_limit)
+        logging.info(f"[CHAPTERS-DEBUG] Transcript data for {video_id}: {repr(transcript_data)[:200]}")
 
         if not transcript_data:
             logging.error(f"Failed to fetch transcript for {video_id} after {time.time() - start_time_transcript:.2f} seconds (User: {user.id})")
@@ -78,6 +98,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
         start_time_format = time.time()
         formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
         logging.info(f"Formatted transcript ({transcript_length} lines) for {video_id} in {time.time() - start_time_format:.2f}s (User: {user.id})")
+        logging.info(f"[CHAPTERS-DEBUG] Formatted transcript sample: {repr(formatted_transcript)[:200]}")
 
         system_prompt = create_chapter_prompt(video_duration_minutes)
 
@@ -86,6 +107,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
         chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         openai_duration = time.time() - start_time_openai
         logging.info(f"OpenAI call for {video_id} completed in {openai_duration:.2f}s (User: {user.id})")
+        logging.info(f"[CHAPTERS-DEBUG] Raw chapters from OpenAI: {repr(chapters)[:200]}")
 
         if not chapters:
             logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user.id})")
@@ -102,6 +124,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
                 logging.error(f"Failed to deduct credits for user {user.id} after successful generation for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
             else:
                 logging.info(f"Successfully deducted 1 credit from user {user.id} for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
+            logging.info(f"[CHAPTERS-DEBUG] Deduction successful: {deduction_successful}")
         except Exception as e:
             logging.error(f"Exception during credit deduction for user {user.id} video {video_id}: {e}")
         # --- End Credit Deduction ---
@@ -109,10 +132,13 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
         start_time_cache = time.time()
         add_to_cache(video_id, chapters)
         logging.info(f"Added chapters for {video_id} to cache in {time.time() - start_time_cache:.2f}s (User: {user.id})")
+        logging.info(f"[CHAPTERS-DEBUG] Chapters cached for {video_id}")
 
+        parsed_chapters, formatted_text = parse_chapters_text(chapters)
         return JSONResponse(content={
             'videoId': video_id,
-            'formatted_text': chapters,
+            'chapters': parsed_chapters,
+            'formatted_text': formatted_text,
             'fromCache': False
         })
     finally:
