@@ -64,14 +64,11 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
             logging.warning(f"User {user.id} attempted generation with insufficient credits for video {video_id}.")
             raise HTTPException(status_code=402, detail="Insufficient credits to generate chapters.")
 
-        # Check cache first unless force is True
+        cache_obj = get_from_cache(video_id)
         if not body.force:
-            cached_chapters = get_from_cache(video_id)
-            logging.info(f"[CHAPTERS-DEBUG] Cached chapters for {video_id}: {bool(cached_chapters)}")
-            if cached_chapters:
+            if cache_obj and cache_obj.get('chapters'):
                 logging.info(f"Returning cached chapters for {video_id} (User: {user.id})")
-                logging.info(f"[CHAPTERS-DEBUG] Returning cached chapters: {repr(cached_chapters)[:200]}")
-                parsed_chapters, formatted_text = parse_chapters_text(cached_chapters)
+                parsed_chapters, formatted_text = parse_chapters_text(cache_obj['chapters'])
                 return JSONResponse(content={
                     'videoId': video_id,
                     'chapters': parsed_chapters,
@@ -79,63 +76,46 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
                     'fromCache': True
                 })
 
-        # Get transcript
-        start_time_transcript = time.time()
-        timeout_limit = 45
-        logging.info(f"Attempting to fetch transcript for {video_id} with timeout {timeout_limit}s (User: {user.id})")
-        transcript_data = fetch_transcript(video_id, timeout_limit)
-        logging.info(f"[CHAPTERS-DEBUG] Transcript data for {video_id}: {repr(transcript_data)[:200]}")
+        # Use cached formatted transcript if available (for force regenerate)
+        formatted_transcript = None
+        transcript_data = None
+        if body.force and cache_obj and cache_obj.get('formatted_transcript'):
+            formatted_transcript = cache_obj['formatted_transcript']
+            logging.info(f"[CHAPTERS-DEBUG] Using cached formatted transcript for {video_id} (User: {user.id})")
+        else:
+            # Get transcript and format it
+            timeout_limit = 45
+            logging.info(f"Attempting to fetch transcript for {video_id} with timeout {timeout_limit}s (User: {user.id})")
+            transcript_data = fetch_transcript(video_id, timeout_limit)
+            if not transcript_data:
+                logging.error(f"Failed to fetch transcript for {video_id} (User: {user.id})")
+                raise HTTPException(status_code=500, detail="Failed to fetch transcript after multiple attempts")
+            formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
+            logging.info(f"[CHAPTERS-DEBUG] Formatted transcript sample: {repr(formatted_transcript)[:200]}")
 
-        if not transcript_data:
-            logging.error(f"Failed to fetch transcript for {video_id} after {time.time() - start_time_transcript:.2f} seconds (User: {user.id})")
-            raise HTTPException(status_code=500, detail="Failed to fetch transcript after multiple attempts")
-
-        elapsed_time_transcript = time.time() - start_time_transcript
-        logging.info(f"Successfully retrieved transcript for {video_id} with {len(transcript_data)} entries in {elapsed_time_transcript:.2f} seconds (User: {user.id})")
-
-        last_entry = transcript_data[-1]
-        video_duration_seconds = last_entry['start'] + last_entry['duration']
-        video_duration_minutes = video_duration_seconds / 60
-
-        start_time_format = time.time()
-        formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
-        logging.info(f"Formatted transcript ({transcript_length} lines) for {video_id} in {time.time() - start_time_format:.2f}s (User: {user.id})")
-        logging.info(f"[CHAPTERS-DEBUG] Formatted transcript sample: {repr(formatted_transcript)[:200]}")
-
+        # Generate chapters via OpenAI
+        if not transcript_data and cache_obj and cache_obj.get('formatted_transcript'):
+            # If we used cached formatted_transcript, estimate duration
+            video_duration_minutes = 10  # fallback value
+        else:
+            last_entry = transcript_data[-1] if transcript_data else None
+            video_duration_seconds = last_entry['start'] + last_entry['duration'] if last_entry else 600
+            video_duration_minutes = video_duration_seconds / 60
         system_prompt = create_chapter_prompt(video_duration_minutes)
-
-        start_time_openai = time.time()
-        logging.info(f"Calling OpenAI to generate chapters for {video_id} (User: {user.id})")
         chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
-        openai_duration = time.time() - start_time_openai
-        logging.info(f"OpenAI call for {video_id} completed in {openai_duration:.2f}s (User: {user.id})")
-        logging.info(f"[CHAPTERS-DEBUG] Raw chapters from OpenAI: {repr(chapters)[:200]}")
-
         if not chapters:
             logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user.id})")
             raise HTTPException(status_code=500, detail="Failed to generate chapters with OpenAI")
 
-        chapter_count = len(chapters.strip().split("\n"))
-        logging.info(f"Generated {chapter_count} chapters for {video_id} (User: {user.id})")
-
-        # --- Credit Deduction ---
+        # Deduct credit
         try:
-            start_time_deduct = time.time()
             deduction_successful = await credits_service.deduct_credits(user.id)
-            if not deduction_successful:
-                logging.error(f"Failed to deduct credits for user {user.id} after successful generation for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
-            else:
-                logging.info(f"Successfully deducted 1 credit from user {user.id} for video {video_id}. Took {time.time() - start_time_deduct:.2f}s")
-            logging.info(f"[CHAPTERS-DEBUG] Deduction successful: {deduction_successful}")
+            logging.info(f"Deduction successful: {deduction_successful}")
         except Exception as e:
             logging.error(f"Exception during credit deduction for user {user.id} video {video_id}: {e}")
-        # --- End Credit Deduction ---
 
-        start_time_cache = time.time()
-        add_to_cache(video_id, chapters)
-        logging.info(f"Added chapters for {video_id} to cache in {time.time() - start_time_cache:.2f}s (User: {user.id})")
-        logging.info(f"[CHAPTERS-DEBUG] Chapters cached for {video_id}")
-
+        # Cache new chapters and formatted transcript
+        add_to_cache(video_id, chapters, formatted_transcript)
         parsed_chapters, formatted_text = parse_chapters_text(chapters)
         return JSONResponse(content={
             'videoId': video_id,
