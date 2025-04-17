@@ -58,7 +58,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
     if body.force and cache_obj and cache_obj.get('openai_prompt'):
         openai_prompt = cache_obj['openai_prompt']
         logging.info(f"[CHAPTERS-DEBUG] Using cached OpenAI prompt for {video_id} (User: {user.id})")
-        chapters = await generate_chapters_with_openai(None, video_id, openai_prompt, is_full_prompt=True)
+        chapters = await generate_chapters_with_openai(None, video_id, openai_prompt)
         if not chapters:
             logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user.id}) [prompt replay]")
             raise HTTPException(status_code=500, detail="Failed to generate chapters with OpenAI")
