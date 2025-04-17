@@ -52,19 +52,41 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
     video_id = body.video_id
     lock_key = f"{LOCK_PREFIX}{video_id}:{user.id}"
     logging.info(f"[CHAPTERS-DEBUG] generate_chapters called for video_id={video_id}, user_id={user.id}, force={body.force}")
+
+    cache_obj = get_from_cache(video_id)
+    # If force regenerate and cached OpenAI prompt exists, skip lock and transcript fetching
+    if body.force and cache_obj and cache_obj.get('openai_prompt'):
+        openai_prompt = cache_obj['openai_prompt']
+        logging.info(f"[CHAPTERS-DEBUG] Using cached OpenAI prompt for {video_id} (User: {user.id})")
+        chapters = await generate_chapters_with_openai(None, video_id, openai_prompt, is_full_prompt=True)
+        if not chapters:
+            logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user.id}) [prompt replay]")
+            raise HTTPException(status_code=500, detail="Failed to generate chapters with OpenAI")
+        try:
+            deduction_successful = await credits_service.deduct_credits(user.id)
+            logging.info(f"Deduction successful: {deduction_successful}")
+        except Exception as e:
+            logging.error(f"Exception during credit deduction for user {user.id} video {video_id}: {e}")
+        add_to_cache(video_id, chapters, openai_prompt)
+        parsed_chapters, formatted_text = parse_chapters_text(chapters)
+        return JSONResponse(content={
+            'videoId': video_id,
+            'chapters': parsed_chapters,
+            'formatted_text': formatted_text,
+            'fromCache': False
+        })
+
+    # Otherwise, use lock for initial generation or if prompt is not cached
     lock_acquired = await redis_operation("acquire_chapter_lock", acquire_chapter_lock, lock_key, LOCK_TTL_SECONDS)
     if not lock_acquired:
         logging.warning(f"Lock not acquired for {lock_key}: another generation in progress.")
         raise HTTPException(status_code=429, detail="Chapter generation already in progress. Please try again shortly.")
     try:
-        # --- Credit Check ---
         has_credits = await credits_service.has_sufficient_credits(user.id)
         logging.info(f"[CHAPTERS-DEBUG] User {user.id} has credits: {has_credits}")
         if not has_credits:
             logging.warning(f"User {user.id} attempted generation with insufficient credits for video {video_id}.")
             raise HTTPException(status_code=402, detail="Insufficient credits to generate chapters.")
-
-        cache_obj = get_from_cache(video_id)
         if not body.force:
             if cache_obj and cache_obj.get('chapters'):
                 logging.info(f"Returning cached chapters for {video_id} (User: {user.id})")
@@ -75,47 +97,29 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
                     'formatted_text': formatted_text,
                     'fromCache': True
                 })
-
-        # Use cached formatted transcript if available (for force regenerate)
-        formatted_transcript = None
-        transcript_data = None
-        if body.force and cache_obj and cache_obj.get('formatted_transcript'):
-            formatted_transcript = cache_obj['formatted_transcript']
-            logging.info(f"[CHAPTERS-DEBUG] Using cached formatted transcript for {video_id} (User: {user.id})")
-        else:
-            # Get transcript and format it
-            timeout_limit = 45
-            logging.info(f"Attempting to fetch transcript for {video_id} with timeout {timeout_limit}s (User: {user.id})")
-            transcript_data = fetch_transcript(video_id, timeout_limit)
-            if not transcript_data:
-                logging.error(f"Failed to fetch transcript for {video_id} (User: {user.id})")
-                raise HTTPException(status_code=500, detail="Failed to fetch transcript after multiple attempts")
-            formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
-            logging.info(f"[CHAPTERS-DEBUG] Formatted transcript sample: {repr(formatted_transcript)[:200]}")
-
-        # Generate chapters via OpenAI
-        if not transcript_data and cache_obj and cache_obj.get('formatted_transcript'):
-            # If we used cached formatted_transcript, estimate duration
-            video_duration_minutes = 10  # fallback value
-        else:
-            last_entry = transcript_data[-1] if transcript_data else None
-            video_duration_seconds = last_entry['start'] + last_entry['duration'] if last_entry else 600
-            video_duration_minutes = video_duration_seconds / 60
+        # Get transcript and format it
+        timeout_limit = 45
+        logging.info(f"Attempting to fetch transcript for {video_id} with timeout {timeout_limit}s (User: {user.id})")
+        transcript_data = fetch_transcript(video_id, timeout_limit)
+        if not transcript_data:
+            logging.error(f"Failed to fetch transcript for {video_id} (User: {user.id})")
+            raise HTTPException(status_code=500, detail="Failed to fetch transcript after multiple attempts")
+        formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
+        last_entry = transcript_data[-1]
+        video_duration_seconds = last_entry['start'] + last_entry['duration']
+        video_duration_minutes = video_duration_seconds / 60
         system_prompt = create_chapter_prompt(video_duration_minutes)
+        openai_prompt = system_prompt + '\n' + formatted_transcript
         chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         if not chapters:
             logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user.id})")
             raise HTTPException(status_code=500, detail="Failed to generate chapters with OpenAI")
-
-        # Deduct credit
         try:
             deduction_successful = await credits_service.deduct_credits(user.id)
             logging.info(f"Deduction successful: {deduction_successful}")
         except Exception as e:
             logging.error(f"Exception during credit deduction for user {user.id} video {video_id}: {e}")
-
-        # Cache new chapters and formatted transcript
-        add_to_cache(video_id, chapters, formatted_transcript)
+        add_to_cache(video_id, chapters, openai_prompt)
         parsed_chapters, formatted_text = parse_chapters_text(chapters)
         return JSONResponse(content={
             'videoId': video_id,
