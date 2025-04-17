@@ -304,6 +304,7 @@ class UiManager {
    * Ensure the main content is created
    */
   ensureMainContentCreated() {
+    console.log("[DEBUG] ensureMainContentCreated called");
     const { mainContentArea } = this.elements.containers;
 
     if (!mainContentArea) return;
@@ -400,6 +401,7 @@ class UiManager {
    * Set up event listeners for main content
    */
   setupMainContentEventListeners() {
+    console.log("[DEBUG] setupMainContentEventListeners called");
     const { generateButton, copyButton, regenerateButton, prevVersionButton, nextVersionButton } = this.elements.main;
 
     if (generateButton) {
@@ -529,6 +531,7 @@ class UiManager {
    * @param {boolean} [force] - Whether to force regeneration (bypass cache)
    */
   async handleGenerateChapters(force = false) {
+    console.log("[DEBUG] handleGenerateChapters called, force:", force);
     if (!this.store || !this.api) {
       this.showNotification("API service not available", "error");
       return;
@@ -616,6 +619,7 @@ class UiManager {
    * Handle regenerate chapters button click
    */
   handleRegenerateChapters() {
+    console.log("[DEBUG] handleRegenerateChapters called");
     // Pass force=true to handleGenerateChapters
     this.handleGenerateChapters(true);
   }
