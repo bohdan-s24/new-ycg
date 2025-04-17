@@ -10,11 +10,11 @@
  */
 class VideoService {
   constructor() {
-    this.store = window.YCG_STORE
-    this.lastCheckTime = 0
-    this.checkInterval = 1000 // 1 second
-    this.isInitialized = false
-    this.authStateListener = this.handleAuthStateChange.bind(this)
+    this.store = window.YCG_STORE;
+    this.lastCheckTime = 0;
+    this.checkInterval = 1000; // 1 second
+    this.isInitialized = false;
+    this.authStateListener = this.handleAuthStateChange.bind(this);
   }
 
   /**
@@ -22,45 +22,45 @@ class VideoService {
    */
   init() {
     if (this.isInitialized) {
-      console.log("[Video] Video service already initialized")
-      return
+      console.log("[Video] Video service already initialized");
+      return;
     }
 
-    console.log("[Video] Initializing video service")
+    console.log("[Video] Initializing video service");
 
     // Set up auth state change listener
     if (this.store) {
-      console.log("[Video] Setting up auth state change listener")
-      this.store.subscribe(this.authStateListener)
+      console.log("[Video] Setting up auth state change listener");
+      this.store.subscribe(this.authStateListener);
     }
 
     // Only check for video if user is logged in
     if (this.isUserLoggedIn()) {
-      console.log("[Video] User is logged in, checking for video")
-      this.checkForVideo()
+      console.log("[Video] User is logged in, checking for video");
+      this.checkForVideo();
     } else {
-      console.log("[Video] User is not logged in, skipping video check")
+      console.log("[Video] User is not logged in, skipping video check");
     }
 
-    this.isInitialized = true
-    console.log("[Video] Video service initialized")
+    this.isInitialized = true;
+    console.log("[Video] Video service initialized");
   }
 
   /**
    * Handle auth state changes
    */
   handleAuthStateChange() {
-    if (!this.store) return
+    if (!this.store) return;
 
-    const state = this.store.getState()
-    const isLoggedIn = state && state.auth && state.auth.isAuthenticated && state.auth.token
+    const state = this.store.getState();
+    const isLoggedIn = state && state.auth && state.auth.isAuthenticated && state.auth.token;
 
     // Check for video when user logs in
     if (isLoggedIn) {
-      console.log("[Video] Auth state changed: User is logged in, checking for video")
-      this.checkForVideo()
+      console.log("[Video] Auth state changed: User is logged in, checking for video");
+      this.checkForVideo();
     } else {
-      console.log("[Video] Auth state changed: User is not logged in")
+      console.log("[Video] Auth state changed: User is not logged in");
     }
   }
 
@@ -69,10 +69,10 @@ class VideoService {
    * @returns {boolean} Whether the user is logged in
    */
   isUserLoggedIn() {
-    if (!this.store) return false
+    if (!this.store) return false;
 
-    const state = this.store.getState()
-    return state && state.auth && state.auth.isAuthenticated && state.auth.token
+    const state = this.store.getState();
+    return state && state.auth && state.auth.isAuthenticated && state.auth.token;
   }
 
   /**
@@ -81,32 +81,32 @@ class VideoService {
    */
   async checkForVideo() {
     // Throttle checks to avoid too many messages
-    const now = Date.now()
+    const now = Date.now();
     if (now - this.lastCheckTime < this.checkInterval) {
-      return
+      return;
     }
-    this.lastCheckTime = now
+    this.lastCheckTime = now;
 
-    console.log("[Video] Checking for YouTube video")
+    console.log("[Video] Checking for YouTube video");
 
     try {
       // Query for the active tab
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
-      const currentTab = tabs[0]
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const currentTab = tabs[0];
 
       if (!currentTab) {
-        throw new Error("No active tab found")
+        throw new Error("No active tab found");
       }
 
       // Check if the tab is a YouTube page
-      const isYouTube = currentTab.url && currentTab.url.includes("youtube.com")
+      const isYouTube = currentTab.url && currentTab.url.includes("youtube.com");
 
       if (!isYouTube) {
         this.store.dispatch("video", {
           type: "SET_VIDEO_ERROR",
           payload: { error: "Please navigate to a YouTube video page" },
-        })
-        return
+        });
+        return;
       }
 
       // Variable to store video response
@@ -117,69 +117,71 @@ class VideoService {
         // Create a promise that will reject after a timeout
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => {
-            reject(new Error("Content script communication timed out"))
-          }, 5000) // 5 second timeout
-        })
+            reject(new Error("Content script communication timed out"));
+          }, 5000); // 5 second timeout
+        });
 
         // Create the message promise
         const messagePromise = new Promise((resolve) => {
           chrome.tabs.sendMessage(currentTab.id, { action: "getVideoInfo" }, (response) => {
             // Check for chrome runtime error
             if (chrome.runtime.lastError) {
-              console.warn("[Video] Chrome runtime error:", chrome.runtime.lastError)
-              resolve({ success: false, error: chrome.runtime.lastError.message })
+              console.warn("[Video] Chrome runtime error:", chrome.runtime.lastError);
+              resolve({ success: false, error: chrome.runtime.lastError.message });
             } else {
-              resolve(response || { success: false, error: "No response from content script" })
+              resolve(response || { success: false, error: "No response from content script" });
             }
-          })
-        })
+          });
+        });
 
         // Race the message against the timeout
-        videoResponse = await Promise.race([messagePromise, timeoutPromise])
+        videoResponse = await Promise.race([messagePromise, timeoutPromise]);
 
         if (!videoResponse || !videoResponse.success) {
-          const error = videoResponse?.error || "Failed to get video information"
+          const error = videoResponse?.error || "Failed to get video information";
           this.store.dispatch("video", {
             type: "SET_VIDEO_ERROR",
             payload: { error },
-          })
-          return
+          });
+          return;
         }
 
         // Update video info in store
+        console.log("[Video] Dispatching SET_VIDEO_INFO", videoResponse.videoId, videoResponse.videoTitle);
         this.store.dispatch("video", {
           type: "SET_VIDEO_INFO",
           payload: {
             id: videoResponse.videoId,
             title: videoResponse.videoTitle,
           },
-        })
+        });
+        console.log("[Video] State after dispatch:", this.store.getState().video);
 
-        console.log("[Video] Video found:", videoResponse.videoId, videoResponse.videoTitle)
+        console.log("[Video] Video found:", videoResponse.videoId, videoResponse.videoTitle);
       } catch (timeoutError) {
-        console.error("[Video] Content script communication error:", timeoutError)
+        console.error("[Video] Content script communication error:", timeoutError);
         this.store.dispatch("video", {
           type: "SET_VIDEO_ERROR",
           payload: { error: "Communication with YouTube page timed out. Please refresh the page." },
-        })
-        return
+        });
+        return;
       }
     } catch (error) {
-      console.error("[Video] Error checking for video:", error)
+      console.error("[Video] Error checking for video:", error);
 
       // Check if this is a "Could not establish connection" error
       if (error.message.includes("Could not establish connection") || error.message.includes("Connection failed")) {
         // This is expected when not on a YouTube page
-        console.log("[Video] Not on a YouTube page or content script not loaded")
+        console.log("[Video] Not on a YouTube page or content script not loaded");
         this.store.dispatch("video", {
           type: "SET_VIDEO_ERROR",
           payload: { error: "Please navigate to a YouTube video and refresh the page" },
-        })
+        });
       } else {
         this.store.dispatch("video", {
           type: "SET_VIDEO_ERROR",
           payload: { error: error.message },
-        })
+        });
       }
     }
   }
@@ -191,12 +193,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // This ensures that YCG_STORE is available
   if (typeof chrome !== "undefined" && chrome.tabs) {
     if (window.YCG_STORE) {
-      window.YCG_VIDEO = new VideoService()
-      console.log("[Video] Video service created")
+      window.YCG_VIDEO = new VideoService();
+      console.log("[Video] Video service created");
     } else {
-      console.error("[Video] Failed to create video service: YCG_STORE not available")
+      console.error("[Video] Failed to create video service: YCG_STORE not available");
     }
   } else {
-    console.warn("[Video] Chrome API not available. Running outside of extension context?")
+    console.warn("[Video] Chrome API not available. Running outside of extension context?");
   }
-})
+});

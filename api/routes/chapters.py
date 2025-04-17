@@ -28,6 +28,7 @@ router = APIRouter()
 
 class GenerateChaptersRequest(BaseModel):
     video_id: constr(min_length=8, max_length=16, pattern=r"^[\w-]{8,16}$")
+    force: bool = False
 
 # --- Add parse_chapters_text helper ---
 def parse_chapters_text(chapters_text: str):
@@ -50,7 +51,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
     """
     video_id = body.video_id
     lock_key = f"{LOCK_PREFIX}{video_id}:{user.id}"
-    logging.info(f"[CHAPTERS-DEBUG] generate_chapters called for video_id={video_id}, user_id={user.id}")
+    logging.info(f"[CHAPTERS-DEBUG] generate_chapters called for video_id={video_id}, user_id={user.id}, force={body.force}")
     lock_acquired = await redis_operation("acquire_chapter_lock", acquire_chapter_lock, lock_key, LOCK_TTL_SECONDS)
     if not lock_acquired:
         logging.warning(f"Lock not acquired for {lock_key}: another generation in progress.")
@@ -63,19 +64,20 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
             logging.warning(f"User {user.id} attempted generation with insufficient credits for video {video_id}.")
             raise HTTPException(status_code=402, detail="Insufficient credits to generate chapters.")
 
-        # Check cache first
-        cached_chapters = get_from_cache(video_id)
-        logging.info(f"[CHAPTERS-DEBUG] Cached chapters for {video_id}: {bool(cached_chapters)}")
-        if cached_chapters:
-            logging.info(f"Returning cached chapters for {video_id} (User: {user.id})")
-            logging.info(f"[CHAPTERS-DEBUG] Returning cached chapters: {repr(cached_chapters)[:200]}")
-            parsed_chapters, formatted_text = parse_chapters_text(cached_chapters)
-            return JSONResponse(content={
-                'videoId': video_id,
-                'chapters': parsed_chapters,
-                'formatted_text': formatted_text,
-                'fromCache': True
-            })
+        # Check cache first unless force is True
+        if not body.force:
+            cached_chapters = get_from_cache(video_id)
+            logging.info(f"[CHAPTERS-DEBUG] Cached chapters for {video_id}: {bool(cached_chapters)}")
+            if cached_chapters:
+                logging.info(f"Returning cached chapters for {video_id} (User: {user.id})")
+                logging.info(f"[CHAPTERS-DEBUG] Returning cached chapters: {repr(cached_chapters)[:200]}")
+                parsed_chapters, formatted_text = parse_chapters_text(cached_chapters)
+                return JSONResponse(content={
+                    'videoId': video_id,
+                    'chapters': parsed_chapters,
+                    'formatted_text': formatted_text,
+                    'fromCache': True
+                })
 
         # Get transcript
         start_time_transcript = time.time()

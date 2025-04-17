@@ -55,12 +55,23 @@ body {
 }
 
 .app-container {
-  width: 360px;
+  width: 450px;
   min-height: 500px;
   max-height: 600px;
   overflow: hidden;
   position: relative;
   background: var(--bg-gradient);
+}
+
+.screen {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: opacity var(--transition), transform var(--transition);
+  overflow-y: auto;
+  max-height: 100vh;
+  box-sizing: border-box;
 }
 
 /* Screen Styles */
@@ -866,4 +877,126 @@ body {
 /* Fix for the muted background color that was referenced but not defined */
 .muted {
   background-color: #f1f5f9;
+}
+
+/* Responsive Design */
+@media (max-width: 400px) {
+  .welcome-content,
+  .auth-content,
+  .main-content-area {
+    padding: 1rem !important;
+    margin: 0 !important;
+    border-radius: var(--radius);
+  }
+  .logo-container {
+    margin-bottom: 1rem;
+  }
+  .welcome-logo {
+    width: 60px;
+    height: 60px;
+  }
+  .chapters-content {
+    max-height: 150px;
+  }
+  .chapters-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+  .btn {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 340px) {
+  .welcome-message, .auth-footer {
+    font-size: 0.85rem;
+    max-width: 90vw;
+  }
+}
+
+/* Consistent spacing utilities */
+.space-xs { margin: 0.25rem !important; }
+.space-sm { margin: 0.5rem !important; }
+.space-md { margin: 1rem !important; }
+.space-lg { margin: 2rem !important; }
+
+/* Ensure notifications and errors have consistent spacing */
+.notification, .error-message, .status-message {
+  margin-bottom: 1rem;
+  margin-top: 0.5rem;
+}
+
+/* Full Size */
+.full-size {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  min-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+/* Unified card for main content */
+.main-content-card {
+  background: var(--card-gradient);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 1.5rem;
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.main-content-card .video-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.main-content-card .chapters-block {
+  width: 100%;
+}
+
+.main-content-card .actions {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+}
+
+.main-content-card .actions .btn {
+  flex: 1;
+}
+
+#welcome-container.full-size {
+  width: 100vw;
+  height: 100vh;
+  min-width: 100vw;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card-gradient, #f4f4fa);
+  box-sizing: border-box;
+}
+
+.welcome-content.full-size {
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
 }

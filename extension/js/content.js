@@ -4,7 +4,7 @@
  * This script runs in the context of YouTube pages and communicates with the popup.
  */
 
-console.log('[Content] YouTube Chapter Generator: Content script loaded');
+console.log("[Content] YouTube Chapter Generator: Content script loaded");
 
 // Keep track of when the content script was loaded
 const CONTENT_SCRIPT_LOADED_TIME = Date.now();
@@ -16,19 +16,19 @@ setInterval(() => {
 
 // Listen for messages from the popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('[Content] Received message:', request);
+  console.log("[Content] Received message:", request);
   
   try {
-    if (request.action === 'getVideoInfo') {
+    if (request.action === "getVideoInfo") {
       // Extract video ID and title
       const videoInfo = getVideoInfo();
       
-      console.log('[Content] Extracted video info:', videoInfo);
+      console.log("[Content] Extracted video info:", videoInfo);
       
       if (!videoInfo.videoId) {
         sendResponse({ 
           success: false, 
-          error: 'Could not extract video ID. Make sure you are on a YouTube video page.' 
+          error: "Could not extract video ID. Make sure you are on a YouTube video page." 
         });
       } else {
         sendResponse({ 
@@ -40,11 +40,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     } else {
       sendResponse({ 
         success: false, 
-        error: 'Unknown action requested' 
+        error: "Unknown action requested" 
       });
     }
   } catch (error) {
-    console.error('[Content] Error processing message:', error);
+    console.error("[Content] Error processing message:", error);
     sendResponse({ 
       success: false, 
       error: `Error in content script: ${error.message}` 
@@ -66,18 +66,18 @@ function getVideoInfo() {
     const videoId = extractVideoId(url);
     
     // Get video title
-    let videoTitle = '';
+    let videoTitle = "";
     
     // Try different methods to get the title
     // Method 1: From the page title
     const pageTitle = document.title;
-    if (pageTitle && !pageTitle.includes('YouTube')) {
-      videoTitle = pageTitle.replace(' - YouTube', '');
+    if (pageTitle && !pageTitle.includes("YouTube")) {
+      videoTitle = pageTitle.replace(" - YouTube", "");
     }
     
     // Method 2: From the video element
     if (!videoTitle) {
-      const titleElement = document.querySelector('h1.title.style-scope.ytd-video-primary-info-renderer');
+      const titleElement = document.querySelector("h1.title.style-scope.ytd-video-primary-info-renderer");
       if (titleElement) {
         videoTitle = titleElement.textContent.trim();
       }
@@ -85,15 +85,15 @@ function getVideoInfo() {
     
     // Method 3: From meta tags
     if (!videoTitle) {
-      const metaTitle = document.querySelector('meta[property="og:title"]');
+      const metaTitle = document.querySelector("meta[property=\"og:title\"]");
       if (metaTitle) {
-        videoTitle = metaTitle.getAttribute('content');
+        videoTitle = metaTitle.getAttribute("content");
       }
     }
     
     // Method 4: From structured data
     if (!videoTitle) {
-      const scriptElements = document.querySelectorAll('script[type="application/ld+json"]');
+      const scriptElements = document.querySelectorAll("script[type=\"application/ld+json\"]");
       for (const script of scriptElements) {
         try {
           const data = JSON.parse(script.textContent);
@@ -102,17 +102,17 @@ function getVideoInfo() {
             break;
           }
         } catch (e) {
-          console.error('[Content] Error parsing JSON-LD:', e);
+          console.error("[Content] Error parsing JSON-LD:", e);
         }
       }
     }
     
     return {
       videoId,
-      videoTitle: videoTitle || 'Unknown Title'
+      videoTitle: videoTitle || "Unknown Title"
     };
   } catch (error) {
-    console.error('[Content] Error getting video info:', error);
+    console.error("[Content] Error getting video info:", error);
     return {
       videoId: null,
       videoTitle: null
@@ -147,7 +147,7 @@ function extractVideoId(url) {
     
     return null;
   } catch (error) {
-    console.error('[Content] Error extracting video ID:', error);
+    console.error("[Content] Error extracting video ID:", error);
     return null;
   }
 }
