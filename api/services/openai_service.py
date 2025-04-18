@@ -12,14 +12,15 @@ import httpx
 # Initialize OpenAI clients
 openai_client = None
 async_openai_client = None
+
+# Diagnostic: print API key presence (mask for security)
+api_key_display = (Config.OPENAI_API_KEY[:4] + '...' + Config.OPENAI_API_KEY[-4:]) if Config.OPENAI_API_KEY else None
+print(f"[OpenAI INIT] API key present: {bool(Config.OPENAI_API_KEY)}, value: {api_key_display}")
+
 if Config.OPENAI_API_KEY:
     try:
         openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
-        
-        # Attach httpx event hooks for granular retry logging
-        def log_retry_event(event):
-            print(f"[OpenAI/httpx] Retry event: {event!r}")
-        
+        print("[OpenAI INIT] OpenAI sync client configured")
         # Custom transport for retries (event_hooks removed, only supported on request/response)
         transport = httpx.AsyncHTTPTransport(
             retries=3,
@@ -27,21 +28,21 @@ if Config.OPENAI_API_KEY:
             retry_on_exceptions=True,
             backoff_factor=0.5,
         )
-        # Correct: no event_hooks passed to AsyncClient
         async_openai_client = AsyncOpenAI(
             api_key=Config.OPENAI_API_KEY,
             http_client=httpx.AsyncClient(
                 transport=transport
             )
         )
-        
-        print("OpenAI clients configured")
+        print("[OpenAI INIT] OpenAI async client configured")
     except Exception as e:
-        print(f"ERROR configuring OpenAI clients: {e}")
+        print(f"[OpenAI INIT] ERROR configuring OpenAI clients: {e}")
         traceback.print_exc()
 else:
-    print("Warning: OpenAI API key not found in environment variables")
+    print("[OpenAI INIT] Warning: OpenAI API key not found in environment variables")
 
+if async_openai_client is None:
+    print("[OpenAI INIT] CRITICAL: async_openai_client is still None after initialization!")
 
 def create_chapter_prompt(video_duration_minutes: float) -> str:
     """
