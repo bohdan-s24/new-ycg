@@ -21,11 +21,9 @@ if Config.OPENAI_API_KEY:
     try:
         openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
         print("[OpenAI INIT] OpenAI sync client configured")
-        # Custom transport for retries (event_hooks removed, only supported on request/response)
+        # Custom transport for retries (minimal config for compatibility)
         transport = httpx.AsyncHTTPTransport(
             retries=3,
-            retry_on_status={429, 500, 502, 503, 504},
-            retry_on_exceptions=True,
             backoff_factor=0.5,
         )
         async_openai_client = AsyncOpenAI(
