@@ -16,6 +16,11 @@ class UiManager {
     this.api = window.YCG_API;
     this.elements = {};
     this.unsubscribe = null;
+    this._boundGenerateHandler = null;
+    this._boundCopyHandler = null;
+    this._boundRegenerateHandler = null;
+    this._boundPrevVersionHandler = null;
+    this._boundNextVersionHandler = null;
   }
 
   /**
@@ -404,24 +409,56 @@ class UiManager {
     console.log("[DEBUG] setupMainContentEventListeners called");
     const { generateButton, copyButton, regenerateButton, prevVersionButton, nextVersionButton } = this.elements.main;
 
+    // --- Generate Button ---
     if (generateButton) {
-      generateButton.addEventListener("click", () => this.handleGenerateChapters());
+        if (this._boundGenerateHandler) {
+            generateButton.removeEventListener("click", this._boundGenerateHandler);
+        }
+        // Only pass event if needed
+        this._boundGenerateHandler = (event) => this.handleGenerateChapters();
+        generateButton.addEventListener("click", this._boundGenerateHandler);
+        console.log("[DEBUG] Generate button event listener attached");
     }
 
+    // --- Copy Button ---
     if (copyButton) {
-      copyButton.addEventListener("click", () => this.handleCopyChapters());
+        if (this._boundCopyHandler) {
+            copyButton.removeEventListener("click", this._boundCopyHandler);
+        }
+        this._boundCopyHandler = () => this.handleCopyChapters();
+        copyButton.addEventListener("click", this._boundCopyHandler);
+        console.log("[DEBUG] Copy button event listener attached");
     }
 
+    // --- Regenerate Button ---
     if (regenerateButton) {
-      regenerateButton.addEventListener("click", () => this.handleRegenerateChapters());
+        if (this._boundRegenerateHandler) {
+            regenerateButton.removeEventListener("click", this._boundRegenerateHandler);
+        }
+        // Prevent event object from being passed
+        this._boundRegenerateHandler = () => this.handleRegenerateChapters();
+        regenerateButton.addEventListener("click", this._boundRegenerateHandler);
+        console.log("[DEBUG] Regenerate button event listener attached");
     }
 
+    // --- Prev Version Button ---
     if (prevVersionButton) {
-      prevVersionButton.addEventListener("click", () => this.handlePrevVersion());
+        if (this._boundPrevVersionHandler) {
+            prevVersionButton.removeEventListener("click", this._boundPrevVersionHandler);
+        }
+        this._boundPrevVersionHandler = () => this.handlePrevVersion();
+        prevVersionButton.addEventListener("click", this._boundPrevVersionHandler);
+        console.log("[DEBUG] PrevVersion button event listener attached");
     }
 
+    // --- Next Version Button ---
     if (nextVersionButton) {
-      nextVersionButton.addEventListener("click", () => this.handleNextVersion());
+        if (this._boundNextVersionHandler) {
+            nextVersionButton.removeEventListener("click", this._boundNextVersionHandler);
+        }
+        this._boundNextVersionHandler = () => this.handleNextVersion();
+        nextVersionButton.addEventListener("click", this._boundNextVersionHandler);
+        console.log("[DEBUG] NextVersion button event listener attached");
     }
 
     console.log("[UI] Main content event listeners set up");

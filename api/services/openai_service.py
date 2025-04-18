@@ -114,8 +114,18 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
     
     for model in models_to_try:
         try:
-            print(f"Trying model: {model}")
-            
+            import time
+            import socket
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Trying model: {model}, timeout={timeout}s")
+            # Network diagnostics
+            try:
+                server_ip = socket.gethostbyname(socket.gethostname())
+                openai_ip = socket.gethostbyname('api.openai.com')
+                print(f"Server IP: {server_ip}")
+                print(f"api.openai.com resolves to: {openai_ip}")
+            except Exception as dns_e:
+                print(f"DNS/network check failed: {dns_e}")
+            start = time.time()
             response = await async_openai_client.chat.completions.create(
                 model=model,
                 messages=[
@@ -124,7 +134,8 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
                 ],
                 timeout=timeout
             )
-            
+            elapsed = time.time() - start
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Model {model} call succeeded in {elapsed:.2f}s")
             chapters = response.choices[0].message.content.strip()
             chapter_lines = chapters.splitlines()
             if not chapter_lines or len(chapter_lines) < 2:
@@ -133,12 +144,10 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
             if not chapter_lines[0].startswith("00:00"):
                 print("WARNING: First chapter doesn't start at 00:00, trying another model")
                 continue
-            
             # All basic checks passed
             return chapters
-            
         except Exception as e:
-            print(f"Error generating chapters with {model}: {type(e).__name__}")
+            print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Error generating chapters with {model}: {type(e).__name__}")
             print(f"Error details: {str(e)}")
             import traceback
             traceback.print_exc()
