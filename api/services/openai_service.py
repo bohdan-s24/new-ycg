@@ -105,11 +105,10 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
     
     print(f"Generating chapters for {video_id}")
     
+    # Model preference: gpt-4.1-mini as primary, gpt-4o as secondary
     models_to_try = [
+        "gpt-4.1-mini",
         "gpt-4o",
-        "gpt-4-turbo",
-        "gpt-3.5-turbo-0125",
-        "gpt-3.5-turbo"
     ]
     
     for model in models_to_try:
@@ -147,10 +146,22 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
             # All basic checks passed
             return chapters
         except Exception as e:
+            import traceback
+            import sys
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Error generating chapters with {model}: {type(e).__name__}")
             print(f"Error details: {str(e)}")
-            import traceback
             traceback.print_exc()
+            # Enhanced: If the exception has a response or request attribute (httpx/OpenAI), log it
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Exception response status: {getattr(e.response, 'status_code', None)}")
+                print(f"Exception response content: {getattr(e.response, 'text', None)}")
+            if hasattr(e, 'request') and e.request is not None:
+                print(f"Exception request info: {e.request}")
+            # Log the full exception chain if available
+            exc_type, exc_value, exc_tb = sys.exc_info()
+            while exc_value and exc_value.__cause__:
+                print(f"Caused by: {type(exc_value.__cause__).__name__}: {exc_value.__cause__}")
+                exc_value = exc_value.__cause__
             continue
     
     print("All OpenAI models failed to generate chapters")
