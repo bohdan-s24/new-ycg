@@ -6,41 +6,25 @@ import os
 from typing import Dict, Any, Optional, List
 from openai import OpenAI, AsyncOpenAI
 from api.config import Config
-import httpx
 
 
 # Initialize OpenAI clients
 openai_client = None
 async_openai_client = None
 
-# Diagnostic: print API key presence (mask for security)
-api_key_display = (Config.OPENAI_API_KEY[:4] + '...' + Config.OPENAI_API_KEY[-4:]) if Config.OPENAI_API_KEY else None
-print(f"[OpenAI INIT] API key present: {bool(Config.OPENAI_API_KEY)}, value: {api_key_display}")
-
 if Config.OPENAI_API_KEY:
     try:
         openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
-        print("[OpenAI INIT] OpenAI sync client configured")
-        # Custom transport for retries (minimal config for compatibility)
-        transport = httpx.AsyncHTTPTransport(
-            retries=3,
-            backoff_factor=0.5,
-        )
-        async_openai_client = AsyncOpenAI(
-            api_key=Config.OPENAI_API_KEY,
-            http_client=httpx.AsyncClient(
-                transport=transport
-            )
-        )
-        print("[OpenAI INIT] OpenAI async client configured")
+        async_openai_client = AsyncOpenAI(api_key=Config.OPENAI_API_KEY)
+        print("OpenAI clients configured")
     except Exception as e:
-        print(f"[OpenAI INIT] ERROR configuring OpenAI clients: {e}")
+        print(f"ERROR configuring OpenAI clients: {e}")
         traceback.print_exc()
 else:
-    print("[OpenAI INIT] Warning: OpenAI API key not found in environment variables")
+    print("Warning: OpenAI API key not found in environment variables")
 
 if async_openai_client is None:
-    print("[OpenAI INIT] CRITICAL: async_openai_client is still None after initialization!")
+    print("CRITICAL: async_openai_client is still None after initialization!")
 
 def create_chapter_prompt(video_duration_minutes: float) -> str:
     """
@@ -133,16 +117,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
     for model in models_to_try:
         try:
             import time
-            import socket
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Trying model: {model}, timeout={timeout}s")
-            # Network diagnostics
-            try:
-                server_ip = socket.gethostbyname(socket.gethostname())
-                openai_ip = socket.gethostbyname('api.openai.com')
-                print(f"Server IP: {server_ip}")
-                print(f"api.openai.com resolves to: {openai_ip}")
-            except Exception as dns_e:
-                print(f"DNS/network check failed: {dns_e}")
             start = time.time()
             response = await async_openai_client.chat.completions.create(
                 model=model,
