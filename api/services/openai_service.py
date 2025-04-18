@@ -20,20 +20,22 @@ if Config.OPENAI_API_KEY:
         def log_retry_event(event):
             print(f"[OpenAI/httpx] Retry event: {event!r}")
         
-        # Custom transport with event hooks for retries
+        # Custom transport for retries (event_hooks go on the client, not the transport)
         transport = httpx.AsyncHTTPTransport(
             retries=3,
             retry_on_status={429, 500, 502, 503, 504},
             retry_on_exceptions=True,
             backoff_factor=0.5,
-            event_hooks={
-                "retry": [log_retry_event],
-            },
         )
-        # If you use openai>=1.0, you can pass http_client to the AsyncOpenAI client
+        # Attach event hooks to the AsyncClient
         async_openai_client = AsyncOpenAI(
             api_key=Config.OPENAI_API_KEY,
-            http_client=httpx.AsyncClient(transport=transport)
+            http_client=httpx.AsyncClient(
+                transport=transport,
+                event_hooks={
+                    "retry": [log_retry_event],
+                }
+            )
         )
         
         print("OpenAI clients configured")
