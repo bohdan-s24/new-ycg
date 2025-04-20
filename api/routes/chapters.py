@@ -54,11 +54,18 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
     logging.info(f"[CHAPTERS-DEBUG] generate_chapters called for video_id={video_id}, user_id={user.id}, force={body.force}")
 
     cache_obj = get_from_cache(video_id)
-    # If force regenerate and cached OpenAI prompt exists, skip lock and transcript fetching
-    if body.force and cache_obj and cache_obj.get('openai_prompt'):
-        openai_prompt = cache_obj['openai_prompt']
-        logging.info(f"[CHAPTERS-DEBUG] Using cached OpenAI prompt for {video_id} (User: {user.id})")
-        chapters = await generate_chapters_with_openai(None, video_id, openai_prompt)
+    # If force regenerate and cached transcript exists, skip lock and transcript fetching
+    if body.force and cache_obj and cache_obj.get('transcript'):
+        transcript_data = cache_obj['transcript']
+        logging.info(f"[CHAPTERS-DEBUG] Using cached transcript for {video_id} (User: {user.id})")
+        # Rebuild prompt as in initial generation
+        formatted_transcript, transcript_length = format_transcript_for_model(transcript_data)
+        # Estimate duration
+        last_entry = transcript_data[-1]
+        video_duration_seconds = last_entry['start'] + last_entry['duration']
+        video_duration_minutes = video_duration_seconds / 60
+        system_prompt = create_chapter_prompt(video_duration_minutes)
+        chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         if not chapters:
             logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user.id}) [prompt replay]")
             raise HTTPException(status_code=500, detail="Failed to generate chapters with OpenAI")
@@ -67,7 +74,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
             logging.info(f"Deduction successful: {deduction_successful}")
         except Exception as e:
             logging.error(f"Exception during credit deduction for user {user.id} video {video_id}: {e}")
-        add_to_cache(video_id, chapters, openai_prompt)
+        add_to_cache(video_id, chapters, transcript_data)
         parsed_chapters, formatted_text = parse_chapters_text(chapters)
         return JSONResponse(content={
             'videoId': video_id,
@@ -76,7 +83,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
             'fromCache': False
         })
 
-    # Otherwise, use lock for initial generation or if prompt is not cached
+    # Otherwise, use lock for initial generation or if transcript is not cached
     lock_acquired = await redis_operation("acquire_chapter_lock", acquire_chapter_lock, lock_key, LOCK_TTL_SECONDS)
     if not lock_acquired:
         logging.warning(f"Lock not acquired for {lock_key}: another generation in progress.")
@@ -109,7 +116,6 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
         video_duration_seconds = last_entry['start'] + last_entry['duration']
         video_duration_minutes = video_duration_seconds / 60
         system_prompt = create_chapter_prompt(video_duration_minutes)
-        openai_prompt = system_prompt + '\n' + formatted_transcript
         chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
         if not chapters:
             logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user.id})")
@@ -119,7 +125,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
             logging.info(f"Deduction successful: {deduction_successful}")
         except Exception as e:
             logging.error(f"Exception during credit deduction for user {user.id} video {video_id}: {e}")
-        add_to_cache(video_id, chapters, openai_prompt)
+        add_to_cache(video_id, chapters, transcript_data)
         parsed_chapters, formatted_text = parse_chapters_text(chapters)
         return JSONResponse(content={
             'videoId': video_id,
