@@ -314,6 +314,13 @@ class UiManager {
 
     if (!mainContentArea) return;
 
+    // Before replacing innerHTML, reset all handler refs to prevent double listeners
+    this._boundGenerateHandler = null;
+    this._boundCopyHandler = null;
+    this._boundRegenerateHandler = null;
+    this._boundPrevVersionHandler = null;
+    this._boundNextVersionHandler = null;
+
     // Check if main content is empty
     if (mainContentArea.children.length === 0) {
       console.log("[UI] Creating main content structure");
