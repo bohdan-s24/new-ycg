@@ -5,8 +5,12 @@ import traceback
 import os
 from typing import Dict, Any, Optional, List
 from openai import OpenAI, AsyncOpenAI
+import openai  # For logging
 from api.config import Config
 
+
+# Enable OpenAI debug logging for full request/response logs
+openai.log = "debug"
 
 # Initialize OpenAI clients
 openai_client = None
