@@ -6,8 +6,6 @@ class Config:
     """Centralized configuration management"""
     # Environment variables
     OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-    WEBSHARE_USERNAME = os.environ.get("WEBSHARE_USERNAME")
-    WEBSHARE_PASSWORD = os.environ.get("WEBSHARE_PASSWORD")
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY") # Loaded from Vercel env
     REDIS_URL = os.environ.get("REDIS_URL") # Full Upstash URL (e.g., rediss://...)
     KV_REST_API_TOKEN = os.environ.get("KV_REST_API_TOKEN") # Use the Vercel KV token variable name
@@ -46,13 +44,17 @@ class Config:
     PREMIUM_PLAN_CREDITS = 50
     PREMIUM_PLAN_PRICE = 29
 
+    # Proxy configuration for Bright Data
+    BRIGHTDATA_USERNAME = os.environ.get("BRIGHTDATA_USERNAME")
+    BRIGHTDATA_PASSWORD = os.environ.get("BRIGHTDATA_PASSWORD")
+    BRIGHTDATA_HOST = os.environ.get("BRIGHTDATA_HOST", "brd.superproxy.io")
+    BRIGHTDATA_PORT = int(os.environ.get("BRIGHTDATA_PORT", 33335))
 
-    # Proxy configuration
     @classmethod
     def get_proxy_url(cls) -> Optional[str]:
-        """Get proxy URL if credentials are available"""
-        if cls.WEBSHARE_USERNAME and cls.WEBSHARE_PASSWORD:
-            return f"http://{cls.WEBSHARE_USERNAME}:{cls.WEBSHARE_PASSWORD}@p.webshare.io:80"
+        """Get proxy URL if Bright Data credentials are available"""
+        if cls.BRIGHTDATA_USERNAME and cls.BRIGHTDATA_PASSWORD:
+            return f"http://{cls.BRIGHTDATA_USERNAME}:{cls.BRIGHTDATA_PASSWORD}@{cls.BRIGHTDATA_HOST}:{cls.BRIGHTDATA_PORT}"
         return None
 
     @classmethod
@@ -64,16 +66,4 @@ class Config:
                 'http': proxy_url,
                 'https': proxy_url
             }
-        return None
-
-    @classmethod
-    def get_webshare_proxy_config(cls) -> Any:
-        """Get WebshareProxyConfig for youtube_transcript_api"""
-        from youtube_transcript_api.proxies import WebshareProxyConfig
-
-        if cls.WEBSHARE_USERNAME and cls.WEBSHARE_PASSWORD:
-            return WebshareProxyConfig(
-                proxy_username=cls.WEBSHARE_USERNAME,
-                proxy_password=cls.WEBSHARE_PASSWORD
-            )
         return None
