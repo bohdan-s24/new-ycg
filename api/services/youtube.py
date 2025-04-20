@@ -58,8 +58,8 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Di
         print(f"Attempting to fetch transcript {attempt_name}")
         try:
             transcript_list = None
-            if use_proxy and Config.get_webshare_proxy_config():
-                proxy_config = Config.get_webshare_proxy_config()
+            if use_proxy and Config.get_proxy_dict():
+                proxy_config = Config.get_proxy_dict()
                 transcript_list = YouTubeTranscriptApi.get_transcript(
                     video_id,
                     proxies=proxy_config,
@@ -70,7 +70,7 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Di
                     video_id, 
                     languages=Config.TRANSCRIPT_LANGUAGES
                 )
-                
+            
             if transcript_list:
                 print(f"Successfully fetched transcript {attempt_name} for {video_id}")
                 return transcript_list
@@ -160,7 +160,17 @@ def fetch_transcript_with_requests(video_id: str, proxy_dict: Optional[Dict[str,
             print(f"Successfully fetched transcript with {len(transcript)} entries using httpx")
             return transcript
     try:
-        return asyncio.run(_fetch())
+        # Use asyncio.run only if not already in an event loop
+        loop = None
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        if loop and loop.is_running():
+            # If we're already in an event loop (e.g., FastAPI, Jupyter), run as a task
+            return loop.run_until_complete(_fetch())
+        else:
+            return asyncio.run(_fetch())
     except Exception as e:
         print(f"Error fetching transcript with httpx: {e}")
         traceback.print_exc()
