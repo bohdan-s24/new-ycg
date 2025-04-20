@@ -22,16 +22,7 @@ from youtube_transcript_api import (
 
 from api.config import Config
 
-# Path to Bright Data CA certificate (should be relative to project root)
-BRIGHTDATA_CA_PATH = os.environ.get("BRIGHTDATA_CA_PATH", "BrightData SSL certificate (port 33335).crt")
-
-# Patch requests to always use the Bright Data CA cert for YouTubeTranscriptApi requests
-import requests
-old_request = requests.Session.request
-def patched_request(self, method, url, *args, **kwargs):
-    kwargs['verify'] = BRIGHTDATA_CA_PATH
-    return old_request(self, method, url, *args, **kwargs)
-requests.Session.request = patched_request
+# Evomi proxy config does not require SSL CA patching or special logic
 
 def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Dict[str, Any]]]:
     """
@@ -125,7 +116,7 @@ def fetch_transcript_with_requests(video_id: str, proxy_dict: Optional[Dict[str,
         print(f"Attempting to fetch transcript for {video_id} using httpx with proxies: {bool(proxy_dict)}")
         proxies = proxy_dict if proxy_dict else None
         video_url = f"https://www.youtube.com/watch?v={video_id}"
-        async with httpx.AsyncClient(proxies=proxies, timeout=timeout, verify=BRIGHTDATA_CA_PATH) as client:
+        async with httpx.AsyncClient(proxies=proxies, timeout=timeout) as client:
             print(f"Fetching video page with proxies: {bool(proxy_dict)}")
             response = await client.get(video_url)
             response.raise_for_status()

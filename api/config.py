@@ -44,17 +44,17 @@ class Config:
     PREMIUM_PLAN_CREDITS = 50
     PREMIUM_PLAN_PRICE = 29
 
-    # Proxy configuration for Bright Data
-    BRIGHTDATA_USERNAME = os.environ.get("BRIGHTDATA_USERNAME")
-    BRIGHTDATA_PASSWORD = os.environ.get("BRIGHTDATA_PASSWORD")
-    BRIGHTDATA_HOST = os.environ.get("BRIGHTDATA_HOST", "brd.superproxy.io")
-    BRIGHTDATA_PORT = int(os.environ.get("BRIGHTDATA_PORT", 33335))
+    # Proxy configuration for Evomi
+    EVOMI_USERNAME = os.environ.get("EVOMI_USERNAME")
+    EVOMI_PASSWORD = os.environ.get("EVOMI_PASSWORD")
+    EVOMI_HOST = os.environ.get("EVOMI_HOST", "rp.evomi.com")
+    EVOMI_PORT = int(os.environ.get("EVOMI_PORT", 1000))
 
     @classmethod
     def get_proxy_url(cls) -> Optional[str]:
-        """Get proxy URL if Bright Data credentials are available"""
-        if cls.BRIGHTDATA_USERNAME and cls.BRIGHTDATA_PASSWORD:
-            return f"http://{cls.BRIGHTDATA_USERNAME}:{cls.BRIGHTDATA_PASSWORD}@{cls.BRIGHTDATA_HOST}:{cls.BRIGHTDATA_PORT}"
+        """Get proxy URL if Evomi credentials are available"""
+        if cls.EVOMI_USERNAME and cls.EVOMI_PASSWORD:
+            return f"http://{cls.EVOMI_USERNAME}:{cls.EVOMI_PASSWORD}@{cls.EVOMI_HOST}:{cls.EVOMI_PORT}"
         return None
 
     @classmethod
