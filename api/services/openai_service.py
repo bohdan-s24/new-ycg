@@ -140,8 +140,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
                         input=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": formatted_transcript}
-                        ],
-                        timeout=timeout
+                        ]
                     ),
                     timeout=timeout+5  # Slightly longer than OpenAI timeout
                 )
