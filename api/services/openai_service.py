@@ -124,10 +124,8 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Trying model: {model}, timeout={timeout}s")
             print("[OPENAI-REQUEST] Parameters:", {
                 "model": model,
-                "input": [
-                    {"role": "system", "content": system_prompt[:100] + ("..." if len(system_prompt) > 100 else "")},
-                    {"role": "user", "content": formatted_transcript[:100] + ("..." if len(formatted_transcript) > 100 else "")}
-                ],
+                "input": formatted_transcript[:100] + ("..." if len(formatted_transcript) > 100 else ""),
+                "instructions": system_prompt[:100] + ("..." if len(system_prompt) > 100 else ""),
                 "timeout": timeout
             })
             print("[OPENAI] About to call OpenAI API (AsyncOpenAI.responses.create)")
