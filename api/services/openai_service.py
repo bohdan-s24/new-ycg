@@ -121,7 +121,6 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
     for model in models_to_try:
         try:
             import time
-            import asyncio
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Trying model: {model}, timeout={timeout}s")
             print("[OPENAI-REQUEST] Parameters:", {
                 "model": model,
@@ -131,22 +130,22 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
                 ],
                 "timeout": timeout
             })
-            print("[OPENAI] About to call OpenAI API (wrapped in asyncio.wait_for)")
+            print("[OPENAI] About to call OpenAI API (AsyncOpenAI.responses.create)")
             start = time.time()
             try:
-                response = await asyncio.wait_for(
-                    async_openai_client.responses.create(
-                        model=model,
-                        input=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": formatted_transcript}
-                        ]
-                    ),
-                    timeout=timeout+5  # Slightly longer than OpenAI timeout
+                response = await async_openai_client.responses.create(
+                    model=model,
+                    input="".join([
+                        f"[SYSTEM]\n{system_prompt}\n",
+                        f"[USER]\n{formatted_transcript}"
+                    ])
                 )
-                print("[OPENAI] OpenAI API call returned from asyncio.wait_for")
-            except asyncio.TimeoutError:
-                print(f"[OPENAI] asyncio.wait_for: Timed out waiting for OpenAI API response for model {model}")
+                print("[OPENAI] OpenAI API call returned from AsyncOpenAI.responses.create")
+            except openai.APITimeoutError:
+                print(f"[OPENAI] OpenAI API: Timed out waiting for OpenAI API response for model {model}")
+                continue
+            except openai.APIStatusError as exc:
+                print(f"[OPENAI] APIStatusError: {exc.status_code} {exc.response}")
                 continue
             elapsed = time.time() - start
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Model {model} call succeeded in {elapsed:.2f}s")
