@@ -133,12 +133,12 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
             print("[OPENAI] About to call OpenAI API (AsyncOpenAI.responses.create)")
             start = time.time()
             try:
+                # Use the correct signature for the latest SDK:
                 response = await async_openai_client.responses.create(
                     model=model,
-                    input="".join([
-                        f"[SYSTEM]\n{system_prompt}\n",
-                        f"[USER]\n{formatted_transcript}"
-                    ])
+                    input=formatted_transcript,
+                    instructions=system_prompt,
+                    timeout=timeout
                 )
                 print("[OPENAI] OpenAI API call returned from AsyncOpenAI.responses.create")
             except openai.APITimeoutError:
