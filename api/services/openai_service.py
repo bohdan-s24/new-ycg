@@ -121,6 +121,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
     for model in models_to_try:
         try:
             import time
+            import asyncio
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Trying model: {model}, timeout={timeout}s")
             print("[OPENAI-REQUEST] Parameters:", {
                 "model": model,
@@ -130,15 +131,24 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
                 ],
                 "timeout": timeout
             })
+            print("[OPENAI] About to call OpenAI API (wrapped in asyncio.wait_for)")
             start = time.time()
-            response = await async_openai_client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": formatted_transcript}
-                ],
-                timeout=timeout
-            )
+            try:
+                response = await asyncio.wait_for(
+                    async_openai_client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": formatted_transcript}
+                        ],
+                        timeout=timeout
+                    ),
+                    timeout=timeout+5  # Slightly longer than OpenAI timeout
+                )
+                print("[OPENAI] OpenAI API call returned from asyncio.wait_for")
+            except asyncio.TimeoutError:
+                print(f"[OPENAI] asyncio.wait_for: Timed out waiting for OpenAI API response for model {model}")
+                continue
             elapsed = time.time() - start
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Model {model} call succeeded in {elapsed:.2f}s")
             print(f"[OPENAI-RESPONSE] Raw response: {getattr(response, 'choices', None)}")
