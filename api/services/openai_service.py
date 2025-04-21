@@ -122,6 +122,14 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
         try:
             import time
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Trying model: {model}, timeout={timeout}s")
+            print("[OPENAI-REQUEST] Parameters:", {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt[:100] + ("..." if len(system_prompt) > 100 else "")},
+                    {"role": "user", "content": formatted_transcript[:100] + ("..." if len(formatted_transcript) > 100 else "")}
+                ],
+                "timeout": timeout
+            })
             start = time.time()
             response = await async_openai_client.chat.completions.create(
                 model=model,
@@ -133,6 +141,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
             )
             elapsed = time.time() - start
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Model {model} call succeeded in {elapsed:.2f}s")
+            print(f"[OPENAI-RESPONSE] Raw response: {getattr(response, 'choices', None)}")
             chapters = response.choices[0].message.content.strip()
             chapter_lines = chapters.splitlines()
             if not chapter_lines or len(chapter_lines) < 2:
