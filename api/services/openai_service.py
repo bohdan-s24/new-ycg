@@ -151,8 +151,11 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
                 continue
             elapsed = time.time() - start
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Model {model} call succeeded in {elapsed:.2f}s")
-            print(f"[OPENAI-RESPONSE] Raw response: {getattr(response, 'choices', None)}")
-            chapters = response.choices[0].message.content.strip()
+            print(f"[OPENAI-RESPONSE] Raw response: {getattr(response, 'output_text', None)}")
+            chapters = getattr(response, 'output_text', None)
+            if not chapters:
+                print("No output_text in response, trying another model")
+                continue
             chapter_lines = chapters.splitlines()
             if not chapter_lines or len(chapter_lines) < 2:
                 print("Not enough chapters, trying another model")

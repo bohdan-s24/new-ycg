@@ -62,11 +62,28 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Di
             transcript_list = None
             if use_proxy and Config.get_proxy_dict():
                 proxy_config = Config.get_proxy_dict()
-                transcript_list = YouTubeTranscriptApi.get_transcript(
-                    video_id,
-                    proxies=proxy_config,
-                    languages=Config.TRANSCRIPT_LANGUAGES
-                )
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "*/*",
+                }
+                proxies = proxy_config
+                url = f"https://www.youtube.com/watch?v={video_id}"
+                from requests.exceptions import ChunkedEncodingError
+                for attempt in range(3):
+                    try:
+                        resp = requests.get(url, headers=headers, proxies=proxies, timeout=30, stream=False)
+                        if resp.status_code == 200 and resp.content:
+                            transcript_list = YouTubeTranscriptApi.get_transcript(
+                                video_id,
+                                proxies=proxy_config,
+                                languages=Config.TRANSCRIPT_LANGUAGES
+                            )
+                            break
+                        else:
+                            print(f"Proxy request failed: status={resp.status_code}, len={len(resp.content)}")
+                    except ChunkedEncodingError as e:
+                        print(f"Attempt {attempt+1}: ChunkedEncodingError, retrying...")
+                        time.sleep(2)
             else:
                 transcript_list = YouTubeTranscriptApi.get_transcript(
                     video_id,
