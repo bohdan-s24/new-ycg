@@ -135,7 +135,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
             start = time.time()
             try:
                 response = await asyncio.wait_for(
-                    async_openai_client.chat.completions.create(
+                    async_openai_client.responses.create(
                         model=model,
                         messages=[
                             {"role": "system", "content": system_prompt},
