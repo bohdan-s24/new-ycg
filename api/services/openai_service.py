@@ -125,7 +125,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Trying model: {model}, timeout={timeout}s")
             print("[OPENAI-REQUEST] Parameters:", {
                 "model": model,
-                "messages": [
+                "input": [
                     {"role": "system", "content": system_prompt[:100] + ("..." if len(system_prompt) > 100 else "")},
                     {"role": "user", "content": formatted_transcript[:100] + ("..." if len(formatted_transcript) > 100 else "")}
                 ],
@@ -137,7 +137,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
                 response = await asyncio.wait_for(
                     async_openai_client.responses.create(
                         model=model,
-                        messages=[
+                        input=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": formatted_transcript}
                         ],
