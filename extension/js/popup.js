@@ -157,6 +157,7 @@
         // Toggle purchase options
         if (purchaseOptions) {
           purchaseOptions.classList.toggle("hidden");
+          console.log("[BUY-CREDITS] Toggled purchase options. Hidden:", purchaseOptions.classList.contains("hidden"));
         }
       });
     }
@@ -177,17 +178,23 @@
           event.preventDefault();
           const priceId = btn.getAttribute("data-price-id");
           const mode = btn.getAttribute("data-mode");
-          if (!priceId || !mode) return;
+          console.log(`[BUY-CREDITS] Purchase button clicked. priceId=${priceId}, mode=${mode}`);
+          if (!priceId || !mode) {
+            console.warn("[BUY-CREDITS] Missing priceId or mode.", { priceId, mode });
+            return;
+          }
           btn.disabled = true;
           btn.textContent = "Redirecting...";
           try {
             const result = await window.YCG_API.createCheckoutSession(priceId, mode);
+            console.log("[BUY-CREDITS] createCheckoutSession result:", result);
             if (result && result.success && result.data && result.data.url) {
               window.open(result.data.url, "_blank");
             } else {
               alert("Failed to create Stripe checkout session. Please try again.");
             }
           } catch (e) {
+            console.error("[BUY-CREDITS] Error during checkout:", e);
             alert("Error: " + (e.message || e));
           } finally {
             btn.disabled = false;
