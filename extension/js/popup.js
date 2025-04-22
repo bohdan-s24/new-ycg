@@ -134,6 +134,8 @@
     const privacyLink = document.getElementById("privacy-link");
     const myAccountLink = document.getElementById("my-account-link");
     const feedbackLink = document.getElementById("feedback-link");
+    const purchaseOptions = document.getElementById("purchase-options");
+    const purchaseBtns = document.querySelectorAll(".purchase-btn");
 
     if (termsLink) {
       termsLink.addEventListener("click", (event) => {
@@ -152,7 +154,10 @@
     if (myAccountLink) {
       myAccountLink.addEventListener("click", (event) => {
         event.preventDefault();
-        chrome.tabs.create({ url: "https://new-ycg.vercel.app/account" });
+        // Toggle purchase options
+        if (purchaseOptions) {
+          purchaseOptions.classList.toggle("hidden");
+        }
       });
     }
 
@@ -162,6 +167,35 @@
         // Lazy load feedback module only when feedback is clicked
         const feedbackModule = await import("./popup_feedback.js");
         feedbackModule.openFeedbackForm();
+      });
+    }
+
+    // Purchase button logic
+    if (purchaseBtns && window.YCG_API) {
+      purchaseBtns.forEach(btn => {
+        btn.addEventListener("click", async (event) => {
+          event.preventDefault();
+          const priceId = btn.getAttribute("data-price-id");
+          const mode = btn.getAttribute("data-mode");
+          if (!priceId || !mode) return;
+          btn.disabled = true;
+          btn.textContent = "Redirecting...";
+          try {
+            const result = await window.YCG_API.createCheckoutSession(priceId, mode);
+            if (result && result.success && result.data && result.data.url) {
+              window.open(result.data.url, "_blank");
+            } else {
+              alert("Failed to create Stripe checkout session. Please try again.");
+            }
+          } catch (e) {
+            alert("Error: " + (e.message || e));
+          } finally {
+            btn.disabled = false;
+            btn.textContent = btn.getAttribute("data-mode") === "payment" ?
+              (btn.getAttribute("data-price-id") === "price_1RGefhF7Kryr2ZRb4GUtKKvj" ? "10 Credits – $9 (One-Time)" : "50 Credits – $29 (One-Time)") :
+              (btn.getAttribute("data-price-id") === "price_1RGef7F7Kryr2ZRb9FWp5g7v" ? "10 Credits – $9/mo (Subscription)" : "50 Credits – $29/mo (Subscription)");
+          }
+        });
       });
     }
   }

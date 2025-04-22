@@ -19,6 +19,7 @@ from ..services import credits_service
 USER_KEY_PREFIX = "user:"
 GOOGLE_ID_KEY_PREFIX = "google:"
 EMAIL_KEY_PREFIX = "email:"
+STRIPE_CUSTOMER_ID_KEY_PREFIX = "stripe:customer:"
 
 
 async def get_user_by_id(user_id: str) -> Optional[User]:
@@ -110,6 +111,31 @@ async def get_user_by_google_id(google_id: str) -> Optional[User]:
     return await redis_operation("get_user_by_google_id", _get_user_by_google_id, google_id)
 
 
+async def get_user_by_stripe_customer_id(stripe_customer_id: str) -> Optional[User]:
+    """
+    Retrieves a user by Stripe Customer ID.
+    """
+    stripe_key = f"{STRIPE_CUSTOMER_ID_KEY_PREFIX}{stripe_customer_id}"
+
+    async def _get_user_by_stripe_id(redis, stripe_customer_id):
+        # Get the user key from the Stripe Customer ID index
+        user_key = await redis.get(stripe_key)
+        if not user_key:
+            logging.info(f"No user key found for Stripe Customer ID: {stripe_customer_id}")
+            return None
+        # Get the user data
+        user_data_json = await redis.get(user_key)
+        if not user_data_json:
+            logging.warning(f"User key {user_key} found for Stripe ID {stripe_customer_id}, but no user data.")
+            return None
+        try:
+            return User.model_validate_json(user_data_json)
+        except ValidationError as e:
+            logging.error(f"Error parsing user data for Stripe ID {stripe_customer_id}: {e}")
+            return None
+    return await redis_operation("get_user_by_stripe_customer_id", _get_user_by_stripe_id, stripe_customer_id)
+
+
 async def create_user(user_data: Dict[str, Any]) -> User:
     """
     Creates a new user.
@@ -176,6 +202,11 @@ async def save_user(user: User) -> bool:
             google_id_key = f"{GOOGLE_ID_KEY_PREFIX}{user.google_id}"
             await redis.set(google_id_key, user_key)
 
+        # Store the Stripe Customer ID index if available
+        if user.stripe_customer_id:
+            stripe_customer_id_key = f"{STRIPE_CUSTOMER_ID_KEY_PREFIX}{user.stripe_customer_id}"
+            await redis.set(stripe_customer_id_key, user_key)
+
         return True
 
     try:
@@ -224,6 +255,38 @@ async def update_user(user_id: str, update_data: Dict[str, Any]) -> User:
     except ValidationError as e:
         logging.error(f"Error updating user {user_id}: {e}")
         raise AppValidationError("Invalid user data", errors=e.errors())
+
+
+async def update_user_stripe_customer_id(user_id: str, stripe_customer_id: str) -> Optional[User]:
+    """
+    Updates only the Stripe Customer ID for a user.
+    """
+    try:
+        return await update_user(user_id, {"stripe_customer_id": stripe_customer_id})
+    except ResourceNotFoundError:
+        logging.error(f"User {user_id} not found when trying to update Stripe Customer ID.")
+        return None
+    except Exception as e:
+        logging.error(f"Failed to update Stripe Customer ID for user {user_id}: {e}")
+        return None
+
+
+async def update_user_stripe_ids(user_id: str, stripe_customer_id: str, stripe_subscription_id: str) -> Optional[User]:
+    """
+    Updates both Stripe Customer ID and Subscription ID for a user.
+    """
+    update_data = {
+        "stripe_customer_id": stripe_customer_id,
+        "stripe_subscription_id": stripe_subscription_id
+    }
+    try:
+        return await update_user(user_id, update_data)
+    except ResourceNotFoundError:
+        logging.error(f"User {user_id} not found when trying to update Stripe IDs.")
+        return None
+    except Exception as e:
+        logging.error(f"Failed to update Stripe IDs for user {user_id}: {e}")
+        return None
 
 
 async def get_or_create_google_user(google_user_info: Dict[str, Any]) -> Tuple[User, bool]:

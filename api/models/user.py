@@ -12,6 +12,10 @@ class User(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Timestamp of user creation")
     picture: Optional[str] = Field(None, description="URL to user's profile picture")
     credits: Optional[int] = Field(0, description="User's credit balance")
+    # Stripe integration fields
+    stripe_customer_id: Optional[str] = Field(None, description="Stripe Customer ID")
+    stripe_subscription_id: Optional[str] = Field(None, description="Stripe Subscription ID (if active)")
+    subscription_status: Optional[str] = Field(None, description="e.g., active, canceled, past_due")
     # Add other fields as needed, e.g., verification tokens, password reset tokens
 
 class UserCreate(BaseModel):

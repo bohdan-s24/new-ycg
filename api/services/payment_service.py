@@ -8,131 +8,46 @@ from ..config import Config
 from ..utils.db import get_redis_connection
 from . import credits_service
 
-# Remove top-level initialization:
-# stripe.api_key = Config.STRIPE_SECRET_KEY 
+# Stripe Product/Price mapping for credits
+STRIPE_PRICE_ID_TO_CREDITS = {
+    # One-time purchases
+    'price_1RGefhF7Kryr2ZRb4GUtKKvj': 10,   # 10 Credits One-Time ($9)
+    'price_1RGefRF7Kryr2ZRbmpxIKe7S': 50,   # 50 Credits One-Time ($29)
+    # Subscriptions (monthly)
+    'price_1RGef7F7Kryr2ZRb9FWp5g7v': 10,   # 10 Credits Recurring ($9/month)
+    'price_1RGenMF7Kryr2ZRbrNPx4BVb': 50,   # 50 Credits Recurring ($29/month)
+}
+
+# Stripe API key setup
+stripe.api_key = Config.STRIPE_SECRET_KEY
 
 # Redis key prefixes
-PAYMENT_PLANS_KEY = "payment:plans"
 CHECKOUT_SESSION_KEY_PREFIX = "checkout:"
 
-# Define the available plans
-DEFAULT_PLANS = [
-    {
-        "id": "free",
-        "name": "Free",
-        "credits": 3,
-        "price": 0,
-        "description": "3 free credits after registration"
-    },
-    {
-        "id": "basic",
-        "name": "Basic",
-        "credits": 10,
-        "price": 9,
-        "description": "10 credits for $9"
-    },
-    {
-        "id": "premium",
-        "name": "Premium",
-        "credits": 50,
-        "price": 29,
-        "description": "50 credits for $29"
-    }
-]
+import asyncio
 
-async def initialize_payment_plans():
-    """Initialize the payment plans in Redis if they don't exist."""
-    r = await get_redis_connection()
-    
-    # Check if plans already exist
-    plans_exist = await r.exists(PAYMENT_PLANS_KEY)
-    if not plans_exist:
-        # Store the default plans
-        await r.set(PAYMENT_PLANS_KEY, json.dumps(DEFAULT_PLANS))
-        logging.info("Initialized default payment plans in Redis")
-
-async def get_payment_plans() -> List[Dict[str, Any]]:
-    """Get the available payment plans."""
-    r = await get_redis_connection()
-    
-    # Get plans from Redis
-    plans_json = await r.get(PAYMENT_PLANS_KEY)
-    if plans_json:
-        return json.loads(plans_json)
-    
-    # If plans don't exist, initialize and return default plans
-    await initialize_payment_plans()
-    return DEFAULT_PLANS
-
-async def create_checkout_session(user_id: str, plan_id: str, success_url: str, cancel_url: str, timeout: int = 30) -> Optional[Dict[str, Any]]:
+async def create_checkout_session(user_id: str, price_id: str, mode: str, timeout: int = 30):
     """
-    Create a Stripe checkout session for a specific plan.
-    
+    Create a Stripe checkout session for a specific price ID and mode.
     Args:
-        user_id: The ID of the user making the purchase
-        plan_id: The ID of the plan being purchased
-        success_url: URL to redirect to on successful payment
-        cancel_url: URL to redirect to if payment is cancelled
-        timeout: Timeout for the Stripe API call in seconds
-        
+        user_id: The ID of the user making the purchase.
+        price_id: The Stripe Price ID being purchased.
+        mode: 'payment' for one-time, 'subscription' for recurring.
+        timeout: Timeout for the Stripe API call in seconds.
     Returns:
-        Dictionary with checkout session details or None if error
+        Stripe Checkout Session dict (id, url) or None if error.
     """
     try:
-        # Get the plan details
-        plans = await get_payment_plans()
-        plan = next((p for p in plans if p["id"] == plan_id), None)
-        
-        if not plan:
-            logging.error(f"Plan {plan_id} not found")
-            return None
-            
-        # Stripe API call with timeout
-        import asyncio
         async def create_session():
             return stripe.checkout.Session.create(
-                payment_method_types=["card"],
-                line_items=[
-                    {
-                        "price_data": {
-                            "currency": "usd",
-                            "product_data": {
-                                "name": f"{plan['name']} - {plan['credits']} Credits",
-                                "description": plan["description"],
-                            },
-                            "unit_amount": int(plan["price"] * 100),  # Convert to cents
-                        },
-                        "quantity": 1,
-                    }
-                ],
-                mode="payment",
-                success_url=success_url,
-                cancel_url=cancel_url,
-                metadata={
-                    "user_id": user_id,
-                    "plan_id": plan_id,
-                    "credits": plan["credits"]
-                }
+                line_items=[{"price": price_id, "quantity": 1}],
+                mode=mode,
+                success_url=f"{Config.FRONTEND_URL}/success",
+                cancel_url=f"{Config.FRONTEND_URL}/cancel",
+                client_reference_id=user_id,
             )
         session = await asyncio.wait_for(create_session(), timeout=timeout)
-        
-        # Store session info in Redis
-        r = await get_redis_connection()
-        session_data = {
-            "id": session.id,
-            "user_id": user_id,
-            "plan_id": plan_id,
-            "credits": plan["credits"],
-            "amount": plan["price"],
-            "created_at": datetime.utcnow().isoformat(),
-            "status": "pending"
-        }
-        await r.set(f"{CHECKOUT_SESSION_KEY_PREFIX}{session.id}", json.dumps(session_data))
-        
-        return {
-            "id": session.id,
-            "url": session.url
-        }
+        return {"id": session.id, "url": session.url}
     except asyncio.TimeoutError:
         logging.error("Stripe checkout session creation timed out")
         return None
@@ -140,60 +55,44 @@ async def create_checkout_session(user_id: str, plan_id: str, success_url: str, 
         logging.error(f"Error creating checkout session: {e}")
         return None
 
-async def handle_checkout_completed(session_id: str) -> bool:
-    """
-    Handle a completed checkout session from Stripe webhook.
-    
-    Args:
-        session_id: The ID of the completed checkout session
-        
-    Returns:
-        True if credits were added successfully, False otherwise
-    """
-    try:
-        # Get the session data from Redis
-        r = await get_redis_connection()
-        session_data_json = await r.get(f"{CHECKOUT_SESSION_KEY_PREFIX}{session_id}")
-        
-        if not session_data_json:
-            logging.error(f"Checkout session {session_id} not found in Redis")
-            return False
-            
-        session_data = json.loads(session_data_json)
-        
-        # Verify the session with Stripe
-        stripe_session = stripe.checkout.Session.retrieve(session_id)
-        
-        if stripe_session.payment_status != "paid":
-            logging.warning(f"Checkout session {session_id} not paid. Status: {stripe_session.payment_status}")
-            return False
-            
-        # Add credits to the user
-        user_id = session_data["user_id"]
-        credits = session_data["credits"]
-        description = f"Purchase of {credits} credits for ${session_data['amount']}"
-        
-        new_balance = await credits_service.add_credits(
-            user_id, 
-            credits, 
-            "purchase", 
-            description
-        )
-        
-        if new_balance is None:
-            logging.error(f"Failed to add credits for user {user_id} after payment")
-            return False
-            
-        # Update session status in Redis
-        session_data["status"] = "completed"
-        session_data["completed_at"] = datetime.utcnow().isoformat()
-        await r.set(f"{CHECKOUT_SESSION_KEY_PREFIX}{session_id}", json.dumps(session_data))
-        
-        logging.info(f"Successfully added {credits} credits to user {user_id}. New balance: {new_balance}")
-        return True
-    except Exception as e:
-        logging.error(f"Error handling checkout completion: {e}")
-        return False
+async def handle_webhook_event(event):
+    event_type = event['type']
+    data_object = event['data']['object']
+    logging.info(f"Handling webhook event: {event['id']} ({event_type})")
+    if event_type == 'checkout.session.completed':
+        session = data_object
+        user_id = session.get('client_reference_id')
+        price_id = None
+        credits = 0
+        mode = session.get('mode')
+        # For one-time payment, add credits now
+        if 'subscription' == mode:
+            # For subscriptions, credits are added on invoice.paid
+            pass
+        else:
+            # For one-time payment, add credits now
+            if session.get('line_items'):
+                price_id = session['line_items'][0]['price']['id']
+            if not price_id and session.get('metadata', {}):
+                price_id = session['metadata'].get('price_id')
+            if not price_id:
+                logging.error(f"No price_id found in session {session['id']}")
+                return
+            credits = STRIPE_PRICE_ID_TO_CREDITS.get(price_id, 0)
+            if credits > 0 and user_id:
+                await credits_service.add_credits(user_id, credits, "purchase", f"Stripe purchase: {credits} credits")
+    elif event_type == 'invoice.paid':
+        invoice = data_object
+        stripe_customer_id = invoice.get('customer')
+        price_id = invoice['lines']['data'][0]['price']['id'] if invoice.get('lines', {}).get('data') else None
+        credits = STRIPE_PRICE_ID_TO_CREDITS.get(price_id, 0)
+        if credits > 0 and stripe_customer_id:
+            from ..services import user_service
+            user = await user_service.get_user_by_stripe_customer_id(stripe_customer_id)
+            if user:
+                await credits_service.add_credits(user.id, credits, "subscription_renewal", f"Stripe subscription renewal: {credits} credits")
+    else:
+        logging.warning(f"Unhandled webhook event type: {event_type}")
 
 async def get_user_purchases(user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
     """
@@ -209,7 +108,7 @@ async def get_user_purchases(user_id: str, limit: int = 10) -> List[Dict[str, An
     try:
         # Get transactions of type "purchase" from credits service
         transactions = await credits_service.get_transactions(user_id)
-        purchases = [t for t in transactions if t["type"] == "purchase"]
+        purchases = [t for t in transactions if t["type"] in ["purchase", "subscription_renewal"]]
         
         # Sort by timestamp (newest first) and limit
         purchases.sort(key=lambda x: x["timestamp"], reverse=True)

@@ -15,6 +15,10 @@ from ..models.user import User
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
+class CreateCheckoutSessionRequest(BaseModel):
+    price_id: constr(min_length=10)
+    mode: str  # 'payment' or 'subscription'
+
 class CheckoutRequest(BaseModel):
     plan_id: constr(min_length=3, max_length=32)
     success_url: HttpUrl
@@ -28,21 +32,20 @@ async def get_plans():
     plans = await payment_service.get_payment_plans()
     return success_response({"plans": plans})
 
-@router.post('/checkout')
-async def create_checkout(body: CheckoutRequest, user: User = Depends(token_required_fastapi)):
+@router.post('/create-checkout-session')
+async def create_checkout_session_route(body: CreateCheckoutSessionRequest, user: User = Depends(token_required_fastapi)):
     """
-    Create a checkout session for a plan.
+    Create a Stripe Checkout Session for a one-time payment or subscription.
     Requires authentication.
     """
-    checkout_session = await payment_service.create_checkout_session(
-        user.id,
-        body.plan_id,
-        str(body.success_url),
-        str(body.cancel_url)
+    session = await payment_service.create_checkout_session(
+        user_id=user.id,
+        price_id=body.price_id,
+        mode=body.mode
     )
-    if not checkout_session:
+    if not session:
         return error_response("Failed to create checkout session", 500)
-    return success_response(checkout_session)
+    return success_response({"sessionId": session["id"], "url": session["url"]})
 
 @router.post('/webhook')
 async def webhook(request: Request):
@@ -63,15 +66,11 @@ async def webhook(request: Request):
     except stripe.error.SignatureVerificationError as e:
         logging.error(f"Invalid Stripe signature: {e}")
         return error_response("Invalid signature", 400)
-    # Handle the event
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        session_id = session['id']
-        success = await payment_service.handle_checkout_completed(session_id)
-        if success:
-            logging.info(f"Successfully processed payment for session {session_id}")
-        else:
-            logging.error(f"Failed to process payment for session {session_id}")
+    # Pass event to service
+    try:
+        await payment_service.handle_webhook_event(event)
+    except Exception as e:
+        logging.error(f"Error handling webhook event: {e}")
     return success_response({"received": True})
 
 @router.get('/purchases')

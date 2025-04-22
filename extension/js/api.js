@@ -946,20 +946,33 @@ class ApiService {
   }
 
   /**
-   * Create a payment session
-   * @param {string} planId - The payment plan ID
-   * @returns {Promise<Object>} The payment session
+   * Create a Stripe checkout session
+   * @param {string} priceId - The Stripe Price ID
+   * @param {string} mode - 'payment' or 'subscription'
+   * @returns {Promise<Object>} The checkout session
    */
-  async createPaymentSession(planId) {
+  async createCheckoutSession(priceId, mode) {
     return this.request(
       this.API.PAYMENT.CREATE_SESSION,
       {
         method: "POST",
-        body: JSON.stringify({ plan_id: planId }),
+        body: JSON.stringify({ price_id: priceId, mode }),
       },
-      true,
+      true
     );
   }
+
+  // (DEPRECATED) Create a payment session by plan ID
+  // async createPaymentSession(planId) {
+  //   return this.request(
+  //     this.API.PAYMENT.CREATE_SESSION,
+  //     {
+  //       method: "POST",
+  //       body: JSON.stringify({ plan_id: planId }),
+  //     },
+  //     true,
+  //   );
+  // }
 
   /**
    * Check if the API is available
