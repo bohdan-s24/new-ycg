@@ -21,7 +21,7 @@ class Config:
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000") # Default for local dev
 
     # API configurations
-    OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]
+    OPENAI_MODELS = ["gpt-4.1-mini", "gpt-4o"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
 
     # Timeout settings
