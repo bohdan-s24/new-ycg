@@ -75,7 +75,7 @@ class ApiService {
       // Payment endpoints
       PAYMENT: {
         PLANS: `${config.API_BASE_URL}/v1/payment/plans`,
-        CREATE_SESSION: `${config.API_BASE_URL}/v1/payment/create-session`,
+        CREATE_SESSION: `${config.API_BASE_URL}/v1/payment/create-checkout-session`,
       },
 
       // Health check
@@ -952,14 +952,22 @@ class ApiService {
    * @returns {Promise<Object>} The checkout session
    */
   async createCheckoutSession(priceId, mode) {
-    return this.request(
-      this.API.PAYMENT.CREATE_SESSION,
-      {
+    try {
+      const token = await this.getAccessToken();
+      const res = await fetch(`${this.API.BASE_URL}/v1/payment/create-checkout-session`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
         body: JSON.stringify({ price_id: priceId, mode }),
-      },
-      true
-    );
+      });
+      const data = await res.json();
+      if (!res.ok) return { success: false, error: data.message || "Unknown error" };
+      return { success: true, data: data.data };
+    } catch (err) {
+      return { success: false, error: err.message || err };
+    }
   }
 
   // (DEPRECATED) Create a payment session by plan ID
