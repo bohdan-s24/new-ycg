@@ -19,7 +19,7 @@ class Config:
     STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET") # Loaded from Vercel env
 
     # Frontend URL (needed for Stripe Checkout redirects)
-    FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000") # Default for local dev
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://ycg-frontend.vercel.app") # Updated to new frontend domain
 
     # API configurations
     OPENAI_MODELS = ["gpt-4.1-mini", "gpt-4o"]

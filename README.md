@@ -93,6 +93,26 @@ uvicorn api.index:app --reload
   ```
 - For production (Vercel), deployment is automatic and uses ASGI by default.
 
+## Project Structure Migration (April 2025)
+
+**The project is now split into two Vercel deployments:**
+
+- **Backend (API):** https://ycg-backend.vercel.app
+  - Contains all FastAPI backend code, Stripe integration, and API endpoints.
+  - Environment variable `FRONTEND_URL` should be set to `https://ycg-frontend.vercel.app`.
+
+- **Frontend (Static/Extension):** https://ycg-frontend.vercel.app
+  - Contains all static files and Chrome extension assets (see `new-ycg-frontend` repo).
+  - Stripe payment success/cancel URLs now point to this domain.
+
+### Migration Steps
+1. All static files and extension assets moved to a new repo/project: `new-ycg-frontend`.
+2. Stripe redirect URLs and backend config updated to use the new frontend domain.
+3. CORS enabled on backend for the frontend domain.
+4. All extension API calls must use the backend domain: `https://ycg-backend.vercel.app`.
+
+**See the `README.md` in the frontend repo for details on static/extension deployment.**
+
 ## Deployment
 
 The backend is automatically deployed to Vercel when changes are pushed to the main branch.

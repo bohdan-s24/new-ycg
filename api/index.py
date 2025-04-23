@@ -9,10 +9,20 @@ from api.routes.auth import router as auth_router
 from api.routes.credits import router as credits_router
 from api.routes.payment import router as payment_router
 from api.errors import register_exception_handlers
+from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://ycg-frontend.vercel.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 register_exception_handlers(app)
 
 api_prefix = "/v1"
