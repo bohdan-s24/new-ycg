@@ -10,9 +10,16 @@ from jose import jwt, JWTError
 
 from ..config import Config
 from ..utils.exceptions import AuthenticationError
+from ..utils.db import redis_operation
+
+import secrets
+import hashlib
+import asyncio
 
 # Constants
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+REFRESH_TOKEN_REDIS_PREFIX = "refresh_token:"
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -113,3 +120,57 @@ def validate_token(token: str) -> Dict[str, Any]:
     except Exception as e:
         logging.error(f"Unexpected error validating token: {e}")
         raise AuthenticationError(f"Token validation failed: {str(e)}")
+
+
+async def generate_refresh_token(user_id: str) -> str:
+    """
+    Generates a secure refresh token, stores its hash in Redis with expiry, and returns the plaintext token.
+    """
+    token = secrets.token_urlsafe(64)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    redis_key = f"{REFRESH_TOKEN_REDIS_PREFIX}{user_id}:{token_hash}"
+    expire_seconds = REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+
+    async def _set(redis):
+        await redis.set(redis_key, "1", ex=expire_seconds)
+        return True
+    await redis_operation("set_refresh_token", _set)
+    return token
+
+
+async def validate_refresh_token(user_id: str, token: str) -> bool:
+    """
+    Validates a refresh token for a user by checking its hash in Redis.
+    """
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    redis_key = f"{REFRESH_TOKEN_REDIS_PREFIX}{user_id}:{token_hash}"
+    async def _get(redis):
+        return await redis.get(redis_key)
+    result = await redis_operation("get_refresh_token", _get)
+    return result is not None
+
+
+async def revoke_refresh_token(user_id: str, token: str) -> bool:
+    """
+    Revokes a refresh token by deleting its hash from Redis.
+    """
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    redis_key = f"{REFRESH_TOKEN_REDIS_PREFIX}{user_id}:{token_hash}"
+    async def _del(redis):
+        return await redis.delete(redis_key)
+    result = await redis_operation("del_refresh_token", _del)
+    return result == 1
+
+
+async def revoke_all_refresh_tokens(user_id: str) -> int:
+    """
+    Revokes all refresh tokens for a user (logs out from all devices).
+    """
+    # Pattern: refresh_token:{user_id}:*
+    pattern = f"{REFRESH_TOKEN_REDIS_PREFIX}{user_id}:*"
+    async def _del_all(redis):
+        keys = await redis.keys(pattern)
+        if not keys:
+            return 0
+        return await redis.delete(*keys)
+    return await redis_operation("del_all_refresh_tokens", _del_all)

@@ -122,10 +122,13 @@ async def login_user(user: User) -> Dict[str, Any]:
         user: The User object
 
     Returns:
-        Dictionary containing access token and user information
+        Dictionary containing access token, refresh token, and user information
     """
     # Create access token
     access_token = await create_user_token(user)
+    # Create refresh token
+    from . import token_service as _token_service
+    refresh_token = await _token_service.generate_refresh_token(user.id)
 
     # Get credit balance
     from . import credits_service
@@ -134,6 +137,7 @@ async def login_user(user: User) -> Dict[str, Any]:
     # Return token and user info
     return {
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
         "user_id": user.id,
         "email": user.email,

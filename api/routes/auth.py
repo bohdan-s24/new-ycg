@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, Request, Depends, HTTPException, status
 from ..config import Config
-from ..services import auth_service, credits_service
+from ..services import auth_service, credits_service, oauth_service, token_service, user_service
 from ..models.user import UserCreate, UserLogin
 from ..utils.responses import success_response, error_response
 from ..utils.decorators import token_required_fastapi
@@ -20,6 +20,10 @@ class GoogleLoginData(BaseModel):
 
 class VerifyTokenData(BaseModel):
     token: str
+
+class RefreshRequest(BaseModel):
+    user_id: str
+    refresh_token: str
 
 @router.get('/debug')
 def auth_debug():
@@ -119,6 +123,70 @@ async def verify_token(data: VerifyTokenData):
     except Exception as e:
         logging.error(f"Unexpected error verifying token: {str(e)}")
         return error_response("Internal server error", 500)
+
+@router.post('/refresh')
+async def refresh_tokens(body: RefreshRequest):
+    """
+    Exchange a valid refresh token for a new access token (and optionally a new refresh token).
+    """
+    user_id = body.user_id
+    refresh_token = body.refresh_token
+    try:
+        # Validate refresh token
+        valid = await token_service.validate_refresh_token(user_id, refresh_token)
+        if not valid:
+            logging.warning(f"[REFRESH] Invalid refresh token for user_id={user_id}")
+            return error_response("Invalid refresh token", 401)
+        # Optionally rotate refresh token (for extra security)
+        await token_service.revoke_refresh_token(user_id, refresh_token)
+        new_refresh_token = await token_service.generate_refresh_token(user_id)
+        # Issue new access token
+        user = await user_service.get_user_by_id(user_id)
+        if not user:
+            return error_response("User not found", 404)
+        from ..services.auth_service import create_user_token
+        access_token = await create_user_token(user)
+        return success_response({
+            "access_token": access_token,
+            "refresh_token": new_refresh_token,
+            "token_type": "bearer"
+        })
+    except Exception as e:
+        logging.error(f"[REFRESH] Error during token refresh: {e}")
+        return error_response("Token refresh failed", 500)
+
+@router.post('/logout')
+async def logout(request: Request):
+    """
+    Logs out the user by revoking refresh tokens (if any) and/or Google access tokens.
+    Optionally logs the event for auditing.
+    """
+    try:
+        data = await request.json()
+        google_token = data.get("google_token")
+        refresh_token = data.get("refresh_token")
+        user_id = data.get("user_id")
+        logs = []
+
+        # Log the logout event
+        logging.info(f"[LOGOUT] Logout requested for user_id={user_id}")
+
+        # Revoke Google token if provided
+        if google_token:
+            revoked = await oauth_service.revoke_google_token(google_token)
+            logs.append(f"Google token revoked: {revoked}")
+            logging.info(f"[LOGOUT] Google token revoked for user_id={user_id}")
+
+        # Revoke refresh token if provided
+        if refresh_token and user_id:
+            revoked = await token_service.revoke_refresh_token(user_id, refresh_token)
+            logs.append(f"Refresh token revoked: {revoked}")
+            logging.info(f"[LOGOUT] Refresh token revoked for user_id={user_id}")
+
+        return success_response({"message": "Logout successful", "logs": logs})
+    except Exception as e:
+        logging.error(f"[LOGOUT] Error during logout: {e}")
+        return error_response("Logout failed", 500)
 
 @router.get('/config')
 async def get_auth_config():

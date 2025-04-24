@@ -101,3 +101,27 @@ def verify_google_id_token(token: str, client_id: Optional[str] = None) -> Dict[
     except Exception as e:
         logging.error(f"Unexpected error verifying Google ID token: {e}")
         raise AuthenticationError(f"Google authentication failed: {str(e)}")
+
+
+async def revoke_google_token(token: str, timeout: int = 10) -> bool:
+    """
+    Revokes a Google OAuth access token.
+    Args:
+        token: The Google OAuth access token to revoke
+        timeout: Timeout for the Google API call in seconds
+    Returns:
+        True if revocation succeeded, False otherwise
+    """
+    revoke_url = "https://oauth2.googleapis.com/revoke"
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(revoke_url, params={"token": token}, headers={"Content-Type": "application/x-www-form-urlencoded"})
+            if response.status_code == 200:
+                logging.info("Google token revoked successfully.")
+                return True
+            else:
+                logging.warning(f"Failed to revoke Google token. Status: {response.status_code}, Response: {response.text}")
+                return False
+    except Exception as e:
+        logging.error(f"Error revoking Google token: {e}")
+        return False
