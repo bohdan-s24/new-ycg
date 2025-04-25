@@ -11,11 +11,11 @@ from . import credits_service
 # Stripe Product/Price mapping for credits
 STRIPE_PRICE_ID_TO_CREDITS = {
     # One-time purchases
-    'price_1RGefhF7Kryr2ZRb4GUtKKvj': 10,   # 10 Credits One-Time ($9)
-    'price_1RGefRF7Kryr2ZRbmpxIKe7S': 50,   # 50 Credits One-Time ($29)
+    'price_1RHh4dF7Kryr2ZRbrm1f0zt4': 10,   # 10 Credits One-Time ($9)
+    'price_1RHh4RF7Kryr2ZRbL5HZLqj8': 50,   # 50 Credits One-Time ($29)
     # Subscriptions (monthly)
-    'price_1RGef7F7Kryr2ZRb9FWp5g7v': 10,   # 10 Credits Recurring ($9/month)
-    'price_1RGenMF7Kryr2ZRbrNPx4BVb': 50,   # 50 Credits Recurring ($29/month)
+    'price_1RHh4dF7Kryr2ZRbZwLlf2bT': 10,   # 10 Credits Recurring ($9/month)
+    'price_1RHh4RF7Kryr2ZRbmHnwUnq4': 50,   # 50 Credits Recurring ($29/month)
 }
 
 # Stripe API key setup
