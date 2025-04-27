@@ -40,11 +40,13 @@ async def create_checkout_session(user_id: str, price_id: str, mode: str, timeou
     try:
         async def create_session():
             return stripe.checkout.Session.create(
+                payment_method_types=["card"],
                 line_items=[{"price": price_id, "quantity": 1}],
                 mode=mode,
-                success_url=f"https://ycg-frontend.vercel.app/payment-success.html",
-                cancel_url=f"https://ycg-frontend.vercel.app/payment-cancel.html",
+                success_url=Config.STRIPE_SUCCESS_URL,
+                cancel_url=Config.STRIPE_CANCEL_URL,
                 client_reference_id=user_id,
+                allow_promotion_codes=True,
             )
         session = await asyncio.wait_for(create_session(), timeout=timeout)
         return {"id": session.id, "url": session.url}
