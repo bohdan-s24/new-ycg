@@ -73,10 +73,22 @@ async def handle_webhook_event(event):
             pass
         else:
             # For one-time payment, add credits now
+            # Try to get price_id from line_items if present
             if session.get('line_items'):
                 price_id = session['line_items'][0]['price']['id']
+            # If price_id is still missing, try metadata
             if not price_id and session.get('metadata', {}):
                 price_id = session['metadata'].get('price_id')
+            # If still missing, fetch line items from Stripe API
+            if not price_id:
+                session_id = session.get('id')
+                if session_id:
+                    try:
+                        line_items = stripe.checkout.Session.list_line_items(session_id, limit=1)
+                        if line_items and line_items.data:
+                            price_id = line_items.data[0].price.id
+                    except Exception as e:
+                        logging.error(f"Failed to fetch line items for session {session_id}: {e}")
             if not price_id:
                 logging.error(f"No price_id found in session {session['id']}")
                 return
