@@ -20,6 +20,10 @@ class Config:
     # Frontend URL (needed for Stripe Checkout redirects)
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://ycg-frontend.vercel.app") # Updated to new frontend domain
 
+    # Stripe URLs
+    STRIPE_SUCCESS_URL = "https://ycg-frontend.vercel.app/payment-success.html"
+    STRIPE_CANCEL_URL = "https://ycg-frontend.vercel.app/payment-cancel.html"
+
     # API configurations
     OPENAI_MODELS = ["gpt-4.1-mini", "gpt-4o"]
     TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
