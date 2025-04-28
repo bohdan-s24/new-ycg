@@ -18,7 +18,7 @@ import asyncio
 
 # Constants
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+REFRESH_TOKEN_EXPIRE_DAYS = 365  # Increased from 7 to 365 days for long-lived refresh tokens
 REFRESH_TOKEN_REDIS_PREFIX = "refresh_token:"
 
 
