@@ -9,7 +9,7 @@ A Chrome extension that automatically generates YouTube video chapters using AI,
 - Creates properly formatted YouTube chapters ready to copy
 - Simple, user-friendly interface
 - Works with any YouTube video that has captions/subtitles
-- Supports Webshare proxies to avoid IP blocks
+- Supports Decodo proxies to avoid IP blocks
 - **NEW**: Credit-based system with multiple pricing plans
 - **NEW**: User accounts with Google sign-in
 
@@ -63,8 +63,8 @@ pip install -r requirements.txt
 ```
 # API Keys
 OPENAI_API_KEY=your_api_key_here
-WEBSHARE_USERNAME=your_webshare_username
-WEBSHARE_PASSWORD=your_webshare_password
+DECODO_USERNAME=your_decodo_username
+DECODO_PASSWORD=your_decodo_password
 
 # Authentication
 JWT_SECRET_KEY=your_jwt_secret
@@ -122,31 +122,49 @@ The backend is automatically deployed to Vercel when changes are pushed to the m
 To ensure proper functionality, set these environment variables in your Vercel project:
 
 1. `OPENAI_API_KEY` - Your OpenAI API key
-2. `WEBSHARE_USERNAME` - Your Webshare proxy username (if using Webshare)
-3. `WEBSHARE_PASSWORD` - Your Webshare proxy password (if using Webshare)
+2. `DECODO_USERNAME` - Your Decodo proxy username
+3. `DECODO_PASSWORD` - Your Decodo proxy password
 4. `JWT_SECRET_KEY` - Secret key for JWT token generation
 5. `GOOGLE_CLIENT_ID` - Google OAuth client ID
 6. `REDIS_URL` - Upstash Redis connection URL
 7. `STRIPE_SECRET_KEY` - Stripe API secret key
 8. `STRIPE_WEBHOOK_SECRET` - Stripe webhook secret for verifying events
 
-## Using Webshare Proxies
+## Proxy Provider (Decodo)
 
-To avoid YouTube IP blocks, this project supports Webshare proxies:
+This project uses [Decodo Residential Proxies](https://help.decodo.com/docs/residential-proxy-quick-start) for all YouTube requests.
 
-1. **Purchase a Webshare Package**: 
-   - Sign up for [Webshare](https://www.webshare.io/)
-   - Purchase a "Residential" proxy package (NOT "Proxy Server" or "Static Residential")
+### Required Environment Variables
 
-2. **Configure Proxies**:
-   - Find your proxy credentials in Webshare dashboard
-   - Add them to your environment variables (see above)
+On Vercel (or locally), set the following:
 
-3. **Vercel Configuration**:
-   - Add the variables to your Vercel project settings
-   - Redeploy the application
+- `DECODO_USERNAME`: Your Decodo proxy username
+- `DECODO_PASSWORD`: Your Decodo proxy password
 
-The API will automatically use the proxies if they are configured, falling back to direct access if not.
+These are used to construct the proxy URL:
+
+```
+http://<DECODO_USERNAME>:<DECODO_PASSWORD>@gate.decodo.com:10001
+```
+
+The backend will automatically use this proxy for all outbound requests to YouTube.
+
+### Example Usage (Python)
+
+```python
+import requests
+url = 'https://ip.decodo.com/json'
+username = 'YOUR_USERNAME'
+password = 'YOUR_PASSWORD'
+proxy = f"http://{username}:{password}@gate.decodo.com:10001"
+result = requests.get(url, proxies = {
+    'http': proxy,
+    'https': proxy
+})
+print(result.text)
+```
+
+If these variables are not set, the backend will attempt direct connections and may be rate-limited by YouTube.
 
 ## Authentication Setup
 
@@ -179,7 +197,7 @@ If you see CORS errors in the console:
 
 ### Proxy Issues
 If the proxy is not working:
-- Check the Webshare account status
+- Check the Decodo account status
 - Verify the credentials are correct
 - Ensure you're using Residential proxies (not other types)
 - Check the server logs for connection errors

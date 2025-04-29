@@ -57,14 +57,18 @@ async def connectivity_check():
     except Exception as e:
         logging.error(f"Direct connection test failed: {e}")
         direct_connection_success = False
-    if os.environ.get("HTTPS_PROXY"):
+    # Use Decodo proxy if configured
+    if os.environ.get("DECODO_USERNAME") and os.environ.get("DECODO_PASSWORD"):
+        proxy_url = f"http://{os.environ['DECODO_USERNAME']}:{os.environ['DECODO_PASSWORD']}@gate.decodo.com:10001"
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
+            async with httpx.AsyncClient(proxies={"http": proxy_url, "https": proxy_url}, timeout=5) as client:
                 response = await client.get("https://www.youtube.com")
                 proxy_connection_success = response.status_code == 200
         except Exception as e:
             logging.error(f"Proxy connection test failed: {e}")
             proxy_connection_success = False
+    else:
+        proxy_connection_success = None
     return JSONResponse(content={
         'status': 'API is operational',
         'version': '1.0.0',

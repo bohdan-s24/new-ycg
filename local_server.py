@@ -26,11 +26,11 @@ if __name__ == '__main__':
         print("\nWARNING: OPENAI_API_KEY environment variable is not set!")
         print("The chapter generation functionality will not work.\n")
     
-    # Check Webshare credentials
-    webshare_user = os.environ.get("WEBSHARE_USERNAME", "")
-    webshare_pass = os.environ.get("WEBSHARE_PASSWORD", "")
-    if not webshare_user or not webshare_pass:
-        print("\nWARNING: Webshare proxy credentials are not configured!")
+    # Check Decodo credentials
+    decodo_user = os.environ.get("DECODO_USERNAME", "")
+    decodo_pass = os.environ.get("DECODO_PASSWORD", "")
+    if not decodo_user or not decodo_pass:
+        print("\nWARNING: Decodo proxy credentials are not configured!")
         print("The API may be rate-limited by YouTube.\n")
     
     # Run the server

@@ -48,22 +48,22 @@ class Config:
     PREMIUM_PLAN_CREDITS = 50
     PREMIUM_PLAN_PRICE = 29
 
-    # Proxy configuration for Evomi
-    EVOMI_USERNAME = os.environ.get("EVOMI_USERNAME")
-    EVOMI_PASSWORD = os.environ.get("EVOMI_PASSWORD")
-    EVOMI_HOST = os.environ.get("EVOMI_HOST", "rp.evomi.com")
-    EVOMI_PORT = int(os.environ.get("EVOMI_PORT", 1000))
+    # Proxy configuration for Decodo
+    DECODO_USERNAME = os.environ.get("DECODO_USERNAME")
+    DECODO_PASSWORD = os.environ.get("DECODO_PASSWORD")
+    DECODO_HOST = "gate.decodo.com"
+    DECODO_PORT = 10001
 
     @classmethod
     def get_proxy_url(cls) -> Optional[str]:
-        """Get proxy URL if Evomi credentials are available"""
-        if cls.EVOMI_USERNAME and cls.EVOMI_PASSWORD:
-            return f"http://{cls.EVOMI_USERNAME}:{cls.EVOMI_PASSWORD}@{cls.EVOMI_HOST}:{cls.EVOMI_PORT}"
+        """Get proxy URL if Decodo credentials are available"""
+        if cls.DECODO_USERNAME and cls.DECODO_PASSWORD:
+            return f"http://{cls.DECODO_USERNAME}:{cls.DECODO_PASSWORD}@{cls.DECODO_HOST}:{cls.DECODO_PORT}"
         return None
 
     @classmethod
     def get_proxy_dict(cls) -> Optional[Dict[str, str]]:
-        """Get proxy dictionary for requests"""
+        """Get proxy dictionary for requests/httpx"""
         proxy_url = cls.get_proxy_url()
         if proxy_url:
             return {

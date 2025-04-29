@@ -22,12 +22,12 @@ from youtube_transcript_api import (
 
 from api.config import Config
 
-# Evomi proxy config does not require SSL CA patching or special logic
+# Decodo proxy config does not require SSL CA patching or special logic
 
 def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Dict[str, Any]]]:
     """
     Fetch transcript using the YouTube Transcript API with proper error handling
-    and fallbacks.
+    and fallbacks. Uses Decodo proxy if configured.
     
     Args:
         video_id: YouTube video ID
@@ -48,7 +48,7 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Di
     
     # Try with proxy first, then without
     attempts = [
-        ("with proxy", True),
+        ("with Decodo proxy", True),
         ("without proxy", False)
     ]
     
@@ -127,14 +127,14 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Di
 
 def fetch_transcript_with_requests(video_id: str, proxy_dict: Optional[Dict[str, str]] = None, timeout: int = 10) -> List[Dict[str, Any]]:
     """
-    Fetch YouTube transcript using httpx.AsyncClient with proxy support (async replacement for requests)
+    Fetch YouTube transcript using httpx.AsyncClient with Decodo proxy support (async replacement for requests)
     """
     async def _fetch():
-        print(f"Attempting to fetch transcript for {video_id} using httpx with proxies: {bool(proxy_dict)}")
+        print(f"Attempting to fetch transcript for {video_id} using httpx with Decodo proxy: {bool(proxy_dict)}")
         proxies = proxy_dict if proxy_dict else None
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         async with httpx.AsyncClient(proxies=proxies, timeout=timeout) as client:
-            print(f"Fetching video page with proxies: {bool(proxy_dict)}")
+            print(f"Fetching video page with Decodo proxy: {bool(proxy_dict)}")
             response = await client.get(video_url)
             response.raise_for_status()
             html = response.text
