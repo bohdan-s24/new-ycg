@@ -105,7 +105,8 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
             'formatted_text': formatted_text,
             'fromCache': False,
             'generationCount': new_count,
-            'remainingGenerations': remaining_generations
+            'remainingGenerations': remaining_generations,
+            'creditsUsed': credits_needed
         })
 
     # Otherwise, use lock for initial generation or if transcript is not cached
@@ -145,7 +146,8 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
                     'formatted_text': formatted_text,
                     'fromCache': True,
                     'generationCount': current_count,
-                    'remainingGenerations': remaining_generations
+                    'remainingGenerations': remaining_generations,
+                    'creditsUsed': 0  # No credits used for cached response
                 })
 
         # Get transcript and format it
@@ -191,7 +193,8 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
             'formatted_text': formatted_text,
             'fromCache': False,
             'generationCount': new_count,
-            'remainingGenerations': remaining_generations
+            'remainingGenerations': remaining_generations,
+            'creditsUsed': credits_needed
         })
     finally:
         await redis_operation("release_chapter_lock", release_chapter_lock, lock_key)
