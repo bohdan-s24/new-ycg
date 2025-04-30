@@ -10,9 +10,14 @@ from ..utils.db import redis_operation
 FREE_CREDITS_ON_SIGNUP = 3
 DEFAULT_GENERATION_COST = 1 # Cost per chapter generation
 
+# Constants for chapter generation limits
+MAX_GENERATIONS_PER_CREDIT = 3  # Initial + 2 regenerations
+MAX_TOTAL_GENERATIONS = 6  # Maximum total generations (initial + 5 regenerations)
+
 # Redis key prefixes
 CREDIT_BALANCE_KEY_PREFIX = "credits:"
 TRANSACTION_LOG_KEY_PREFIX = "transactions:" # Using a Redis List for transaction log
+VIDEO_GENERATIONS_KEY_PREFIX = "video_generations:"  # Track generations per video per user
 
 async def initialize_credits(user_id: str):
     """Sets the initial free credits for a new user."""
@@ -157,3 +162,103 @@ async def get_transactions(user_id: str, offset: int = 0, limit: int = 20):
     except Exception as e:
         logging.error(f"Failed to retrieve transactions for user {user_id}: {e}")
         return [], 0
+
+async def get_video_generation_count(user_id: str, video_id: str) -> int:
+    """
+    Get the number of times a user has generated chapters for a specific video.
+
+    Args:
+        user_id: The user ID
+        video_id: The YouTube video ID
+
+    Returns:
+        The number of generations for this video
+    """
+    key = f"{VIDEO_GENERATIONS_KEY_PREFIX}{user_id}:{video_id}"
+
+    async def _get_count(redis, _):
+        count = await redis.get(key)
+        return int(count) if count is not None else 0
+
+    try:
+        return await redis_operation("get_video_generation_count", _get_count, user_id)
+    except Exception as e:
+        logging.error(f"Failed to get generation count for user {user_id}, video {video_id}: {e}")
+        return 0
+
+async def increment_video_generation_count(user_id: str, video_id: str) -> int:
+    """
+    Increment the generation count for a specific video.
+
+    Args:
+        user_id: The user ID
+        video_id: The YouTube video ID
+
+    Returns:
+        The new count after incrementing
+    """
+    key = f"{VIDEO_GENERATIONS_KEY_PREFIX}{user_id}:{video_id}"
+
+    async def _increment_count(redis, _):
+        new_count = await redis.incr(key)
+        # Set expiry to 30 days to avoid keeping this data forever
+        await redis.expire(key, 60 * 60 * 24 * 30)
+        return int(new_count)
+
+    try:
+        return await redis_operation("increment_video_generation_count", _increment_count, user_id)
+    except Exception as e:
+        logging.error(f"Failed to increment generation count for user {user_id}, video {video_id}: {e}")
+        return 0
+
+async def calculate_credits_needed(user_id: str, video_id: str) -> int:
+    """
+    Calculate how many credits are needed for the next generation based on current count.
+
+    Args:
+        user_id: The user ID
+        video_id: The YouTube video ID
+
+    Returns:
+        Number of credits needed (1) or -1 if max generations reached
+    """
+    current_count = await get_video_generation_count(user_id, video_id)
+
+    # If we've reached the maximum total generations, return -1
+    if current_count >= MAX_TOTAL_GENERATIONS:
+        return -1
+
+    # For all generations, we use 1 credit
+    # The credit usage is tracked by the count:
+    # - First 3 generations (0, 1, 2) use the first credit
+    # - Next 3 generations (3, 4, 5) use the second credit
+    return DEFAULT_GENERATION_COST
+
+async def has_reached_max_generations(user_id: str, video_id: str) -> bool:
+    """
+    Check if a user has reached the maximum number of generations for a video.
+
+    Args:
+        user_id: The user ID
+        video_id: The YouTube video ID
+
+    Returns:
+        True if the user has reached the maximum generations, False otherwise
+    """
+    current_count = await get_video_generation_count(user_id, video_id)
+    return current_count >= MAX_TOTAL_GENERATIONS
+
+async def get_remaining_generations(user_id: str, video_id: str) -> int:
+    """
+    Get the number of remaining generations for a video.
+
+    Args:
+        user_id: The user ID
+        video_id: The YouTube video ID
+
+    Returns:
+        Number of remaining generations (0 to MAX_TOTAL_GENERATIONS)
+    """
+    current_count = await get_video_generation_count(user_id, video_id)
+    remaining = max(0, MAX_TOTAL_GENERATIONS - current_count)
+    return remaining
