@@ -49,7 +49,15 @@ async def get_credit_balance(user_id: str) -> int:
     return await redis_operation("get_credit_balance", _get_balance, user_id)
 
 async def has_sufficient_credits(user_id: str, amount_needed: int = DEFAULT_GENERATION_COST) -> bool:
-    """Checks if the user has enough credits."""
+    """
+    Checks if the user has enough credits.
+
+    If amount_needed is 0, always returns True.
+    """
+    # If no credits are needed, always return True
+    if amount_needed == 0:
+        return True
+
     current_balance = await get_credit_balance(user_id)
     return current_balance >= amount_needed
 
@@ -57,8 +65,18 @@ async def deduct_credits(user_id: str, amount: int = DEFAULT_GENERATION_COST, de
     """
     Deducts credits from a user's balance. Returns True if successful, False otherwise.
     Implements atomic check-and-decrement operation.
+
+    If amount is 0, no credits are deducted but the transaction is still logged.
     """
     key = f"{CREDIT_BALANCE_KEY_PREFIX}{user_id}"
+
+    # If amount is 0, just log the transaction and return True
+    if amount == 0:
+        logging.info(f"No credits needed for user {user_id} for operation: {description}")
+
+        # Log the free transaction
+        await add_transaction(user_id, 0, "free_operation", description)
+        return True
 
     async def _deduct_credits(redis, user_id, amount, description):
         # First, get the current balance
@@ -220,7 +238,7 @@ async def calculate_credits_needed(user_id: str, video_id: str) -> int:
         video_id: The YouTube video ID
 
     Returns:
-        Number of credits needed (1) or -1 if max generations reached
+        Number of credits needed (0 or 1) or -1 if max generations reached
     """
     current_count = await get_video_generation_count(user_id, video_id)
 
@@ -228,11 +246,23 @@ async def calculate_credits_needed(user_id: str, video_id: str) -> int:
     if current_count >= MAX_TOTAL_GENERATIONS:
         return -1
 
-    # For all generations, we use 1 credit
-    # The credit usage is tracked by the count:
-    # - First 3 generations (0, 1, 2) use the first credit
-    # - Next 3 generations (3, 4, 5) use the second credit
-    return DEFAULT_GENERATION_COST
+    # First generation (count = 0) always costs 1 credit
+    if current_count == 0:
+        return DEFAULT_GENERATION_COST
+
+    # For regenerations within the first credit's limit (count = 1 or 2)
+    # No additional credit is needed
+    if current_count < MAX_GENERATIONS_PER_CREDIT:
+        return 0
+
+    # For regenerations beyond the first credit's limit (count = 3)
+    # We need a new credit for the 4th generation (count = 3)
+    if current_count == MAX_GENERATIONS_PER_CREDIT:
+        return DEFAULT_GENERATION_COST
+
+    # For regenerations within the second credit's limit (count = 4 or 5)
+    # No additional credit is needed
+    return 0
 
 async def has_reached_max_generations(user_id: str, video_id: str) -> bool:
     """
