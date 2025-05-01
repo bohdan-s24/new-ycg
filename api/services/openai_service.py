@@ -53,6 +53,13 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
         "Generate concise, compelling YouTube chapter titles that keep viewers watching until the very end.\n"
         "The final chapter should feel like a climax — a payoff for the viewer's attention.\n\n"
 
+        "## CHAPTER COUNT - VERY IMPORTANT\n"
+        "- For videos under 10 minutes: Create 5-7 chapters maximum\n"
+        "- For videos 10-20 minutes: Create 7-10 chapters maximum\n"
+        "- For videos over 20 minutes: Create 10-15 chapters maximum\n"
+        "- Focus on MAJOR content transitions only - not every small topic change\n"
+        "- Quality over quantity: Fewer, more meaningful chapters are better than many small ones\n\n"
+
         "## FORMAT\n"
         f"- Use only this format: `{timestamp_format} Chapter Title`\n"
         "- One chapter per line\n"
@@ -65,7 +72,7 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
         "4. Chapters should follow natural flow (typically every 2–6 mins between key moments).\n"
         "5. Titles should be under 50 characters, ideally 20–40.\n"
         "6. Use casual, emotional, or intriguing phrasing without excessive clickbait.\n"
-        "7. Identify 5–15 key transitions or topic changes (fewer chapters for shorter videos).\n"
+        "7. Prioritize MAJOR transitions only - be selective and strategic.\n"
         "8. Timestamp accuracy is crucial — no rounding or patterning.\n"
         "9. Keywords and emotion should reflect the transcript's voice.\n"
         "10. Each title should provoke curiosity to watch this chapter.\n\n"
@@ -77,10 +84,14 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
         "- Cues: [music], [pause], [transition], 'in this video...', 'final thoughts...'\n\n"
 
         "### Follow the Step-by-Step Process:\n"
-        "1. **Analyze the full transcript** to understand the general context, content type (list, tutorial, story, etc.) and natural structure.\n"
-        "2. **Identify 5–15 key transitions or 'aha' moments** (more if it's list-based — 1 chapter per item is OK).\n"
-        "3. **Craft strong titles** with emotional triggers (curiosity, surprise, controversey, etc.). Use keywords from the transcript and avoid banal cliches. Highlight unique or shocking info.\n"
-        "4. **Verify timestamps**:\n"
+        "1. **Analyze the full transcript** to understand the general context, content type, and natural structure.\n"
+        "2. **Determine appropriate chapter count** based on video length:\n"
+        "   - Under 10 minutes: 5-7 chapters maximum\n"
+        "   - 10-20 minutes: 7-10 chapters maximum\n"
+        "   - Over 20 minutes: 10-15 chapters maximum\n"
+        "3. **Identify only the MAJOR transitions** - be highly selective and focus on main topic changes.\n"
+        "4. **Craft strong titles** with emotional triggers (curiosity, surprise, etc.). Use keywords from the transcript.\n"
+        "5. **Verify timestamps**:\n"
         "   - Match transitions exactly — no rounding or regular intervals.\n"
         "   - Ensure timestamps are in ascending order and fully cover the video.\n\n"
     )
@@ -104,12 +115,15 @@ def create_final_reminder(video_duration_minutes: float) -> str:
         timestamp_format = "HH:MM:SS"
 
     final_reminder = (
-        "\n### 🔍 FINAL CHECKLIST\n"
+        "\n### 🔍 FINAL CHECKLIST - STRICTLY FOLLOW THESE GUIDELINES\n"
         f"- ✓ Chapters are formatted: `{timestamp_format} Chapter Title`\n"
         "- ✓ Start at 00:00 with introduction\n"
-        "- ✓ End with a conclusion (curiosity peak)\n"
+        "- ✓ End with a compelling conclusion chapter\n"
         "- ✓ Each chapter naturally follows the previous (no gaps)\n"
-        "- ✓ Aim for 5-15 chapters (fewer for shorter videos)\n"
+        "- ✓ CHAPTER COUNT LIMITS (CRITICAL):\n"
+        "  * Under 10 minute videos: 5-7 chapters MAXIMUM\n"
+        "  * 10-20 minute videos: 7-10 chapters MAXIMUM\n"
+        "  * Over 20 minute videos: 10-15 chapters MAXIMUM\n"
         "- ✓ Titles are under 50 characters, ideally 20-40\n"
         "- ✓ All timestamps are real and from transcript only\n"
         "- ✓ No even timestamp spacing or fabricated patterns\n"
@@ -162,7 +176,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
                 "model": model,
                 "input": combined_input[:100] + ("..." if len(combined_input) > 100 else ""),
                 "instructions": system_prompt[:100] + ("..." if len(system_prompt) > 100 else ""),
-                "temperature": 0.7,
+                "temperature": 0.3,
                 "max_output_tokens": 2048,
                 "timeout": timeout
             })
@@ -174,7 +188,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
                     model=model,
                     instructions=system_prompt,
                     input=combined_input,
-                    temperature=0.7,
+                    temperature=0.3,
                     max_output_tokens=2048,
                     timeout=timeout
                 )
