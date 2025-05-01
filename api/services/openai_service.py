@@ -155,8 +155,8 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
             import time
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Trying model: {model}, timeout={timeout}s")
 
-            # Prepare the input with transcript and final reminder
-            combined_input = f"{formatted_transcript}\n\n---\n\n{final_reminder}"
+            # Prepare the input with transcript, system prompt repeat, and final reminder
+            combined_input = f"{formatted_transcript}\n\n---\n\n{system_prompt}\n\n---\n\n{final_reminder}"
 
             print("[OPENAI-REQUEST] Parameters:", {
                 "model": model,
