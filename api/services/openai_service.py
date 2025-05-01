@@ -50,8 +50,7 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
         f"You are an expert YouTube strategist and copywriter.\n\n"
 
         "## GOAL\n"
-        "Generate emotionally compelling, curiosity-driven YouTube chapter titles that keep viewers watching until the very end.\n"
-        "Think of each chapter as part of a suspenseful chain, where every title triggers interest and leads naturally to the next.\n"
+        "Generate concise, compelling YouTube chapter titles that keep viewers watching until the very end.\n"
         "The final chapter should feel like a climax — a payoff for the viewer's attention.\n\n"
 
         "## FORMAT\n"
@@ -63,13 +62,13 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
         "1. Start at **00:00** with an engaging introduction.\n"
         "2. End with a compelling conclusion chapter.\n"
         "3. Use real transitions from the transcript — never invent timestamps.\n"
-        "4. Chapters should follow natural flow (typically every 2–6 mins).\n"
-        "5. Titles should be under 60 characters, ideally 30–50.\n"
-        "6. Use casual, emotional, or clickbait-style phrasing.\n"
-        "7. Identify 10–15 key transitions, topic changes, or 'aha' moments.\n"
+        "4. Chapters should follow natural flow (typically every 2–6 mins between key moments).\n"
+        "5. Titles should be under 50 characters, ideally 20–40.\n"
+        "6. Use casual, emotional, or intriguing phrasing without excessive clickbait.\n"
+        "7. Identify 5–15 key transitions or topic changes (fewer chapters for shorter videos).\n"
         "8. Timestamp accuracy is crucial — no rounding or patterning.\n"
         "9. Keywords and emotion should reflect the transcript's voice.\n"
-        "10. Each title should provoke curiosity — like a cliffhanger series.\n\n"
+        "10. Each title should provoke curiosity to watch this chapter.\n\n"
 
         "## HOW TO DETECT TRANSITIONS\n"
         "- Numbering: 'first', 'tip #2', 'step 3'\n"
@@ -77,11 +76,13 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
         "- Shifts: 'as for...', 'regarding...', 'to summarize...'\n"
         "- Cues: [music], [pause], [transition], 'in this video...', 'final thoughts...'\n\n"
 
-        "## CHAPTER CHAIN STRATEGY\n"
-        "- Create a narrative flow where each chapter builds on the previous one\n"
-        "- Make viewers curious about what comes next\n"
-        "- Build momentum toward the final chapter\n"
-        "- The last chapter should feel like a culmination or revelation\n"
+        "### Follow the Step-by-Step Process:\n"
+        "1. **Analyze the full transcript** to understand the general context, content type (list, tutorial, story, etc.) and natural structure.\n"
+        "2. **Identify 5–15 key transitions or 'aha' moments** (more if it's list-based — 1 chapter per item is OK).\n"
+        "3. **Craft strong titles** with emotional triggers (curiosity, surprise, controversey, etc.). Use keywords from the transcript and avoid banal cliches. Highlight unique or shocking info.\n"
+        "4. **Verify timestamps**:\n"
+        "   - Match transitions exactly — no rounding or regular intervals.\n"
+        "   - Ensure timestamps are in ascending order and fully cover the video.\n\n"
     )
 
     return system_prompt
@@ -108,11 +109,11 @@ def create_final_reminder(video_duration_minutes: float) -> str:
         "- ✓ Start at 00:00 with introduction\n"
         "- ✓ End with a conclusion (curiosity peak)\n"
         "- ✓ Each chapter naturally follows the previous (no gaps)\n"
-        "- ✓ Aim to 10, maximum 15 chapters (more only if list-based)\n"
-        "- ✓ Titles are under 60 characters\n"
+        "- ✓ Aim for 5-15 chapters (fewer for shorter videos)\n"
+        "- ✓ Titles are under 50 characters, ideally 20-40\n"
         "- ✓ All timestamps are real and from transcript only\n"
         "- ✓ No even timestamp spacing or fabricated patterns\n"
-        "- ✓ Each title is curiosity-driven and emotionally engaging\n"
+        "- ✓ Each title is concise and provokes curiosity\n"
         "- ✓ Last chapter feels like a climax or payoff\n"
         "- ✓ No additional explanations, summaries, or markdown"
     )
