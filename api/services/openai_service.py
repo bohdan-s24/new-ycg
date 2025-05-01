@@ -33,10 +33,10 @@ if async_openai_client is None:
 def create_chapter_prompt(video_duration_minutes: float) -> str:
     """
     Create a flexible prompt for generating chapter titles based on natural content transitions.
-    
+
     Args:
         video_duration_minutes: Duration of the video in minutes
-        
+
     Returns:
         System prompt for the OpenAI API
     """
@@ -44,98 +44,137 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
     timestamp_format = "MM:SS"
     if video_duration_minutes > 60:
         timestamp_format = "HH:MM:SS"
-    
-    # Use the original prompt logic
+
+    # Enhanced prompt with USP messaging about viewer retention
     system_prompt = (
-        f"You are an expert in YouTube content optimization and copywriting.\n\n"
+        f"You are an expert YouTube strategist and copywriter.\n\n"
 
-        "Your task is to create short, punchy, emotionally compelling YouTube chapter titles that boost watch time and engagement.\n"
-        "Think like a top-tier strategist. Titles must feel urgent, powerful, and irresistible.\n\n"
+        "## GOAL\n"
+        "Generate emotionally compelling, curiosity-driven YouTube chapter titles that keep viewers watching until the very end.\n"
+        "Think of each chapter as part of a suspenseful chain, where every title triggers interest and leads naturally to the next.\n"
+        "The final chapter should feel like a climax — a payoff for the viewer's attention.\n\n"
 
-        "### CORE RULES:\n"
-        "1. Start the first chapter at **00:00** (Introduction) and cover the entire video.\n"
-        "2. Use **real transitions** from the transcript — never make up timestamps.\n"
-        "3. Include **both** an introduction and conclusion chapter.\n"
-        "4. Titles should be 30–50 characters (max 80), emotionally engaging, and written in a casual, clickbait-style tone.\n"
-        "5. Chapters should be spaced naturally (typically 2–6 minutes), with balanced distribution across the video.\n"
-        f"6. Format each chapter like this: `{timestamp_format} Chapter Title` (each on a new line).\n\n"
+        "## FORMAT\n"
+        f"- Use only this format: `{timestamp_format} Chapter Title`\n"
+        "- One chapter per line\n"
+        "- No markdown, notes, or commentary\n\n"
 
-        "### HOW TO SPOT CONTENT BREAKS:\n"
+        "## RULES\n"
+        "1. Start at **00:00** with an engaging introduction.\n"
+        "2. End with a compelling conclusion chapter.\n"
+        "3. Use real transitions from the transcript — never invent timestamps.\n"
+        "4. Chapters should follow natural flow (typically every 2–6 mins).\n"
+        "5. Titles should be under 60 characters, ideally 30–50.\n"
+        "6. Use casual, emotional, or clickbait-style phrasing.\n"
+        "7. Identify 10–15 key transitions, topic changes, or 'aha' moments.\n"
+        "8. Timestamp accuracy is crucial — no rounding or patterning.\n"
+        "9. Keywords and emotion should reflect the transcript's voice.\n"
+        "10. Each title should provoke curiosity — like a cliffhanger series.\n\n"
+
+        "## HOW TO DETECT TRANSITIONS\n"
         "- Numbering: 'first', 'tip #2', 'step 3'\n"
-        "- Transitions: 'next', 'moving on', 'let's talk about'\n"
-        "- Topic shifts: 'as for...', 'regarding...', 'when it comes to...'\n"
-        "- Cues in transcript: [music], [pause], [transition]\n"
-        "- Intro/Outro markers: 'in this video...', 'to summarize...', 'final thoughts...'\n\n"
+        "- Phrasing: 'next', 'moving on', 'another thing is...'\n"
+        "- Shifts: 'as for...', 'regarding...', 'to summarize...'\n"
+        "- Cues: [music], [pause], [transition], 'in this video...', 'final thoughts...'\n\n"
 
-        "### Follow the Step-by-Step Process:\n"
-        "1. **Analyze the full transcript** to understand the general context, content type (list, tutorial, story, etc.) and natural structure.\n"
-        "2. **Identify 10–15 key transitions or 'aha' moments** (more if it's list-based — 1 chapter per item is OK).\n"
-        "3. **Craft strong titles** with emotional triggers (curiosity, surprise, controversey, etc.). Use keywords from the transcript and avoid banal cliches. Highlight unique or shocking info.\n"
-        "4. **Verify timestamps**:\n"
-        "   - Match transitions exactly — no rounding or regular intervals.\n"
-        "   - Ensure timestamps are in ascending order and fully cover the video.\n\n"
-
-        "### FINAL OUTPUT FORMAT:\n"
-        f"- Use ONLY this format: `{timestamp_format} Chapter Title`\n"
-        "- Each chapter on a new line\n"
-        "- NO extra text, notes, markdown, or commentary\n\n"
-
-        "###  QUALITY CHECK:\n"
-        "- ✓ 00:00 introduction is present\n"
-        "- ✓ Clear chapter near the end (conclusion)\n"
-        "- ✓ All major content transitions captured\n"
-        "- ✓ Accurate timestamps from transcript only\n"
-        "- ✓ No even intervals or timestamp patterns\n"
-        "- ✓ 10–15 chapters unless list-based\n"
-        "- ✓ All titles under 80 characters\n"
+        "## CHAPTER CHAIN STRATEGY\n"
+        "- Create a narrative flow where each chapter builds on the previous one\n"
+        "- Make viewers curious about what comes next\n"
+        "- Build momentum toward the final chapter\n"
+        "- The last chapter should feel like a culmination or revelation\n"
     )
-    
+
     return system_prompt
 
 
-async def generate_chapters_with_openai(system_prompt: str, video_id: str, formatted_transcript: str, timeout: int = 30) -> Optional[str]:
+def create_final_reminder(video_duration_minutes: float) -> str:
+    """
+    Create a final reminder to be appended after the transcript in the OpenAI request.
+
+    Args:
+        video_duration_minutes: Duration of the video in minutes
+
+    Returns:
+        Final reminder text for the OpenAI API
+    """
+    # Format timestamp based on video duration
+    timestamp_format = "MM:SS"
+    if video_duration_minutes > 60:
+        timestamp_format = "HH:MM:SS"
+
+    final_reminder = (
+        "\n### 🔍 FINAL CHECKLIST\n"
+        f"- ✓ Chapters are formatted: `{timestamp_format} Chapter Title`\n"
+        "- ✓ Start at 00:00 with introduction\n"
+        "- ✓ End with a conclusion (curiosity peak)\n"
+        "- ✓ Each chapter naturally follows the previous (no gaps)\n"
+        "- ✓ Aim to 10, maximum 15 chapters (more only if list-based)\n"
+        "- ✓ Titles are under 60 characters\n"
+        "- ✓ All timestamps are real and from transcript only\n"
+        "- ✓ No even timestamp spacing or fabricated patterns\n"
+        "- ✓ Each title is curiosity-driven and emotionally engaging\n"
+        "- ✓ Last chapter feels like a climax or payoff\n"
+        "- ✓ No additional explanations, summaries, or markdown"
+    )
+
+    return final_reminder
+
+
+async def generate_chapters_with_openai(system_prompt: str, video_id: str, formatted_transcript: str, video_duration_minutes: float = 60, timeout: int = 30) -> Optional[str]:
     """
     Generate chapters using OpenAI with better timestamp distribution.
-    
+
     Args:
         system_prompt: System prompt for the OpenAI API
         video_id: YouTube video ID
         formatted_transcript: Formatted transcript text
+        video_duration_minutes: Duration of the video in minutes (used for final reminder)
         timeout: Timeout for the OpenAI API call in seconds
-        
+
     Returns:
         Generated chapters or None if all models fail
     """
     if not async_openai_client:
         print("OpenAI async client not configured, cannot generate chapters")
         return None
-    
+
     print(f"Generating chapters for {video_id}")
-    
+
+    # Create the final reminder using the provided video duration
+    final_reminder = create_final_reminder(video_duration_minutes)
+
     # Model preference: gpt-4.1-mini as primary, gpt-4o as secondary
     models_to_try = [
         "gpt-4.1-mini",
         "gpt-4o",
     ]
-    
+
     for model in models_to_try:
         try:
             import time
             print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Trying model: {model}, timeout={timeout}s")
+
+            # Prepare the input with transcript and final reminder
+            combined_input = f"{formatted_transcript}\n\n---\n\n{final_reminder}"
+
             print("[OPENAI-REQUEST] Parameters:", {
                 "model": model,
-                "input": formatted_transcript[:100] + ("..." if len(formatted_transcript) > 100 else ""),
+                "input": combined_input[:100] + ("..." if len(combined_input) > 100 else ""),
                 "instructions": system_prompt[:100] + ("..." if len(system_prompt) > 100 else ""),
+                "temperature": 0.7,
+                "max_tokens": 2048,
                 "timeout": timeout
             })
             print("[OPENAI] About to call OpenAI API (AsyncOpenAI.responses.create)")
             start = time.time()
             try:
-                # Use the correct signature for the latest SDK:
+                # Use the updated signature with the new structure:
                 response = await async_openai_client.responses.create(
                     model=model,
-                    input=formatted_transcript,
                     instructions=system_prompt,
+                    input=combined_input,
+                    temperature=0.7,
+                    max_tokens=2048,
                     timeout=timeout
                 )
                 print("[OPENAI] OpenAI API call returned from AsyncOpenAI.responses.create")
@@ -174,11 +213,11 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
             if hasattr(e, 'request') and e.request is not None:
                 print(f"Exception request info: {e.request}")
             # Log the full exception chain if available
-            exc_type, exc_value, exc_tb = sys.exc_info()
+            _, exc_value, _ = sys.exc_info()
             while exc_value and exc_value.__cause__:
                 print(f"Caused by: {type(exc_value.__cause__).__name__}: {exc_value.__cause__}")
                 exc_value = exc_value.__cause__
             continue
-    
+
     print("All OpenAI models failed to generate chapters")
     return None

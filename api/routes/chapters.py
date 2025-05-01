@@ -5,7 +5,7 @@ from pydantic import BaseModel, constr
 from ..utils.responses import success_response
 from ..utils.cache import get_from_cache, add_to_cache
 from ..services.youtube import fetch_transcript
-from ..services.openai_service import create_chapter_prompt, generate_chapters_with_openai
+from ..services.openai_service import create_chapter_prompt, create_final_reminder, generate_chapters_with_openai
 from ..utils.transcript import format_transcript_for_model
 from ..services import credits_service
 from ..utils.decorators import token_required_fastapi
@@ -77,7 +77,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
         video_duration_seconds = last_entry['start'] + last_entry['duration']
         video_duration_minutes = video_duration_seconds / 60
         system_prompt = create_chapter_prompt(video_duration_minutes)
-        chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
+        chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript, video_duration_minutes)
         if not chapters:
             logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user.id}) [prompt replay]")
             raise HTTPException(status_code=500, detail="Failed to generate chapters with OpenAI")
@@ -163,7 +163,7 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
         video_duration_seconds = last_entry['start'] + last_entry['duration']
         video_duration_minutes = video_duration_seconds / 60
         system_prompt = create_chapter_prompt(video_duration_minutes)
-        chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript)
+        chapters = await generate_chapters_with_openai(system_prompt, video_id, formatted_transcript, video_duration_minutes)
 
         if not chapters:
             logging.error(f"Failed to generate chapters with OpenAI for {video_id} (User: {user.id})")
