@@ -143,10 +143,10 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
     # Create the final reminder using the provided video duration
     final_reminder = create_final_reminder(video_duration_minutes)
 
-    # Model preference: gpt-4.1-mini as primary, gpt-4o as secondary
+    # Model preference: gpt-4.1 as primary, gpt-4.1-mini as secondary
     models_to_try = [
+        "gpt-4.1",
         "gpt-4.1-mini",
-        "gpt-4o",
     ]
 
     for model in models_to_try:
@@ -162,7 +162,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
                 "input": combined_input[:100] + ("..." if len(combined_input) > 100 else ""),
                 "instructions": system_prompt[:100] + ("..." if len(system_prompt) > 100 else ""),
                 "temperature": 0.7,
-                "max_tokens": 2048,
+                "max_output_tokens": 2048,
                 "timeout": timeout
             })
             print("[OPENAI] About to call OpenAI API (AsyncOpenAI.responses.create)")
@@ -174,7 +174,7 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
                     instructions=system_prompt,
                     input=combined_input,
                     temperature=0.7,
-                    max_tokens=2048,
+                    max_output_tokens=2048,
                     timeout=timeout
                 )
                 print("[OPENAI] OpenAI API call returned from AsyncOpenAI.responses.create")
