@@ -17,8 +17,8 @@ import hashlib
 import asyncio
 
 # Constants
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
-REFRESH_TOKEN_EXPIRE_DAYS = 365  # Increased from 7 to 365 days for long-lived refresh tokens
+ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 hour (reduced from 7 days for better security)
+REFRESH_TOKEN_EXPIRE_DAYS = 365  # 365 days for long-lived refresh tokens
 REFRESH_TOKEN_REDIS_PREFIX = "refresh_token:"
 
 
