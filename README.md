@@ -15,9 +15,24 @@ A Chrome extension that automatically generates YouTube video chapters using AI,
 
 ## Pricing Plans
 
-- **Free Plan**: 3 credits upon registration (1 credit = 1 video with up to 5 generations)
+- **Free Plan**: 3 credits upon registration
 - **Basic Plan**: 10 credits for $9
 - **Premium Plan**: 50 credits for $29
+
+## Credit System
+
+- Each user starts with 3 free credits upon signup
+- Initial chapter generation for a video costs 1 credit
+- The first 2 regenerations for the same video are free (included with the initial credit)
+- After the first 3 generations (initial + 2 free regenerations), another credit is used
+- The next 2 regenerations are free (included with the second credit)
+- Maximum of 6 generations per video (initial + 5 regenerations)
+
+### Regeneration Logic
+
+- When a user has exactly 1 credit and uses it for initial generation, they can still make up to 2 free regenerations even with 0 credits
+- The backend checks if the user is entitled to a free regeneration before checking their credit balance
+- This ensures users can utilize their full credit value even if their balance reaches 0
 
 ## How It Works
 
@@ -213,5 +228,7 @@ If authentication is not working:
 
 This project is licensed under the MIT License.
 
-## Latest Update
-Updated on April 16, 2025: Backend is now fully async, all blocking code removed, and optimized for concurrency and performance.
+## Latest Updates
+
+- **May 7, 2025**: Fixed free regeneration logic to allow users with 0 credits to use their entitled free regenerations.
+- **April 16, 2025**: Backend is now fully async, all blocking code removed, and optimized for concurrency and performance.

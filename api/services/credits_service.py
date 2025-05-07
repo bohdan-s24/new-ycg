@@ -292,3 +292,26 @@ async def get_remaining_generations(user_id: str, video_id: str) -> int:
     current_count = await get_video_generation_count(user_id, video_id)
     remaining = max(0, MAX_TOTAL_GENERATIONS - current_count)
     return remaining
+
+async def can_regenerate_for_free(user_id: str, video_id: str) -> bool:
+    """
+    Determines if a user can regenerate chapters for free based on their generation count.
+
+    Args:
+        user_id: The user ID
+        video_id: The YouTube video ID
+
+    Returns:
+        True if the user can regenerate for free, False otherwise
+    """
+    current_count = await get_video_generation_count(user_id, video_id)
+
+    # If current count is 1 or 2, they can regenerate for free (within first credit's limit)
+    if 0 < current_count < MAX_GENERATIONS_PER_CREDIT:
+        return True
+
+    # If current count is 4 or 5, they can regenerate for free (within second credit's limit)
+    if MAX_GENERATIONS_PER_CREDIT < current_count < MAX_TOTAL_GENERATIONS:
+        return True
+
+    return False

@@ -54,6 +54,11 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
     cache_obj = get_from_cache(video_id)
     # If force regenerate and cached transcript exists, skip lock and transcript fetching
     if body.force and cache_obj and cache_obj.get('transcript'):
+        # First check if this would be a free regeneration
+        can_regenerate_free = await credits_service.can_regenerate_for_free(user.id, video_id)
+        current_count = await credits_service.get_video_generation_count(user.id, video_id)
+        logging.info(f"[CHAPTERS-DEBUG] User {user.id} regeneration for video {video_id}: current_count={current_count}, can_regenerate_free={can_regenerate_free}")
+
         # Check generation count and calculate credits needed
         credits_needed = await credits_service.calculate_credits_needed(user.id, video_id)
 
@@ -62,11 +67,12 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
             logging.warning(f"User {user.id} reached maximum regenerations for video {video_id}")
             raise HTTPException(status_code=403, detail="Maximum regenerations reached for this video (5 regenerations maximum)")
 
-        # Check if user has enough credits
-        has_credits = await credits_service.has_sufficient_credits(user.id, credits_needed)
-        if not has_credits:
-            logging.warning(f"User {user.id} attempted regeneration with insufficient credits for video {video_id}")
-            raise HTTPException(status_code=402, detail="Insufficient credits to regenerate chapters")
+        # Only check credit balance if this is not a free regeneration
+        if not can_regenerate_free:
+            has_credits = await credits_service.has_sufficient_credits(user.id, credits_needed)
+            if not has_credits:
+                logging.warning(f"User {user.id} attempted regeneration with insufficient credits for video {video_id}")
+                raise HTTPException(status_code=402, detail="Insufficient credits to regenerate chapters")
 
         transcript_data = cache_obj['transcript']
         logging.info(f"[CHAPTERS-DEBUG] Using cached transcript for {video_id} (User: {user.id})")
@@ -115,6 +121,15 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
         logging.warning(f"Lock not acquired for {lock_key}: another generation in progress.")
         raise HTTPException(status_code=429, detail="Chapter generation already in progress. Please try again shortly.")
     try:
+        # First check if this would be a free regeneration (for non-initial generations)
+        current_count = await credits_service.get_video_generation_count(user.id, video_id)
+        can_regenerate_free = False
+
+        # Only check for free regeneration if this is not the initial generation
+        if current_count > 0:
+            can_regenerate_free = await credits_service.can_regenerate_for_free(user.id, video_id)
+            logging.info(f"[CHAPTERS-DEBUG] User {user.id} regeneration for video {video_id}: current_count={current_count}, can_regenerate_free={can_regenerate_free}")
+
         # Check generation count and calculate credits needed
         credits_needed = await credits_service.calculate_credits_needed(user.id, video_id)
 
@@ -123,13 +138,14 @@ async def generate_chapters(body: GenerateChaptersRequest, user: User = Depends(
             logging.warning(f"User {user.id} reached maximum regenerations for video {video_id}")
             raise HTTPException(status_code=403, detail="Maximum regenerations reached for this video (5 regenerations maximum)")
 
-        # Check if user has enough credits
-        has_credits = await credits_service.has_sufficient_credits(user.id, credits_needed)
-        logging.info(f"[CHAPTERS-DEBUG] User {user.id} has credits: {has_credits}, needs: {credits_needed}")
+        # Only check credit balance if this is not a free regeneration
+        if not can_regenerate_free:
+            has_credits = await credits_service.has_sufficient_credits(user.id, credits_needed)
+            logging.info(f"[CHAPTERS-DEBUG] User {user.id} has credits: {has_credits}, needs: {credits_needed}")
 
-        if not has_credits:
-            logging.warning(f"User {user.id} attempted generation with insufficient credits for video {video_id}.")
-            raise HTTPException(status_code=402, detail="Insufficient credits to generate chapters.")
+            if not has_credits:
+                logging.warning(f"User {user.id} attempted generation with insufficient credits for video {video_id}.")
+                raise HTTPException(status_code=402, detail="Insufficient credits to generate chapters.")
 
         # Return cached chapters if available and not forcing regeneration
         if not body.force:
