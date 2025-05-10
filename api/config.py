@@ -26,7 +26,27 @@ class Config:
 
     # API configurations
     OPENAI_MODELS = ["gpt-4.1-mini", "gpt-4o"]
-    TRANSCRIPT_LANGUAGES = ["en", "en-US", "en-GB"]
+    # Language codes in order of preference (English first, then other languages)
+    TRANSCRIPT_LANGUAGES = [
+        # English (various locales)
+        "en", "en-US", "en-GB",
+        # Ukrainian
+        "uk",
+        # Polish
+        "pl",
+        # German
+        "de",
+        # Spanish
+        "es", "es-ES", "es-419",
+        # Italian
+        "it",
+        # French
+        "fr", "fr-FR", "fr-CA",
+        # Japanese
+        "ja",
+        # Chinese (Simplified and Traditional)
+        "zh", "zh-Hans", "zh-Hant", "zh-CN", "zh-TW"
+    ]
 
     # Timeout settings
     REDIS_TIMEOUT = 30  # seconds
