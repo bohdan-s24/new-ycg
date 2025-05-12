@@ -72,7 +72,7 @@ class Config:
     DECODO_USERNAME = os.environ.get("DECODO_USERNAME")
     DECODO_PASSWORD = os.environ.get("DECODO_PASSWORD")
     DECODO_HOST = "gate.decodo.com"
-    DECODO_PORT = 10001
+    DECODO_PORT = 7000
 
     @classmethod
     def get_proxy_url(cls) -> Optional[str]:
