@@ -41,9 +41,10 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
         System prompt for the OpenAI API
     """
     # Format timestamp based on video duration
+    is_long_video = video_duration_minutes > 60
+    # For long videos, we use a mixed format (MM:SS for <60min, HH:MM:SS for >60min)
+    # But we'll use MM:SS as the base format in the prompt
     timestamp_format = "MM:SS"
-    if video_duration_minutes > 60:
-        timestamp_format = "HH:MM:SS"
 
     # Enhanced prompt with USP messaging about viewer retention
     system_prompt = (
@@ -62,9 +63,17 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
         "- Quality over quantity: Fewer, more meaningful chapters are better than many small ones\n\n"
 
         "## FORMAT\n"
-        f"- Use only this format: `{timestamp_format} Chapter Title`\n"
+        f"- Use only this format: `{'MM:SS or HH:MM:SS (depending on timestamp)' if is_long_video else timestamp_format} Chapter Title`\n"
         "- One chapter per line\n"
         "- No markdown, notes, or commentary\n\n"
+
+        f"## TIMESTAMP FORMAT - VERY IMPORTANT\n"
+        f"- For videos under 60 minutes: Use MM:SS format (e.g., 05:30)\n"
+        f"- For videos over 60 minutes:\n"
+        f"  * For timestamps under 60 minutes: Use MM:SS format (e.g., 05:30, 45:20)\n"
+        f"  * For timestamps over 60 minutes: Use HH:MM:SS format (e.g., 01:05:30, 02:15:45)\n"
+        f"- The first chapter MUST always start at 00:00 regardless of where the transcript starts\n"
+        f"- For videos over 60 minutes, when you see timestamps like 60:48, 75:20 in the transcript, convert them to HH:MM:SS format (01:00:48, 01:15:20)\n\n"
 
         "## RULES\n"
         "1. Start at **00:00** with an engaging introduction.\n"
@@ -89,7 +98,8 @@ def create_chapter_prompt(video_duration_minutes: float) -> str:
         "4. **Craft strong titles** with emotional triggers (curiosity, surprise, controversey etc.). In friendly tone of void\n"
         "5. **Verify timestamps**:\n"
         "   - Match transitions exactly — no rounding or regular intervals.\n"
-        "   - Ensure timestamps are in ascending order and fully cover the video.\n\n"
+        "   - Ensure timestamps are in ascending order and fully cover the video.\n"
+        f"   - {'For videos over 60 minutes, ensure all timestamps are in HH:MM:SS format.' if is_long_video else ''}\n\n"
     )
 
     return system_prompt
@@ -106,13 +116,14 @@ def create_final_reminder(video_duration_minutes: float) -> str:
         Final reminder text for the OpenAI API
     """
     # Format timestamp based on video duration
+    is_long_video = video_duration_minutes > 60
+    # For long videos, we use a mixed format (MM:SS for <60min, HH:MM:SS for >60min)
+    # But we'll use MM:SS as the base format in the prompt
     timestamp_format = "MM:SS"
-    if video_duration_minutes > 60:
-        timestamp_format = "HH:MM:SS"
 
     final_reminder = (
         "\n### 🔍 FINAL CHECKLIST - STRICTLY FOLLOW THESE GUIDELINES\n"
-        f"- ✓ Chapters are formatted: `{timestamp_format} Chapter Title`\n"
+        f"- ✓ Chapters are formatted: `{'MM:SS or HH:MM:SS (depending on timestamp)' if is_long_video else timestamp_format} Chapter Title`\n"
         "- ✓ Start at 00:00 with an engaging introduction\n"
         "- ✓ End with a compelling conclusion chapter (emotional or narrative payoff)\n"
         "- ✓ Titles are under 40 characters (ideally 20–30)\n"
@@ -120,6 +131,7 @@ def create_final_reminder(video_duration_minutes: float) -> str:
         "- ✓ Use intrigue techniques (info gaps, open loops, surprise, provocation)\n"
         "- ✓ All timestamps must be exact — pulled directly from transcript\n"
         "- ✓ No fabricated, rounded, or evenly spaced timestamps\n"
+        f"- ✓ {'For videos over 60 minutes: Use MM:SS format for timestamps under 60 minutes and HH:MM:SS format for timestamps over 60 minutes' if is_long_video else 'For videos under 60 minutes, use MM:SS format (e.g., 05:30)'}\n"
         "- ✓ No extra commentary, markdown, notes, or formatting outside the required structure"
     )
 
@@ -201,9 +213,64 @@ async def generate_chapters_with_openai(system_prompt: str, video_id: str, forma
             if not chapter_lines or len(chapter_lines) < 2:
                 print("Not enough chapters, trying another model")
                 continue
+
+            # Check if the first chapter starts at 00:00
             if not chapter_lines[0].startswith("00:00"):
-                print("WARNING: First chapter doesn't start at 00:00, trying another model")
-                continue
+                print("WARNING: First chapter doesn't start at 00:00, fixing it")
+                # Extract the title from the first chapter
+                first_chapter_parts = chapter_lines[0].split(' ', 1)
+                first_chapter_title = first_chapter_parts[1] if len(first_chapter_parts) > 1 else "Introduction"
+
+                # Replace the first chapter with one that starts at 00:00
+                chapter_lines[0] = f"00:00 {first_chapter_title}"
+                chapters = "\n".join(chapter_lines)
+
+            # For videos longer than 60 minutes, apply mixed format:
+            # - MM:SS for timestamps under 60 minutes
+            # - HH:MM:SS for timestamps over 60 minutes
+            if video_duration_minutes > 60:
+                fixed_chapter_lines = []
+                for line in chapter_lines:
+                    parts = line.split(' ', 1)
+                    if len(parts) < 2:
+                        fixed_chapter_lines.append(line)
+                        continue
+
+                    timestamp, title = parts
+
+                    # Parse the timestamp to get total seconds
+                    try:
+                        if timestamp.count(':') == 1:  # MM:SS format
+                            minutes, seconds = map(int, timestamp.split(':'))
+                            total_seconds = minutes * 60 + seconds
+                        elif timestamp.count(':') == 2:  # HH:MM:SS format
+                            hours, minutes, seconds = map(int, timestamp.split(':'))
+                            total_seconds = hours * 3600 + minutes * 60 + seconds
+                        else:
+                            # Invalid format, keep original
+                            fixed_chapter_lines.append(line)
+                            continue
+
+                        # Apply the mixed format rule:
+                        if total_seconds < 3600:  # Less than 60 minutes
+                            # Format as MM:SS
+                            minutes = total_seconds // 60
+                            seconds = total_seconds % 60
+                            new_timestamp = f"{minutes:02d}:{seconds:02d}"
+                        else:  # 60 minutes or more
+                            # Format as HH:MM:SS
+                            hours = total_seconds // 3600
+                            minutes = (total_seconds % 3600) // 60
+                            seconds = total_seconds % 60
+                            new_timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+                        fixed_chapter_lines.append(f"{new_timestamp} {title}")
+                    except ValueError:
+                        # If parsing fails, keep the original
+                        fixed_chapter_lines.append(line)
+
+                chapters = "\n".join(fixed_chapter_lines)
+
             # All basic checks passed
             return chapters
         except Exception as e:
