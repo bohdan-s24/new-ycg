@@ -38,7 +38,7 @@ A Chrome extension that automatically generates YouTube video chapters using AI,
 
 1. The extension extracts the video ID from the current YouTube page
 2. It sends the video ID to our server
-3. The server fetches the transcript using the YouTube Transcript API
+3. The server fetches the transcript using pytubefix
 4. The transcript is sent to OpenAI's API to analyze content and generate chapters
 5. The generated chapters are returned to the extension and displayed to the user
 
@@ -50,7 +50,7 @@ A Chrome extension that automatically generates YouTube video chapters using AI,
 - **Authentication**: JWT-based with Google OAuth integration
 - **Payments**: Stripe for secure payment processing
 - **Libraries**:
-  - YouTube Transcript API (for transcript extraction)
+  - pytubefix (for YouTube transcript extraction)
   - OpenAI API (for intelligent chapter generation)
   - FastAPI for API endpoints (async, with CORS support)
   - httpx (async HTTP client for all external I/O)

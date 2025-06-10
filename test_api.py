@@ -1,52 +1,64 @@
 #!/usr/bin/env python3
 """
-Test script to verify the YouTube Transcript API implementation
+Test script to verify the pytubefix YouTube transcript implementation
 """
 import sys
-from youtube_transcript_api import YouTubeTranscriptApi
+from pytubefix import YouTube
 import traceback
 
 def test_api():
-    """Test the API method"""
-    print("Testing API method...")
+    """Test the pytubefix API method"""
+    print("Testing pytubefix API method...")
     try:
         video_id = "EngW7tLk6R8"  # Sample YouTube video ID
-        
-        # First try to get available transcript languages
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        print("Available transcripts:")
-        transcript_count = 0
-        available_transcripts = []
-        
-        # Collect available transcripts
-        for transcript in transcript_list:
-            transcript_count += 1
-            available_transcripts.append(transcript)
-            print(f"  - {transcript.language_code} ({transcript.language}), Auto-generated: {transcript.is_generated}")
-        
-        print(f"Found {transcript_count} available transcripts")
-        
-        # Try to get a transcript
-        if transcript_count > 0:
-            # Get the first available transcript
-            transcript = available_transcripts[0]
-            transcript_data = transcript.fetch()
-            print(f"✓ Successfully retrieved transcript in {transcript.language} with {len(transcript_data)} entries")
-            first_entry = transcript_data[0]
-            print(f"First entry: {first_entry}")
-            
-            # Try to translate to English
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        # Create YouTube object
+        yt = YouTube(video_url)
+
+        # Check if captions are available
+        if not yt.captions:
+            print("No captions available for this video")
+            return False
+
+        available_captions = list(yt.captions.keys())
+        print("Available captions:")
+        for lang_code in available_captions:
+            caption = yt.captions[lang_code]
+            print(f"  - {lang_code} ({caption.name})")
+
+        print(f"Found {len(available_captions)} available captions")
+
+        # Try to get a caption
+        if available_captions:
+            # Get the first available caption
+            first_lang = available_captions[0]
+            caption = yt.captions[first_lang]
+
+            # Generate SRT captions
+            srt_captions = caption.generate_srt_captions()
+
+            # Count entries by splitting SRT content
+            blocks = srt_captions.strip().split('\n\n')
+            entry_count = len([block for block in blocks if block.strip()])
+
+            print(f"✓ Successfully retrieved captions in {first_lang} with {entry_count} entries")
+
+            if blocks:
+                print(f"First block: {blocks[0][:200]}...")
+
+            # Try to generate text captions as well
             try:
-                print(f"Translating from {transcript.language_code} to English...")
-                english_transcript = transcript.translate('en')
-                english_data = english_transcript.fetch()
-                print(f"✓ Successfully translated transcript to English with {len(english_data)} entries")
-                print(f"First entry: {english_data[0]}")
+                txt_captions = caption.generate_txt_captions()
+                lines = txt_captions.strip().split('\n')
+                print(f"✓ Successfully generated text captions with {len(lines)} lines")
+                if lines:
+                    print(f"First line: {lines[0]}")
             except Exception as e:
-                print(f"Translation failed: {e}")
+                print(f"Text caption generation failed: {e}")
         else:
-            print("No transcripts available for this video")
-        
+            print("No captions available for this video")
+
         return True
     except Exception as e:
         print(f"✗ API test failed: {e}")
@@ -54,14 +66,14 @@ def test_api():
         return False
 
 if __name__ == "__main__":
-    print(f"Testing YouTube Transcript API implementation")
+    print(f"Testing pytubefix YouTube transcript implementation")
     print(f"Python version: {sys.version}")
-    
+
     result = test_api()
-    
+
     if result:
         print("\n✓ Test passed!")
         sys.exit(0)
     else:
         print("\n✗ Test failed!")
-        sys.exit(1) 
+        sys.exit(1)

@@ -1,6 +1,6 @@
 # Flask and Flask extensions removed as part of Sanic migration
 werkzeug==2.0.3
-youtube-transcript-api==1.0.2
+pytubefix
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 openai>=1.75.0
