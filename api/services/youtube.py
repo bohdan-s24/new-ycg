@@ -33,6 +33,10 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[str]:
         Transcript text or None if failed
     """
     import time
+    import os
+    import platform
+    import socket
+    import traceback
     start_time = time.time()
 
     def time_left() -> bool:
@@ -40,6 +44,9 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[str]:
         return elapsed < timeout_limit
 
     print(f"Fetching transcript for {video_id} using pytubefix, timeout limit: {timeout_limit}s")
+
+    # Environment info logging
+    print(f"Environment info: platform={platform.platform()}, hostname={socket.gethostname()}, pid={os.getpid()}")
 
     try:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
@@ -80,7 +87,6 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[str]:
         return txt_captions
 
     except Exception as e:
-        import traceback
         print(f"Error fetching transcript for {video_id}: {e}")
         traceback.print_exc()
         return None
