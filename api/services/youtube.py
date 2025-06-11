@@ -19,11 +19,9 @@ from pytubefix.exceptions import (
 )
 
 from api.config import Config
-from content_core.common import ProcessSourceState
-
 # Decodo proxy config does not require SSL CA patching or special logic
 
-async def extract_youtube_transcript(state: ProcessSourceState):
+async def extract_youtube_transcript(state):
     """
     Extract YouTube transcript and generate chapters using OpenAI.
 
