@@ -21,7 +21,7 @@ from pytubefix.exceptions import (
 from api.config import Config
 # Decodo proxy config does not require SSL CA patching or special logic
 
-def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[tuple]:
+def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Dict[str, Any]]]:
     """
     Fetch transcript using pytubefix with proper error handling and language preferences.
     Supports optional HTTP proxy configuration using Decodo proxy service.
@@ -31,7 +31,7 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[tuple]:
         timeout_limit: Maximum time in seconds to spend fetching the transcript
 
     Returns:
-        Tuple of (transcript text, srt captions) or None if failed
+        List of transcript entries or None if failed
     """
     import time
     import os
@@ -68,6 +68,7 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[tuple]:
     try:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         from pytubefix import YouTube
+        from api.services.youtube import _parse_srt_to_transcript
 
         yt = YouTube(video_url)
 
@@ -99,9 +100,9 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[tuple]:
             print(f"Using first available caption: {caption_key}")
 
         srt_captions = caption.generate_srt_captions()
-        txt_captions = caption.generate_txt_captions()
+        transcript_entries = _parse_srt_to_transcript(srt_captions)
 
-        return txt_captions, srt_captions
+        return transcript_entries
 
     except Exception as e:
         print(f"Error fetching transcript for {video_id}: {e}")
