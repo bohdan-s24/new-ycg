@@ -51,6 +51,11 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Di
             print(f"Time limit reached while creating YouTube object")
             return None
 
+        # Debug: print all captions detected by pytubefix
+        print(f"DEBUG: Captions detected for video {video_id}:")
+        for caption_obj in yt.captions:
+            print(f"  Caption lang: {caption_obj.lang}, code: {caption_obj.code}")
+
         # Check if captions are available
         if not yt.captions:
             print(f"No captions available for video {video_id}")
