@@ -21,12 +21,77 @@ from pytubefix.exceptions import (
 from api.config import Config
 # Decodo proxy config does not require SSL CA patching or special logic
 
+def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[str]:
+    """
+    Fetch transcript using pytubefix with proper error handling and language preferences.
+
+    Args:
+        video_id: YouTube video ID
+        timeout_limit: Maximum time in seconds to spend fetching the transcript
+
+    Returns:
+        Transcript text or None if failed
+    """
+    import time
+    start_time = time.time()
+
+    def time_left() -> bool:
+        elapsed = time.time() - start_time
+        return elapsed < timeout_limit
+
+    print(f"Fetching transcript for {video_id} using pytubefix, timeout limit: {timeout_limit}s")
+
+    try:
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        from pytubefix import YouTube
+
+        yt = YouTube(video_url)
+
+        if not time_left():
+            print(f"Time limit reached while creating YouTube object")
+            return None
+
+        print(f"DEBUG: Captions detected for video {video_id}: {list(yt.captions.keys())}")
+
+        if not yt.captions:
+            print(f"No captions available for video {video_id}")
+            return None
+
+        caption = None
+
+        for lang in Config.TRANSCRIPT_LANGUAGES:
+            if lang in yt.captions:
+                caption = yt.captions[lang]
+                print(f"Found manual caption in preferred language: {lang}")
+                break
+            elif f"a.{lang}" in yt.captions:
+                caption = yt.captions[f"a.{lang}"]
+                print(f"Found auto-generated caption in preferred language: a.{lang}")
+                break
+
+        if not caption:
+            caption_key = next(iter(yt.captions))
+            caption = yt.captions[caption_key]
+            print(f"Using first available caption: {caption_key}")
+
+        srt_captions = caption.generate_srt_captions()
+        txt_captions = caption.generate_txt_captions()
+
+        return txt_captions
+
+    except Exception as e:
+        import traceback
+        print(f"Error fetching transcript for {video_id}: {e}")
+        traceback.print_exc()
+        return None
+
+
 async def extract_youtube_transcript(state):
     """
     Extract YouTube transcript and generate chapters using OpenAI.
 
     Args:
-        state: ProcessSourceState object containing URL and other info
+        state: Object containing URL and other info
 
     Returns:
         Dictionary with content, title, and metadata including video_id and transcript
