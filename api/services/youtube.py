@@ -22,116 +22,60 @@ from api.config import Config
 
 # Decodo proxy config does not require SSL CA patching or special logic
 
-def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Dict[str, Any]]]:
+async def extract_youtube_transcript(state: ProcessSourceState):
     """
-    Fetch transcript using pytubefix with proper error handling and language preferences.
+    Extract YouTube transcript and generate chapters using OpenAI.
 
     Args:
-        video_id: YouTube video ID
-        timeout_limit: Maximum time in seconds to spend fetching the transcript
+        state: ProcessSourceState object containing URL and other info
 
     Returns:
-        List of transcript entries or None if failed
+        Dictionary with content, title, and metadata including video_id and transcript
     """
-    start_time = time.time()
+    from api.services.openai_service import generate_chapters_with_openai
+    from api.utils.transcript import format_transcript_for_model
+    import logging
 
-    def time_left() -> bool:
-        """Check if we still have time to continue operations"""
-        elapsed = time.time() - start_time
-        return elapsed < timeout_limit
+    assert state.url, "No URL provided"
+    logging.warning(f"Extracting transcript from URL: {state.url}")
+    languages = Config.TRANSCRIPT_LANGUAGES
 
-    print(f"Fetching transcript for {video_id} using pytubefix, timeout limit: {timeout_limit}s")
+    video_id = await _extract_youtube_id(state.url)
 
     try:
-        # Create YouTube object
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-        yt = YouTube(video_url)
-
-        if not time_left():
-            print(f"Time limit reached while creating YouTube object")
-            return None
-
-        # Debug: print all captions detected by pytubefix
-        print(f"DEBUG: Captions detected for video {video_id}:")
-        for caption_obj in yt.captions:
-            print(f"  Caption lang: {caption_obj.lang}, code: {caption_obj.code}")
-
-        # Check if captions are available
-        if not yt.captions:
-            print(f"No captions available for video {video_id}")
-            return None
-
-        print(f"Available captions for {video_id}: {list(yt.captions.keys())}")
-
-        # Try to find the best caption track based on language preferences
-        caption = None
-        selected_lang = None
-
-        # First, try to find manual captions in preferred languages
-        for lang_code in Config.TRANSCRIPT_LANGUAGES:
-            # Try exact match
-            if lang_code in yt.captions:
-                caption = yt.captions[lang_code]
-                selected_lang = lang_code
-                print(f"Found manual caption in preferred language: {lang_code}")
-                break
-            # Try auto-generated format (a.lang)
-            auto_lang = f"a.{lang_code}"
-            if auto_lang in yt.captions:
-                caption = yt.captions[auto_lang]
-                selected_lang = auto_lang
-                print(f"Found auto-generated caption in preferred language: {auto_lang}")
-                break
-
-        # If no preferred language found, use the first available caption
-        if not caption:
-            first_caption = next(iter(yt.captions))
-            caption = yt.captions[first_caption.code]
-            selected_lang = first_caption.code
-            print(f"Using first available caption: {first_caption.code}")
-
-        if not time_left():
-            print(f"Time limit reached while selecting caption")
-            return None
-
-        # Generate SRT captions and parse them
-        print(f"Generating captions for language: {selected_lang}")
-        srt_captions = caption.generate_srt_captions()
-
-        if not time_left():
-            print(f"Time limit reached while generating captions")
-            return None
-
-        # Parse SRT format to our expected format
-        transcript_entries = _parse_srt_to_transcript(srt_captions)
-
-        if transcript_entries:
-            print(f"Successfully fetched transcript for {video_id} with {len(transcript_entries)} entries")
-            return transcript_entries
-        else:
-            print(f"Failed to parse transcript entries for {video_id}")
-            return None
-
-    except (VideoUnavailable, VideoPrivate, VideoRegionBlocked) as e:
-        print(f"Video not accessible for {video_id}: {type(e).__name__}: {e}")
-        return None
-
-    except (AgeRestrictedError, MembersOnly, RecordingUnavailable) as e:
-        print(f"Access restricted for {video_id}: {type(e).__name__}: {e}")
-        return None
-
-    except LiveStreamError as e:
-        print(f"Live stream error for {video_id}: {type(e).__name__}: {e}")
-        return None
-
-    except PytubeFixError as e:
-        print(f"PytubeFixError for {video_id}: {type(e).__name__}: {e}")
-        return None
-
+        title = await get_video_title(video_id)
     except Exception as e:
-        print(f"Unexpected error fetching transcript for {video_id}: {type(e).__name__}: {e}")
-        traceback.print_exc()
+        logging.critical(f"Failed to get video title for video_id: {video_id}")
+        logging.exception(e)
+        title = ""
+
+    transcript_text = fetch_transcript(video_id)
+    if not transcript_text:
+        logging.error(f"Failed to fetch transcript for video_id: {video_id}")
         return None
+
+    # Optionally parse SRT to structured transcript for formatting
+    # But since fetch_transcript returns txt captions, we can use directly
+    formatted_transcript = transcript_text
+
+    # Estimate video duration from transcript or set default
+    # Here we set default 60 minutes, can be improved by parsing timestamps
+    video_duration_minutes = 60
+
+    system_prompt = create_chapter_prompt(video_duration_minutes)
+
+    chapters = await generate_chapters_with_openai(
+        system_prompt=system_prompt,
+        video_id=video_id,
+        formatted_transcript=formatted_transcript,
+        video_duration_minutes=video_duration_minutes,
+    )
+
+    return {
+        "content": chapters,
+        "title": title,
+        "metadata": {"video_id": video_id, "transcript": transcript_text},
+    }
 
 
 def _parse_srt_to_transcript(srt_content: str) -> List[Dict[str, Any]]:
