@@ -24,6 +24,7 @@ from api.config import Config
 def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[str]:
     """
     Fetch transcript using pytubefix with proper error handling and language preferences.
+    Supports optional HTTP proxy configuration using Decodo proxy service.
 
     Args:
         video_id: YouTube video ID
@@ -37,6 +38,9 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[str]:
     import platform
     import socket
     import traceback
+    from api.config import Config
+    import urllib.request
+
     start_time = time.time()
 
     def time_left() -> bool:
@@ -47,6 +51,19 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[str]:
 
     # Environment info logging
     print(f"Environment info: platform={platform.platform()}, hostname={socket.gethostname()}, pid={os.getpid()}")
+
+    # Setup proxy if available
+    proxy_url = Config.get_proxy_url()
+    if proxy_url:
+        print(f"Using HTTP proxy: {proxy_url}")
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': proxy_url,
+            'https': proxy_url
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+        urllib.request.install_opener(opener)
+    else:
+        print("No HTTP proxy configured")
 
     try:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
