@@ -21,7 +21,7 @@ from pytubefix.exceptions import (
 from api.config import Config
 # Decodo proxy config does not require SSL CA patching or special logic
 
-def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[str]:
+def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[tuple]:
     """
     Fetch transcript using pytubefix with proper error handling and language preferences.
     Supports optional HTTP proxy configuration using Decodo proxy service.
@@ -31,7 +31,7 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[str]:
         timeout_limit: Maximum time in seconds to spend fetching the transcript
 
     Returns:
-        Transcript text or None if failed
+        Tuple of (transcript text, srt captions) or None if failed
     """
     import time
     import os
@@ -101,7 +101,7 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[str]:
         srt_captions = caption.generate_srt_captions()
         txt_captions = caption.generate_txt_captions()
 
-        return txt_captions
+        return txt_captions, srt_captions
 
     except Exception as e:
         print(f"Error fetching transcript for {video_id}: {e}")
@@ -136,17 +136,20 @@ async def extract_youtube_transcript(state):
         logging.exception(e)
         title = ""
 
-    transcript_text = fetch_transcript(video_id)
-    if not transcript_text:
+    transcript_result = fetch_transcript(video_id)
+    if not transcript_result:
         logging.error(f"Failed to fetch transcript for video_id: {video_id}")
         return None
 
-    # Optionally parse SRT to structured transcript for formatting
-    # But since fetch_transcript returns txt captions, we can use directly
-    formatted_transcript = transcript_text
+    transcript_text, srt_captions = transcript_result
+
+    # Parse SRT captions to structured transcript entries
+    transcript_entries = _parse_srt_to_transcript(srt_captions)
+
+    # Format transcript entries for model input
+    formatted_transcript = format_transcript_for_model(transcript_entries)[0]
 
     # Estimate video duration from transcript or set default
-    # Here we set default 60 minutes, can be improved by parsing timestamps
     video_duration_minutes = 60
 
     system_prompt = create_chapter_prompt(video_duration_minutes)
