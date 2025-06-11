@@ -19,6 +19,7 @@ from pytubefix.exceptions import (
 )
 
 from api.config import Config
+from content_core.common import ProcessSourceState
 
 # Decodo proxy config does not require SSL CA patching or special logic
 
