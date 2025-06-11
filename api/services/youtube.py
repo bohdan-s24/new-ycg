@@ -80,10 +80,10 @@ def fetch_transcript(video_id: str, timeout_limit: int = 30) -> Optional[List[Di
 
         # If no preferred language found, use the first available caption
         if not caption:
-            first_caption_key = next(iter(yt.captions))
-            caption = yt.captions[first_caption_key]
-            selected_lang = first_caption_key
-            print(f"Using first available caption: {first_caption_key}")
+            first_caption = next(iter(yt.captions))
+            caption = yt.captions[first_caption.code]
+            selected_lang = first_caption.code
+            print(f"Using first available caption: {first_caption.code}")
 
         if not time_left():
             print(f"Time limit reached while selecting caption")
